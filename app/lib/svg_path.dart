@@ -1,100 +1,46 @@
-/// Разбор атрибута `d` из SVG в [Path].
+/// Разбор атрибута `d` из SVG в [Path] и преобразования над готовым путём.
 ///
 /// Зачем своё, а не пакет: нужна одна функция под один фирменный контур.
 /// Тянуть ради этого зависимость с её обновлениями и уязвимостями — плохой
 /// размен в проекте, который обещает проверяемость. Здесь сотня строк,
 /// которые можно прочитать целиком.
 ///
-/// Поддержаны команды `M m L l H h V v C c Z z` — этого хватает для вывода
-/// potrace и Inkscape. Встретив неподдержанную (`S Q T A`), функция бросает
-/// [FormatException] с указанием команды, а не рисует молча неправильно.
+/// Разбор чисел живёт в `path_data.dart` — без `dart:ui`, потому что тем же
+/// разбором пользуется генератор иконки Android (`tool/gen_android_icon.dart`),
+/// запускаемый вне Flutter. Здесь остаётся мост в [Path] и те же
+/// преобразования, но над непрозрачным путём.
 library;
 
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
 
-final _token = RegExp(
-  r'[MmLlHhVvCcSsQqTtAaZz]|[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?',
-);
-final _letter = RegExp(r'^[A-Za-z]$');
+import 'path_data.dart';
 
-Path parseSvgPath(String d) {
-  final t = _token.allMatches(d).map((m) => m[0]!).toList();
+/// Разбирает атрибут `d`. Неподдержанная команда (`S Q T A`) бросает
+/// [FormatException] с её указанием, а не рисует молча неправильное.
+Path parseSvgPath(String d) => buildPath(parsePathData(d));
+
+/// Собирает [Path] из разобранных сегментов.
+Path buildPath(List<PathSeg> segs) {
   final path = Path();
-
-  var i = 0;
-  double cx = 0, cy = 0; // текущая точка
-  double sx = 0, sy = 0; // начало подпути, куда возвращает Z
-  var cmd = '';
-
-  double n() {
-    if (i >= t.length) {
-      throw const FormatException('путь оборван: не хватает координат');
-    }
-    return double.parse(t[i++]);
-  }
-
-  while (i < t.length) {
-    if (_letter.hasMatch(t[i])) cmd = t[i++];
-    if (i >= t.length && cmd != 'Z' && cmd != 'z') break;
-
-    switch (cmd) {
-      case 'M':
-        cx = n();
-        cy = n();
-        path.moveTo(cx, cy);
-        sx = cx;
-        sy = cy;
-        cmd = 'L'; // повтор координат после M означает линии
-      case 'm':
-        cx += n();
-        cy += n();
-        path.moveTo(cx, cy);
-        sx = cx;
-        sy = cy;
-        cmd = 'l';
-      case 'L':
-        cx = n();
-        cy = n();
-        path.lineTo(cx, cy);
-      case 'l':
-        cx += n();
-        cy += n();
-        path.lineTo(cx, cy);
-      case 'H':
-        cx = n();
-        path.lineTo(cx, cy);
-      case 'h':
-        cx += n();
-        path.lineTo(cx, cy);
-      case 'V':
-        cy = n();
-        path.lineTo(cx, cy);
-      case 'v':
-        cy += n();
-        path.lineTo(cx, cy);
-      case 'C':
-        final x1 = n(), y1 = n(), x2 = n(), y2 = n();
-        cx = n();
-        cy = n();
-        path.cubicTo(x1, y1, x2, y2, cx, cy);
-      case 'c':
-        // Все шесть чисел отсчитываются от точки НА НАЧАЛО команды,
-        // поэтому cx/cy обновляются последними.
-        final x1 = cx + n(), y1 = cy + n();
-        final x2 = cx + n(), y2 = cy + n();
-        final ex = cx + n(), ey = cy + n();
-        path.cubicTo(x1, y1, x2, y2, ex, ey);
-        cx = ex;
-        cy = ey;
-      case 'Z':
-      case 'z':
+  for (final s in segs) {
+    switch (s) {
+      case MoveSeg(:final x, :final y):
+        path.moveTo(x, y);
+      case LineSeg(:final x, :final y):
+        path.lineTo(x, y);
+      case CubicSeg(
+        :final x1,
+        :final y1,
+        :final x2,
+        :final y2,
+        :final x,
+        :final y,
+      ):
+        path.cubicTo(x1, y1, x2, y2, x, y);
+      case CloseSeg():
         path.close();
-        cx = sx;
-        cy = sy;
-      default:
-        throw FormatException('команда пути «$cmd» не поддержана');
     }
   }
   return path;
@@ -124,9 +70,7 @@ Float64List affine({
 /// Отражает путь по горизонтали относительно собственных границ.
 Path mirrorPathX(Path source) {
   final b = source.getBounds();
-  return source.transform(
-    affine(scaleX: -1, translateX: b.left + b.right),
-  );
+  return source.transform(affine(scaleX: -1, translateX: b.left + b.right));
 }
 
 /// Поворачивает путь вокруг центра его границ.
@@ -157,12 +101,7 @@ Path rotatePath(Path source, double degrees) {
 ///
 /// [mirrorX] отражает по горизонтали: исходный силуэт летит влево, а в
 /// интерфейсе с письмом слева направо отправка читается движением вправо.
-Path fitPath(
-  Path source,
-  Rect box, {
-  bool mirrorX = false,
-  double inset = 0,
-}) {
+Path fitPath(Path source, Rect box, {bool mirrorX = false, double inset = 0}) {
   final b = source.getBounds();
   if (b.isEmpty) return source;
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'brand/mark_geometry.dart';
 import 'brand/raven_path.dart';
 import 'svg_path.dart';
 import 'theme/tokens.dart';
@@ -25,16 +26,13 @@ class ApeironRaven extends StatelessWidget {
     super.key,
     this.size = 64,
     this.color = Ap.bone100,
-    this.facingRight = true,
+    this.facingRight = ravenFacesRight,
     this.pitchDegrees = defaultPitch,
     this.inset = 0,
   });
 
-  /// Разворот по умолчанию. Исходный силуэт держит клюв чуть ниже горизонта;
-  /// поднятый клюв читается как набор высоты, а не как снижение.
-  /// Отрицательный угол — против часовой (ось Y экрана направлена вниз).
-/// Значение выбрано по контактному листу из ряда 0 / −20 / −32 / −45.
-  static const double defaultPitch = -45;
+  /// Разворот по умолчанию — обоснование при [ravenDefaultPitch].
+  static const double defaultPitch = ravenDefaultPitch;
 
   final double size;
   final Color color;

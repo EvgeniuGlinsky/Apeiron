@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'brand/mark_geometry.dart';
 import 'raven.dart';
 import 'theme/tokens.dart';
 
@@ -25,7 +26,7 @@ class ApeironAppIcon extends StatelessWidget {
     this.background = Ap.basalt900,
     this.glyph = Ap.bone100,
     this.shell = IconShell.circle,
-    this.glyphScale = 0.70,
+    this.glyphScale = iconGlyphScale,
     this.pitchDegrees = ApeironRaven.defaultPitch,
   });
 
@@ -37,8 +38,7 @@ class ApeironAppIcon extends StatelessWidget {
   final Color glyph;
   final IconShell shell;
 
-  /// Доля поля, которую занимает птица. Меньше 0,55 — иконка выглядит пустой,
-  /// больше 0,7 — силуэт упирается в края и теряет очертания.
+  /// Доля поля, которую занимает птица — обоснование при [iconGlyphScale].
   final double glyphScale;
 
   @override
