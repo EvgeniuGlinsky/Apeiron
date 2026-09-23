@@ -66,6 +66,28 @@ flutter build windows --debug
 cd app && flutter_rust_bridge_codegen generate
 ```
 
+Варианты знака выкладываются на один лист для сравнения:
+
+```bash
+cd app && flutter test test/mark_sheet.dart   # → build/mark/contact-sheet.png
+```
+
+## Грабли
+
+**`flutter build windows` падает с `MSB8066 ... код -1`.** MSBuild прячет настоящую ошибку.
+Причина обычно в том, что предкомпилированный инструмент cargokit остался битым — например,
+процесс `dart` был убит во время сборки. Лечится удалением его кэша:
+
+```bash
+rm app/build/windows/x64/plugins/rust_lib_apeiron/cargokit_build/tool/bin/build_tool_runner.dill
+rm app/build/windows/x64/plugins/rust_lib_apeiron/cargokit_build/tool/.dart_tool/package_info.prev
+```
+
+Чтобы увидеть настоящую причину, а не `код -1`: `flutter build windows --debug -v`.
+
+**Python падает с `UnicodeEncodeError` на скриптах с кириллицей.** Консоль Windows в cp1252.
+Запускать с `PYTHONIOENCODING=utf-8` — это дефект среды, а не скриптов.
+
 ## Правила, нарушать которые нельзя
 
 Выведены из §18 исследования, подробности и обоснования — в документах выше.

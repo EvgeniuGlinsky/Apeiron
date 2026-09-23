@@ -104,10 +104,11 @@ class _IdentityScreenState extends State<IdentityScreen>
             const ApeironMark(size: 22, color: Ap.glacier400),
             const SizedBox(width: Ap.s12),
             Text('APEIRON',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(letterSpacing: 3)),
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontFamily: Ap.displayFont,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 3,
+                    )),
           ],
         ),
         actions: [
