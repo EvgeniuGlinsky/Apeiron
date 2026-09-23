@@ -89,3 +89,12 @@ If %ERRORLEVEL% equ 253 (
     "%DART%" compile kernel bin/build_tool_runner.dart
     "%DART%" "%PRECOMPILED%" %*
 )
+
+REM --- APEIRON PATCH, not an upstream line ----------------------------------
+REM Without it this script returns 0 even when dart exited with an error: the
+REM trailing `If` with a false condition succeeds on its own and becomes the
+REM exit code of the file. Gradle therefore missed cargokit failures and built
+REM an APK without librust_lib_apeiron.so while reporting success.
+REM Verified by experiment: without the `If` code 1 propagates, with it 0.
+REM Restore this line after updating cargokit. See docs/build-guards.md
+exit /b %ERRORLEVEL%

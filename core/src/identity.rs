@@ -165,13 +165,27 @@ impl std::fmt::Debug for Identity {
     }
 }
 
+/// Сколько байтов хеша уходит на одну группу.
+///
+/// Не то же самое, что [`FINGERPRINT_DIGITS_PER_GROUP`], хотя числа совпадают:
+/// там цифры для человека, здесь байты для арифметики. Пяти байтов (40 бит)
+/// с запасом хватает на пять десятичных цифр — остаток по модулю 10⁵
+/// распределён почти равномерно, смещение порядка 10⁻⁷.
+const FINGERPRINT_BYTES_PER_GROUP: usize = 5;
+
 /// Превращает хеш в читаемые вслух цифры: шесть групп по пять.
 fn digits_from_hash(hash: &[u8]) -> String {
-    hash.chunks_exact(5)
+    let (groups, _tail) = hash.as_chunks::<FINGERPRINT_BYTES_PER_GROUP>();
+    groups
+        .iter()
         .take(FINGERPRINT_GROUPS)
         .map(|chunk| {
             let v = chunk.iter().fold(0u64, |acc, b| (acc << 8) | u64::from(*b));
-            format!("{:0width$}", v % 100_000, width = FINGERPRINT_DIGITS_PER_GROUP)
+            format!(
+                "{:0width$}",
+                v % 100_000,
+                width = FINGERPRINT_DIGITS_PER_GROUP
+            )
         })
         .collect::<Vec<_>>()
         .join(" ")
@@ -179,6 +193,15 @@ fn digits_from_hash(hash: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
+    // В тестах unwrap/expect уместны: падение теста — это и есть сообщение
+    // об ошибке. Запрет остаётся в силе для всего остального кода крейта.
+    #![allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::indexing_slicing
+    )]
+
     use super::*;
 
     #[test]

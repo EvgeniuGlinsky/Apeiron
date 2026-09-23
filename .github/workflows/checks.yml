@@ -1,0 +1,92 @@
+# Обязательные проверки.
+#
+# До 23.09.2026 их не было вовсе, и это обошлось дорого: сборка выдала APK без
+# нативной библиотеки и отрапортовала успехом. Здесь собрано то, что должно
+# ловить такие вещи до человека.
+#
+# **Действия закреплены по SHA, а не по тегу.** Тег в чужом репозитории можно
+# переставить на другой коммит, SHA — нет. Для проекта, который обещает
+# проверяемость, доверять подвижной метке в чужих руках нельзя. SHA взяты
+# 23.09.2026; при обновлении версии брать новый SHA, а не тег.
+
+name: Проверки
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Ровно столько прав, сколько нужно на чтение исходников.
+permissions:
+  contents: read
+
+# Новый толчок в ту же ветку отменяет предыдущий прогон.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    name: Rust — формат, линты, тесты
+    runs-on: ubuntu-latest
+    steps:
+      - name: Забрать исходники
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Поставить тулчейн из rust-toolchain.toml
+        run: rustup show
+
+      - name: Формат
+        run: cargo fmt --all --check
+
+      - name: Линты
+        # `-D warnings`: предупреждение, на которое никто не смотрит, — это
+        # не предупреждение. В ядре к тому же запрещены unwrap/expect/panic.
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Тесты
+        run: cargo test --workspace
+
+  deps:
+    name: Зависимости — уязвимости и лицензии
+    runs-on: ubuntu-latest
+    steps:
+      - name: Забрать исходники
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Поставить cargo-deny
+        # Ставим из исходников, а не сторонним действием: одним чужим
+        # доверенным шагом в цепочке меньше.
+        run: cargo install --locked cargo-deny
+
+      - name: Проверить
+        run: cargo deny check
+
+  flutter:
+    name: Flutter — анализ и тесты
+    runs-on: ubuntu-latest
+    steps:
+      - name: Забрать исходники
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Поставить Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.41.2'
+          channel: stable
+          cache: true
+
+      - name: Зависимости
+        working-directory: app
+        run: flutter pub get
+
+      - name: Анализ
+        working-directory: app
+        run: flutter analyze
+
+      - name: Тесты
+        working-directory: app
+        # Контактные листы (`*_sheet.dart`) сюда не попадают: они названы без
+        # суффикса `_test` намеренно, потому что рисуют PNG и не завершаются.
+        run: flutter test

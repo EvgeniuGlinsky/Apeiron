@@ -13,3 +13,18 @@ hex = "0.4"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
+# Мост — код на границе FFI. Паника здесь не перехватывается ничем и роняет
+# процесс приложения целиком, поэтому запреты те же, что в ядре.
+#
+# `deny`, а не `forbid` как в ядре: FFI без `unsafe` не существует, и
+# сгенерированному мосту он нужен по природе. `forbid` нельзя снять локально
+# даже осознанно, `deny` — можно, и ровно в одном месте: на объявлении
+# `mod frb_generated` в `src/lib.rs`, с объяснением. Весь код, который пишем
+# мы, остаётся без `unsafe`.
+unsafe_code = "deny"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "warn"
