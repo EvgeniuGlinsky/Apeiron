@@ -1,5 +1,6 @@
 import 'package:apeiron/fingerprint.dart';
-import 'package:apeiron/mark.dart';
+import 'package:apeiron/svg_path.dart';
+import 'package:apeiron/raven.dart';
 import 'package:apeiron/theme/tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -99,13 +100,75 @@ void main() {
     });
   });
 
-  testWidgets('знак отрисовывается', (tester) async {
+  group('разбор пути SVG', () {
+    test('простой контур разбирается и даёт ожидаемые границы', () {
+      final p = parseSvgPath('M 10 20 L 40 20 L 40 60 Z');
+      final b = p.getBounds();
+      expect(b.left, 10);
+      expect(b.top, 20);
+      expect(b.right, 40);
+      expect(b.bottom, 60);
+    });
+
+    test('относительные команды считаются от текущей точки', () {
+      final abs = parseSvgPath('M 0 0 L 10 0 L 10 10 Z');
+      final rel = parseSvgPath('m 0 0 l 10 0 l 0 10 z');
+      expect(rel.getBounds(), abs.getBounds());
+    });
+
+    test('повтор координат после M означает линии', () {
+      // Вторая пара после M — это lineTo, а не ещё один moveTo.
+      final p = parseSvgPath('M 0 0 10 10');
+      expect(p.getBounds().right, 10);
+    });
+
+    test('неподдержанная команда не рисуется молча, а бросает ошибку', () {
+      // Молчаливое игнорирование дало бы неверный контур без единого признака.
+      expect(() => parseSvgPath('M 0 0 A 5 5 0 0 1 10 10'),
+          throwsA(isA<FormatException>()));
+    });
+
+    test('оборванный путь бросает ошибку', () {
+      expect(() => parseSvgPath('M 0 0 L 10'), throwsA(isA<FormatException>()));
+    });
+  });
+
+  group('вписывание и преобразования', () {
+    test('fitPath вписывает в поле, сохраняя пропорции', () {
+      final p = parseSvgPath('M 0 0 L 100 0 L 100 50 Z');
+      final f = fitPath(p, const Rect.fromLTWH(0, 0, 200, 200));
+      final b = f.getBounds();
+      expect(b.width, closeTo(200, 0.01));
+      expect(b.height, closeTo(100, 0.01));
+      // По вертикали центрируется.
+      expect(b.top, closeTo(50, 0.01));
+    });
+
+    test('отражение не меняет габаритов', () {
+      final p = parseSvgPath('M 0 0 L 100 0 L 100 50 Z');
+      expect(mirrorPathX(p).getBounds(), p.getBounds());
+    });
+
+    test('поворот на 90° меняет ширину и высоту местами', () {
+      final p = parseSvgPath('M 0 0 L 100 0 L 100 50 L 0 50 Z');
+      final r = rotatePath(p, 90).getBounds();
+      expect(r.width, closeTo(50, 0.01));
+      expect(r.height, closeTo(100, 0.01));
+    });
+
+    test('поворот на ноль возвращает тот же путь', () {
+      final p = parseSvgPath('M 0 0 L 10 10 Z');
+      expect(identical(rotatePath(p, 0), p), isTrue);
+    });
+  });
+
+  testWidgets('ворон отрисовывается', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
-        home: Scaffold(body: Center(child: ApeironMark(size: 64))),
+        home: Scaffold(body: Center(child: ApeironRaven(size: 64))),
       ),
     );
-    expect(find.byType(ApeironMark), findsOneWidget);
+    expect(find.byType(ApeironRaven), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

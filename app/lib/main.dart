@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'fingerprint.dart';
-import 'mark.dart';
+import 'raven.dart';
+import 'wordmark.dart';
 import 'src/rust/api/identity.dart';
 import 'src/rust/frb_generated.dart';
 import 'theme/tokens.dart';
@@ -101,14 +102,9 @@ class _IdentityScreenState extends State<IdentityScreen>
         titleSpacing: Ap.s20,
         title: Row(
           children: [
-            const ApeironMark(size: 22, color: Ap.glacier400),
+            const ApeironRaven(size: 26),
             const SizedBox(width: Ap.s12),
-            Text('APEIRON',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontFamily: Ap.displayFont,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 3,
-                    )),
+            const ApeironWordmark(height: 19),
           ],
         ),
         actions: [
@@ -159,7 +155,7 @@ class _LockedState extends StatelessWidget {
     return Column(
       children: [
         const SizedBox(height: Ap.s40),
-        const ApeironMark(size: 88),
+        const ApeironRaven(size: 92, color: Ap.stone600),
         const SizedBox(height: Ap.s28),
         Text('ЛИЧНОСТЬ ЗАБЛОКИРОВАНА',
             style: t.labelLarge?.copyWith(color: Ap.bone100), textAlign: TextAlign.center),
