@@ -1,0 +1,28 @@
+[package]
+name = "apeiron-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Ядро мессенджера: криптография, хранилище, протокол. Не содержит FFI."
+
+[dependencies]
+ed25519-dalek.workspace = true
+x25519-dalek.workspace = true
+rand.workspace = true
+rand_core.workspace = true
+zeroize.workspace = true
+sha2.workspace = true
+subtle.workspace = true
+thiserror.workspace = true
+hex.workspace = true
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+# Паника в криптографическом коде — это отказ в обслуживании, а иногда и утечка.
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "warn"

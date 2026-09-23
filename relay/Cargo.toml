@@ -1,0 +1,13 @@
+[package]
+name = "apeiron-relay"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Слепой ретранслятор: держит односторонние очереди шифротекста, не зная ни отправителя, ни получателя."
+
+[dependencies]
+apeiron-core = { path = "../core" }
+
+[lints.rust]
+unsafe_code = "forbid"
