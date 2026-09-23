@@ -9,13 +9,15 @@ description = "Ядро мессенджера: криптография, хра
 [dependencies]
 ed25519-dalek.workspace = true
 x25519-dalek.workspace = true
-rand.workspace = true
-rand_core.workspace = true
+getrandom.workspace = true
 zeroize.workspace = true
 sha2.workspace = true
 subtle.workspace = true
 thiserror.workspace = true
 hex.workspace = true
+vodozemac.workspace = true
+hkdf.workspace = true
+chacha20poly1305.workspace = true
 
 [lints.rust]
 unsafe_code = "forbid"
@@ -26,3 +28,12 @@ unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"
 indexing_slicing = "warn"
+
+# Только для тестов: официальные векторы RFC прогоняются напрямую против тех
+# крейтов, которыми мы пользуемся, — см. core/tests/rfc_vectors.rs.
+[dev-dependencies]
+x25519-dalek.workspace = true
+hkdf.workspace = true
+chacha20poly1305.workspace = true
+sha2.workspace = true
+hex.workspace = true

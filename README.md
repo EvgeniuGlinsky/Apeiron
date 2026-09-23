@@ -39,6 +39,8 @@ docs/     решения и спецификации
 | Файл | О чём |
 |---|---|
 | [`docs/threat-log.md`](docs/threat-log.md) | Противники П1–П8 и журнал решений по защите |
+| [`docs/crypto.md`](docs/crypto.md) | Криптоядро: из чего собрано, что проверяется, чего криптография не делает |
+| [`docs/build-guards.md`](docs/build-guards.md) | Предохранители сборки: почему однажды вышел негодный APK и что теперь не даёт это повторить |
 | [`docs/design.md`](docs/design.md) | Система оформления |
 | [`docs/research-verification.md`](docs/research-verification.md) | Проверка исследования, на котором стоит план |
 

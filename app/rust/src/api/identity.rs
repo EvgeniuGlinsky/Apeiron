@@ -52,7 +52,9 @@ const LOCKED: &str = "личность заблокирована";
 /// операцией с подтверждением: смена личности рвёт все существующие переписки.
 #[flutter_rust_bridge::frb]
 pub fn generate_identity() -> Result<PublicIdentityView, String> {
-    let identity = Identity::generate();
+    // Отказ ОС в случайности поднимается наверх как ошибка и доезжает до
+    // экрана: личность на предсказуемых ключах хуже отсутствия личности.
+    let identity = Identity::generate().map_err(|e| e.to_string())?;
     let view = PublicIdentityView::from(&identity.public());
     let mut guard = store().lock().map_err(|_| POISONED.to_string())?;
     *guard = Some(identity);

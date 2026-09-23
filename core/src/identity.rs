@@ -12,8 +12,10 @@
 //! `SigningKey` и `StaticSecret` затирают себя при уничтожении (feature `zeroize`),
 //! поэтому собственный `Drop` здесь не нужен и намеренно не пишется.
 
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
-use rand::rngs::OsRng;
+use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
+use zeroize::Zeroize;
+
+use crate::random::{random_bytes, RandomError};
 use sha2::{Digest, Sha256};
 use x25519_dalek::{PublicKey as X25519Public, StaticSecret};
 
@@ -116,9 +118,17 @@ impl PublicIdentity {
         digits_from_hash(&h.finalize())
     }
 
+    /// Проверка подписи — **строгая**.
+    ///
+    /// Обычная проверка Ed25519 допускает неканоническую запись подписи и точки
+    /// малого порядка. На стойкость это почти не влияет, но означает, что у
+    /// одного и того же сообщения может быть несколько различающихся подписей,
+    /// каждая из которых верна. Там, где подпись входит в хеш — а у нас она
+    /// входит, журнал личности на этом стоит, — это превратилось бы в две
+    /// разные «одинаковые» цепочки. Строгая проверка такого не допускает.
     pub fn verify(&self, message: &[u8], signature: &Signature) -> Result<(), IdentityError> {
         self.verifying
-            .verify(message, signature)
+            .verify_strict(message, signature)
             .map_err(|_| IdentityError::BadSignature)
     }
 }
@@ -131,11 +141,28 @@ pub struct Identity {
 
 impl Identity {
     /// Новая личность из системного источника случайности.
-    pub fn generate() -> Self {
-        Self {
-            signing: SigningKey::generate(&mut OsRng),
-            agreement: StaticSecret::random_from_rng(OsRng),
-        }
+    ///
+    /// Возвращает ошибку, а не паникует: отказ ОС в случайности — редкий, но
+    /// возможный исход (изоляция, исчерпание дескрипторов, очень ранний старт),
+    /// и решать, что с ним делать, должен вызывающий. Библиотеки вокруг в этом
+    /// месте паникуют; нам нельзя. Подробнее — `crate::random`.
+    pub fn generate() -> Result<Self, RandomError> {
+        // Два независимых секрета из двух независимых запросов: общего семени
+        // у подписи и согласования быть не должно, иначе компрометация одного
+        // становится компрометацией второго.
+        let mut signing_seed = random_bytes::<32>()?;
+        let mut agreement_seed = random_bytes::<32>()?;
+
+        let identity = Self {
+            signing: SigningKey::from_bytes(&signing_seed),
+            agreement: StaticSecret::from(agreement_seed),
+        };
+
+        // Семена скопированы внутрь ключей — здесь они больше не нужны.
+        signing_seed.zeroize();
+        agreement_seed.zeroize();
+
+        Ok(identity)
     }
 
     pub fn public(&self) -> PublicIdentity {
@@ -206,7 +233,7 @@ mod tests {
 
     #[test]
     fn public_identity_roundtrip() {
-        let id = Identity::generate();
+        let id = Identity::generate().expect("ОС отдаёт случайность");
         let pub_a = id.public();
         let bytes = pub_a.to_bytes();
         let pub_b = PublicIdentity::from_bytes(&bytes).expect("свои же байты должны разбираться");
@@ -221,7 +248,7 @@ mod tests {
 
     #[test]
     fn signature_verifies_and_tampering_is_caught() {
-        let id = Identity::generate();
+        let id = Identity::generate().expect("ОС отдаёт случайность");
         let pubkey = id.public();
         let msg = b"road to myworld";
         let sig = id.sign(msg);
@@ -231,8 +258,8 @@ mod tests {
 
     #[test]
     fn diffie_hellman_agrees_both_ways() {
-        let a = Identity::generate();
-        let b = Identity::generate();
+        let a = Identity::generate().expect("ОС отдаёт случайность");
+        let b = Identity::generate().expect("ОС отдаёт случайность");
         let ab = a.diffie_hellman(b.public().agreement_key());
         let ba = b.diffie_hellman(a.public().agreement_key());
         assert_eq!(ab.as_bytes(), ba.as_bytes());
@@ -240,7 +267,10 @@ mod tests {
 
     #[test]
     fn fingerprint_shape_is_stable() {
-        let fp = Identity::generate().public().fingerprint();
+        let fp = Identity::generate()
+            .expect("ОС отдаёт случайность")
+            .public()
+            .fingerprint();
         let groups: Vec<&str> = fp.split(' ').collect();
         assert_eq!(groups.len(), FINGERPRINT_GROUPS);
         for g in groups {
@@ -251,24 +281,36 @@ mod tests {
 
     #[test]
     fn safety_number_is_symmetric() {
-        let a = Identity::generate().public();
-        let b = Identity::generate().public();
+        let a = Identity::generate()
+            .expect("ОС отдаёт случайность")
+            .public();
+        let b = Identity::generate()
+            .expect("ОС отдаёт случайность")
+            .public();
         assert_eq!(a.safety_number(&b), b.safety_number(&a));
     }
 
     #[test]
     fn safety_number_changes_if_a_key_is_swapped() {
         // Это и есть обнаружение посредника: подменённый ключ даёт другое число сверки.
-        let a = Identity::generate().public();
-        let b = Identity::generate().public();
-        let impostor = Identity::generate().public();
+        let a = Identity::generate()
+            .expect("ОС отдаёт случайность")
+            .public();
+        let b = Identity::generate()
+            .expect("ОС отдаёт случайность")
+            .public();
+        let impostor = Identity::generate()
+            .expect("ОС отдаёт случайность")
+            .public();
         assert_ne!(a.safety_number(&b), a.safety_number(&impostor));
     }
 
     #[test]
     fn fingerprint_differs_from_safety_number() {
         // Разделение областей хеширования должно давать разные значения.
-        let a = Identity::generate().public();
+        let a = Identity::generate()
+            .expect("ОС отдаёт случайность")
+            .public();
         assert_ne!(a.fingerprint(), a.safety_number(&a));
     }
 }
