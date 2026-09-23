@@ -5,6 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 description = "Ядро мессенджера: криптография, хранилище, протокол. Не содержит FFI."
+# На crates.io не публикуется: это часть приложения, а не библиотека общего
+# пользования. Заодно закрывает случайный `cargo publish` криптографического
+# кода, который ещё в работе.
+publish = false
 
 [dependencies]
 ed25519-dalek.workspace = true

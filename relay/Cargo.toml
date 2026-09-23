@@ -5,6 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 description = "Слепой ретранслятор: держит односторонние очереди шифротекста, не зная ни отправителя, ни получателя."
+# На crates.io не публикуется: это часть приложения, а не библиотека общего
+# пользования. Заодно закрывает случайный `cargo publish` криптографического
+# кода, который ещё в работе.
+publish = false
 
 [dependencies]
 apeiron-core = { path = "../core" }

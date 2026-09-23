@@ -1,7 +1,16 @@
 [package]
 name = "rust_lib_apeiron"
-version = "0.1.0"
-edition = "2021"
+# Наследуем от воркспейса, как остальные крейты. Без `license` крейт уезжает
+# в публичный репозиторий необъявленным — это нашёл `cargo deny check`.
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Мост между Flutter и ядром. Тонкий по замыслу: логики здесь нет, только перенос через FFI."
+# На crates.io не публикуется: это часть приложения, а не библиотека общего
+# пользования. Заодно закрывает случайный `cargo publish` криптографического
+# кода, который ещё в работе.
+publish = false
 
 [lib]
 crate-type = ["cdylib", "staticlib"]
