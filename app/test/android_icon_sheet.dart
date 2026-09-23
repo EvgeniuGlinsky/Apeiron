@@ -23,9 +23,9 @@ import '../tool/android_icon.dart';
 /// а не виджет. Иначе лист показывал бы не то, что увидит пользователь.
 void main() {
   testWidgets('лист иконки Android', (tester) async {
-    await (FontLoader('Inter')
-          ..addFont(rootBundle.load('assets/fonts/Inter-SemiBold.otf')))
-        .load();
+    await (FontLoader(
+      'Inter',
+    )..addFont(rootBundle.load('assets/fonts/Inter-SemiBold.otf'))).load();
 
     const sheet = Size(1460, 1000);
     tester.view
@@ -69,10 +69,12 @@ Path _maskPath(_Mask mask, Size s) {
   return switch (mask) {
     _Mask.circle => Path()..addOval(r),
     // Суперэллипс лаунчера Pixel приближается скруглением в 28 % стороны.
-    _Mask.squircle => Path()
-      ..addRRect(RRect.fromRectAndRadius(r, Radius.circular(s.width * 0.28))),
-    _Mask.rounded => Path()
-      ..addRRect(RRect.fromRectAndRadius(r, Radius.circular(s.width * 0.16))),
+    _Mask.squircle =>
+      Path()
+        ..addRRect(RRect.fromRectAndRadius(r, Radius.circular(s.width * 0.28))),
+    _Mask.rounded =>
+      Path()
+        ..addRRect(RRect.fromRectAndRadius(r, Radius.circular(s.width * 0.16))),
     _Mask.square => Path()..addRect(r),
   };
 }
@@ -96,11 +98,11 @@ class _Adaptive extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox.square(
-        dimension: size,
-        child: CustomPaint(
-          painter: _AdaptivePainter(mask, background, glyph, guides),
-        ),
-      );
+    dimension: size,
+    child: CustomPaint(
+      painter: _AdaptivePainter(mask, background, glyph, guides),
+    ),
+  );
 }
 
 class _AdaptivePainter extends CustomPainter {
@@ -111,8 +113,9 @@ class _AdaptivePainter extends CustomPainter {
   final Color glyph;
   final bool guides;
 
-  static final Path _bird = buildPath(parsePathData(_pathsOf(foregroundXml())
-      .single));
+  static final Path _bird = buildPath(
+    parsePathData(_pathsOf(foregroundXml()).single),
+  );
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -126,7 +129,12 @@ class _AdaptivePainter extends CustomPainter {
     canvas.drawRect(Offset.zero & size, Paint()..color = background);
     canvas.translate(-window * k, -window * k);
     canvas.scale(k);
-    canvas.drawPath(_bird, Paint()..color = glyph..isAntiAlias = true);
+    canvas.drawPath(
+      _bird,
+      Paint()
+        ..color = glyph
+        ..isAntiAlias = true,
+    );
     canvas.restore();
 
     if (!guides) return;
@@ -135,11 +143,7 @@ class _AdaptivePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1
       ..color = Ap.ember400.withValues(alpha: 0.75);
-    canvas.drawCircle(
-      Offset(size.width / 2, size.height / 2),
-      33 * k,
-      guide,
-    );
+    canvas.drawCircle(Offset(size.width / 2, size.height / 2), 33 * k, guide);
   }
 
   @override
@@ -155,14 +159,15 @@ class _Legacy extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox.square(
-        dimension: size,
-        child: CustomPaint(painter: _LegacyPainter()),
-      );
+    dimension: size,
+    child: CustomPaint(painter: _LegacyPainter()),
+  );
 }
 
 class _LegacyPainter extends CustomPainter {
-  static final List<Path> _layers =
-      _pathsOf(legacyXml()).map((d) => buildPath(parsePathData(d))).toList();
+  static final List<Path> _layers = _pathsOf(
+    legacyXml(),
+  ).map((d) => buildPath(parsePathData(d))).toList();
   static final List<Color> _colors = const [Color(0xFF12161A), Ap.bone100];
 
   @override
@@ -186,8 +191,8 @@ class _LegacyPainter extends CustomPainter {
 }
 
 List<String> _pathsOf(String vectorXml) => RegExp(
-      r'android:pathData="([^"]*)"',
-    ).allMatches(vectorXml).map((m) => m.group(1)!).toList();
+  r'android:pathData="([^"]*)"',
+).allMatches(vectorXml).map((m) => m.group(1)!).toList();
 
 class _Sheet extends StatelessWidget {
   const _Sheet();
@@ -199,19 +204,22 @@ class _Sheet extends StatelessWidget {
     letterSpacing: 1.6,
     fontWeight: FontWeight.w600,
   );
-  static const _tiny =
-      TextStyle(fontFamily: 'Inter', color: Ap.stone600, fontSize: 11);
+  static const _tiny = TextStyle(
+    fontFamily: 'Inter',
+    color: Ap.stone600,
+    fontSize: 11,
+  );
 
   static Widget _cell(Widget child, String caption) => Padding(
-        padding: const EdgeInsets.only(right: 24),
-        child: Column(
-          children: [
-            child,
-            const SizedBox(height: 8),
-            Text(caption, style: _tiny),
-          ],
-        ),
-      );
+    padding: const EdgeInsets.only(right: 24),
+    child: Column(
+      children: [
+        child,
+        const SizedBox(height: 8),
+        Text(caption, style: _tiny),
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {

@@ -26,7 +26,10 @@ void main() {
       final style = Ap.dark().filledButtonTheme.style;
       final shape = style?.shape?.resolve(<WidgetState>{});
       expect(shape, isA<RoundedRectangleBorder>());
-      expect((shape! as RoundedRectangleBorder).borderRadius, BorderRadius.zero);
+      expect(
+        (shape! as RoundedRectangleBorder).borderRadius,
+        BorderRadius.zero,
+      );
     });
   });
 
@@ -61,8 +64,14 @@ void main() {
 
   group('раскладка отпечатка', () {
     test('шесть групп ложатся в две строки по три', () {
-      final rows = fingerprintRows(
-          ['30879', '28053', '14932', '68733', '97238', '94718'], 3);
+      final rows = fingerprintRows([
+        '30879',
+        '28053',
+        '14932',
+        '68733',
+        '97238',
+        '94718',
+      ], 3);
       expect(rows.length, 2);
       expect(rows[0], ['30879', '28053', '14932']);
       expect(rows[1], ['68733', '97238', '94718']);
@@ -74,7 +83,11 @@ void main() {
         ['a', 'b', 'c'],
         ['d'],
       ]);
-      expect(rows.expand((r) => r).length, 4, reason: 'ни одна группа не потеряна');
+      expect(
+        rows.expand((r) => r).length,
+        4,
+        reason: 'ни одна группа не потеряна',
+      );
     });
 
     test('пустой вход даёт пустой результат, а не исключение', () {
@@ -94,8 +107,11 @@ void main() {
     test('группы сохраняют порядок при любом разбиении', () {
       final src = List.generate(7, (i) => '$i');
       for (final per in [1, 2, 3, 5, 7, 20]) {
-        expect(fingerprintRows(src, per).expand((r) => r).toList(), src,
-            reason: 'порядок нарушен при per=$per');
+        expect(
+          fingerprintRows(src, per).expand((r) => r).toList(),
+          src,
+          reason: 'порядок нарушен при per=$per',
+        );
       }
     });
   });
@@ -124,8 +140,10 @@ void main() {
 
     test('неподдержанная команда не рисуется молча, а бросает ошибку', () {
       // Молчаливое игнорирование дало бы неверный контур без единого признака.
-      expect(() => parseSvgPath('M 0 0 A 5 5 0 0 1 10 10'),
-          throwsA(isA<FormatException>()));
+      expect(
+        () => parseSvgPath('M 0 0 A 5 5 0 0 1 10 10'),
+        throwsA(isA<FormatException>()),
+      );
     });
 
     test('оборванный путь бросает ошибку', () {

@@ -1,5 +1,4 @@
 import 'package:apeiron/lock_policy.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -24,10 +23,18 @@ void main() {
     test('запирается при потере фокуса — решение R-001', () {
       for (final p in mobile) {
         final policy = LockPolicy.of(p);
-        expect(policy.locksOn(AppLifecycleState.inactive), isTrue, reason: '$p');
+        expect(
+          policy.locksOn(AppLifecycleState.inactive),
+          isTrue,
+          reason: '$p',
+        );
         expect(policy.locksOn(AppLifecycleState.paused), isTrue, reason: '$p');
         expect(policy.locksOn(AppLifecycleState.hidden), isTrue, reason: '$p');
-        expect(policy.locksOn(AppLifecycleState.detached), isTrue, reason: '$p');
+        expect(
+          policy.locksOn(AppLifecycleState.detached),
+          isTrue,
+          reason: '$p',
+        );
       }
     });
 
@@ -54,7 +61,11 @@ void main() {
         final policy = LockPolicy.of(p);
         expect(policy.locksOn(AppLifecycleState.hidden), isTrue, reason: '$p');
         expect(policy.locksOn(AppLifecycleState.paused), isTrue, reason: '$p');
-        expect(policy.locksOn(AppLifecycleState.detached), isTrue, reason: '$p');
+        expect(
+          policy.locksOn(AppLifecycleState.detached),
+          isTrue,
+          reason: '$p',
+        );
       }
     });
 
@@ -80,7 +91,10 @@ void main() {
 
   group('объяснение совпадает с поведением', () {
     test('на телефоне обещан фон', () {
-      expect(LockPolicy.of(TargetPlatform.android).explanation, contains('фон'));
+      expect(
+        LockPolicy.of(TargetPlatform.android).explanation,
+        contains('фон'),
+      );
     });
 
     test('на рабочем столе обещаны окно и срок, и он назван честно', () {

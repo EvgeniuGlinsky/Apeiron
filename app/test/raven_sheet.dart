@@ -19,9 +19,9 @@ import 'package:flutter_test/flutter_test.dart';
 /// Имя без суффикса `_test` намеренно — см. `wordmark_sheet.dart`.
 void main() {
   testWidgets('лист ворона', (tester) async {
-    await (FontLoader('Inter')
-          ..addFont(rootBundle.load('assets/fonts/Inter-SemiBold.otf')))
-        .load();
+    await (FontLoader(
+      'Inter',
+    )..addFont(rootBundle.load('assets/fonts/Inter-SemiBold.otf'))).load();
 
     const sheet = Size(1580, 1420);
     tester.view
@@ -67,8 +67,11 @@ class _Sheet extends StatelessWidget {
     letterSpacing: 1.6,
     fontWeight: FontWeight.w600,
   );
-  static const _tiny =
-      TextStyle(fontFamily: 'Inter', color: Ap.stone600, fontSize: 11);
+  static const _tiny = TextStyle(
+    fontFamily: 'Inter',
+    color: Ap.stone600,
+    fontSize: 11,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -95,9 +98,10 @@ class _Sheet extends StatelessWidget {
                             height: 136,
                             child: Center(
                               child: ApeironRaven(
-                                  size: px,
-                                  color: Ap.bone100,
-                                  pitchDegrees: pitch),
+                                size: px,
+                                color: Ap.bone100,
+                                pitchDegrees: pitch,
+                              ),
                             ),
                           ),
                           Text('${px.toInt()} px', style: _tiny),
@@ -109,11 +113,11 @@ class _Sheet extends StatelessWidget {
                     height: 136,
                     color: Ap.bone50,
                     alignment: Alignment.center,
-                    child:
-                        ApeironRaven(
-                        size: 78,
-                        color: Ap.basalt900,
-                        pitchDegrees: pitch),
+                    child: ApeironRaven(
+                      size: 78,
+                      color: Ap.basalt900,
+                      pitchDegrees: pitch,
+                    ),
                   ),
                   const SizedBox(width: 20),
                   Container(
@@ -125,9 +129,10 @@ class _Sheet extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         ApeironRaven(
-                            size: 30,
-                            color: Ap.bone100,
-                            pitchDegrees: pitch),
+                          size: 30,
+                          color: Ap.bone100,
+                          pitchDegrees: pitch,
+                        ),
                         const SizedBox(width: 14),
                         const ApeironWordmark(height: 24),
                       ],

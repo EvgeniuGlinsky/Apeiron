@@ -18,9 +18,9 @@ import 'package:flutter_test/flutter_test.dart';
 /// Имя без суффикса `_test` намеренно — см. `mark_sheet.dart`.
 void main() {
   testWidgets('лист логотипа-надписи', (tester) async {
-    await (FontLoader('Inter')
-          ..addFont(rootBundle.load('assets/fonts/Inter-SemiBold.otf')))
-        .load();
+    await (FontLoader(
+      'Inter',
+    )..addFont(rootBundle.load('assets/fonts/Inter-SemiBold.otf'))).load();
 
     const sheet = Size(1500, 980);
     tester.view
@@ -105,8 +105,7 @@ class _Sheet extends StatelessWidget {
                   height: 110,
                   color: Ap.bone50,
                   alignment: Alignment.center,
-                  child:
-                      const ApeironWordmark(height: 34, color: Ap.basalt900),
+                  child: const ApeironWordmark(height: 34, color: Ap.basalt900),
                 ),
                 const SizedBox(width: 22),
                 // Акцентный — как в шапке приложения.
@@ -115,8 +114,10 @@ class _Sheet extends StatelessWidget {
                   height: 110,
                   color: Ap.basalt800,
                   alignment: Alignment.center,
-                  child:
-                      const ApeironWordmark(height: 34, color: Ap.glacier400),
+                  child: const ApeironWordmark(
+                    height: 34,
+                    color: Ap.glacier400,
+                  ),
                 ),
                 const SizedBox(width: 22),
                 // Тоньше и толще: проверка, при какой толщине заплывают

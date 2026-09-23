@@ -163,14 +163,13 @@ abstract final class Ap {
     Color color = bone100,
     double spacing = 0,
     FontWeight weight = FontWeight.w400,
-  }) =>
-      TextStyle(
-        fontFamily: monoFallback.first,
-        fontFamilyFallback: monoFallback.sublist(1),
-        fontSize: size,
-        color: color,
-        letterSpacing: spacing,
-        fontWeight: weight,
-        height: 1.3,
-      );
+  }) => TextStyle(
+    fontFamily: monoFallback.first,
+    fontFamilyFallback: monoFallback.sublist(1),
+    fontSize: size,
+    color: color,
+    letterSpacing: spacing,
+    fontWeight: weight,
+    height: 1.3,
+  );
 }
