@@ -1,7 +1,11 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'fingerprint.dart';
+import 'lock_policy.dart';
 import 'raven.dart';
 import 'wordmark.dart';
 import 'src/rust/api/identity.dart';
@@ -45,24 +49,46 @@ class _IdentityScreenState extends State<IdentityScreen>
   String? _error;
   bool _busy = false;
 
+  /// Правила запирания у телефона и у рабочего стола разные — см. [LockPolicy].
+  final LockPolicy _policy = LockPolicy.of(defaultTargetPlatform);
+  Timer? _idle;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    HardwareKeyboard.instance.addHandler(_onKey);
     _refresh();
   }
 
   @override
   void dispose() {
+    _idle?.cancel();
+    HardwareKeyboard.instance.removeHandler(_onKey);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  /// Решение R-001: уход приложения из активного состояния блокирует личность.
-  /// Rust уничтожает ключи и затирает их — в Dart их и не было.
+  /// Решение R-001: личность запирается сама. Rust уничтожает ключи и затирает
+  /// их — в Dart их и не было. Что считать поводом, решает [LockPolicy]:
+  /// на телефоне это уход с переднего плана, на рабочем столе — свёрнутое окно
+  /// или бездействие, но не переключение на другое окно.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) _lock();
+    if (_policy.locksOn(state)) _lock();
+  }
+
+  bool _onKey(KeyEvent event) {
+    _noteActivity();
+    return false; // событие не наше, дальше по цепочке
+  }
+
+  /// Любое действие пользователя отодвигает таймер бездействия.
+  void _noteActivity() {
+    final timeout = _policy.idleTimeout;
+    if (timeout == null || _identity == null) return;
+    _idle?.cancel();
+    _idle = Timer(timeout, _lock);
   }
 
   Future<void> _run(Future<void> Function() action) async {
@@ -80,60 +106,73 @@ class _IdentityScreenState extends State<IdentityScreen>
   }
 
   Future<void> _refresh() => _run(() async {
-        final id = await currentIdentity();
-        if (mounted) setState(() => _identity = id);
-      });
+    final id = await currentIdentity();
+    if (mounted) setState(() => _identity = id);
+    _noteActivity();
+  });
 
   Future<void> _generate() => _run(() async {
-        final id = await generateIdentity();
-        if (mounted) setState(() => _identity = id);
-      });
+    final id = await generateIdentity();
+    if (mounted) setState(() => _identity = id);
+    _noteActivity();
+  });
 
   Future<void> _lock() => _run(() async {
-        await lockIdentity();
-        if (mounted) setState(() => _identity = null);
-      });
+    _idle?.cancel();
+    _idle = null;
+    await lockIdentity();
+    if (mounted) setState(() => _identity = null);
+  });
 
   @override
   Widget build(BuildContext context) {
     final id = _identity;
-    return Scaffold(
-      appBar: AppBar(
-        titleSpacing: Ap.s20,
-        title: Row(
-          children: [
-            const ApeironRaven(size: 26),
-            const SizedBox(width: Ap.s12),
-            const ApeironWordmark(height: 19),
+    return Listener(
+      // Отодвигаем таймер бездействия. `translucent`, чтобы события доходили
+      // и до виджетов под нами: мы слушаем, а не перехватываем.
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => _noteActivity(),
+      onPointerMove: (_) => _noteActivity(),
+      onPointerHover: (_) => _noteActivity(),
+      onPointerSignal: (_) => _noteActivity(),
+      child: Scaffold(
+        appBar: AppBar(
+          titleSpacing: Ap.s20,
+          title: Row(
+            children: [
+              const ApeironRaven(size: 26),
+              const SizedBox(width: Ap.s12),
+              const ApeironWordmark(height: 19),
+            ],
+          ),
+          actions: [
+            if (id != null)
+              IconButton(
+                tooltip: 'Заблокировать',
+                onPressed: _busy ? null : _lock,
+                icon: const Icon(Icons.lock_outline, color: Ap.fog400),
+              ),
+            const SizedBox(width: Ap.s8),
           ],
         ),
-        actions: [
-          if (id != null)
-            IconButton(
-              tooltip: 'Заблокировать',
-              onPressed: _busy ? null : _lock,
-              icon: const Icon(Icons.lock_outline, color: Ap.fog400),
-            ),
-          const SizedBox(width: Ap.s8),
-        ],
-      ),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(Ap.s20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (_error != null) _ErrorBanner(message: _error!),
-                  if (id == null)
-                    _LockedState(busy: _busy, onGenerate: _generate)
-                  else
-                    _IdentityView(identity: id),
-                  const SizedBox(height: Ap.s40),
-                  const _HonestNote(),
-                ],
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(Ap.s20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (_error != null) _ErrorBanner(message: _error!),
+                    if (id == null)
+                      _LockedState(busy: _busy, onGenerate: _generate)
+                    else
+                      _IdentityView(identity: id),
+                    const SizedBox(height: Ap.s40),
+                    _HonestNote(policy: _policy),
+                  ],
+                ),
               ),
             ),
           ),
@@ -157,8 +196,11 @@ class _LockedState extends StatelessWidget {
         const SizedBox(height: Ap.s40),
         const ApeironRaven(size: 92, color: Ap.stone600),
         const SizedBox(height: Ap.s28),
-        Text('ЛИЧНОСТЬ ЗАБЛОКИРОВАНА',
-            style: t.labelLarge?.copyWith(color: Ap.bone100), textAlign: TextAlign.center),
+        Text(
+          'ЛИЧНОСТЬ ЗАБЛОКИРОВАНА',
+          style: t.labelLarge?.copyWith(color: Ap.bone100),
+          textAlign: TextAlign.center,
+        ),
         const SizedBox(height: Ap.s12),
         Text(
           'Ключи уничтожены в памяти. Разблокировка по пину появится на этапе 2.',
@@ -210,7 +252,9 @@ class _IdentityView extends StatelessWidget {
             ),
           ),
           padding: const EdgeInsets.symmetric(
-              vertical: Ap.s28, horizontal: Ap.s16),
+            vertical: Ap.s28,
+            horizontal: Ap.s16,
+          ),
           // Жёсткая сетка 3 × 2, а не Wrap: разбивка обязана быть одинаковой
           // на всех экранах. При сверке голосом плавающая раскладка —
           // источник ошибок, а ошибка здесь означает пропущенного посредника.
@@ -229,7 +273,10 @@ class _IdentityView extends StatelessWidget {
                           child: Text(
                             g,
                             style: Ap.mono(
-                                size: 26, spacing: 3.4, weight: FontWeight.w600),
+                              size: 26,
+                              spacing: 3.4,
+                              weight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ),
@@ -244,15 +291,20 @@ class _IdentityView extends StatelessWidget {
           children: [
             Container(width: 7, height: 7, color: Ap.ember400),
             const SizedBox(width: Ap.s8),
-            Text('НЕ СВЕРЕНО НИ С КЕМ',
-                style: t.labelMedium?.copyWith(color: Ap.ember400)),
+            Text(
+              'НЕ СВЕРЕНО НИ С КЕМ',
+              style: t.labelMedium?.copyWith(color: Ap.ember400),
+            ),
           ],
         ),
 
         const SizedBox(height: Ap.s28),
         _KeyRow(label: 'ED25519 · ПОДПИСЬ', value: identity.signingKeyHex),
         const SizedBox(height: Ap.s16),
-        _KeyRow(label: 'X25519 · СОГЛАСОВАНИЕ', value: identity.agreementKeyHex),
+        _KeyRow(
+          label: 'X25519 · СОГЛАСОВАНИЕ',
+          value: identity.agreementKeyHex,
+        ),
       ],
     );
   }
@@ -272,7 +324,10 @@ class _KeyRow extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: Text(label, style: Theme.of(context).textTheme.labelMedium),
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
             ),
             IconButton(
               iconSize: 16,
@@ -280,9 +335,9 @@ class _KeyRow extends StatelessWidget {
               tooltip: 'Скопировать',
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: value));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Скопировано')),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text('Скопировано')));
               },
               icon: const Icon(Icons.content_copy, color: Ap.fog400),
             ),
@@ -296,7 +351,9 @@ class _KeyRow extends StatelessWidget {
 }
 
 class _HonestNote extends StatelessWidget {
-  const _HonestNote();
+  const _HonestNote({required this.policy});
+
+  final LockPolicy policy;
 
   @override
   Widget build(BuildContext context) {
@@ -311,8 +368,7 @@ class _HonestNote extends StatelessWidget {
           const SizedBox(height: Ap.s8),
           Text(
             'Секретные ключи не покидают Rust — сюда пришли только публичные '
-            'половины и отпечаток. При уходе приложения в фон личность '
-            'уничтожается вместе с ключами.',
+            'половины и отпечаток. ${policy.explanation}',
             style: t.bodySmall,
           ),
           const SizedBox(height: Ap.s16),
