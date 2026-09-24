@@ -54,6 +54,11 @@ pub enum Event {
     /// An address I was about to use already held something else: the schedule is reused or
     /// known to someone else. The message is not delivered.
     Squatted { first: u64 },
+    /// The inviter has taken my reply to its invitation: the contact is no longer "waiting".
+    Accepted,
+    /// Someone answered the invitation before me — whoever else saw it, or someone it was
+    /// forwarded to. This contact will not be established.
+    InvitationTaken,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -112,6 +117,17 @@ pub struct Pair {
     assembling: Option<Assembly>,
     /// Losses up to here have been reported.
     lost_to: u64,
+    /// Whether a state of the peer has ever been read: for the one who accepted an invitation,
+    /// that is the inviter's acknowledgement (`docs/transport.md` §8).
+    peer_seen: bool,
+    /// The reply put into an invitation's inbox, re-put until the peer is seen.
+    intro: Option<Intro>,
+}
+
+#[derive(Debug, Clone)]
+struct Intro {
+    item: SignedItem,
+    put_at: Option<u64>,
 }
 
 impl Pair {
@@ -135,7 +151,24 @@ impl Pair {
             current: None,
             assembling: None,
             lost_to: 0,
+            peer_seen: false,
+            intro: None,
         })
+    }
+
+    /// The reply to an invitation, to be re-put with everything else until the peer answers.
+    pub fn with_intro(mut self, reply: SignedItem) -> Self {
+        self.intro = Some(Intro {
+            item: reply,
+            put_at: None,
+        });
+        self
+    }
+
+    /// Whether a state of the peer has ever been read. For the one who accepted an invitation:
+    /// whether the inviter has taken the reply — until then the contact is "waiting".
+    pub fn peer_seen(&self) -> bool {
+        self.peer_seen
     }
 
     // ─── Sending ─────────────────────────────────────────────────────────────
@@ -232,6 +265,19 @@ impl Pair {
             }
             Some(_) => {}
         }
+
+        if let Some(intro) = &self.intro {
+            match intro.put_at {
+                None => {
+                    due.first_puts.insert(intro.item.key);
+                    due.items.push(intro.item.clone());
+                }
+                Some(t) if t.saturating_add(REPUT_EVERY_S) <= now => {
+                    due.items.push(intro.item.clone())
+                }
+                Some(_) => {}
+            }
+        }
         Ok(due)
     }
 
@@ -247,17 +293,29 @@ impl Pair {
                 c.put_at = Some(now);
             }
         }
+        if let Some(i) = self.intro.as_mut() {
+            if &i.item.key == key {
+                i.put_at = Some(now);
+            }
+        }
     }
 
     /// Whether the item with `key` is still one to put.
     pub fn is_pending(&self, key: &[u8; 32]) -> bool {
         self.outbox.values().any(|o| &o.item.key == key)
             || self.current.as_ref().is_some_and(|c| &c.item.key == key)
+            || self.intro.as_ref().is_some_and(|i| &i.item.key == key)
     }
 
     /// The address `key`, about to be used for the first time, already holds something else.
     /// Its message is not put and is reported.
     pub fn squatted(&mut self, key: &[u8; 32]) -> Option<Event> {
+        if self.intro.as_ref().is_some_and(|i| &i.item.key == key) {
+            // Someone answered this invitation first: whoever else saw its secret, or someone
+            // it was forwarded to. Our reply would never land (BEP 44 keeps the first).
+            self.intro = None;
+            return Some(Event::InvitationTaken);
+        }
         let message = self
             .outbox
             .values()
@@ -283,6 +341,7 @@ impl Pair {
             )?);
         }
         out.extend(self.outbox.values().map(|o| o.item.clone()));
+        out.extend(self.intro.iter().map(|i| i.item.clone()));
         Ok(out)
     }
 
@@ -384,7 +443,16 @@ impl Pair {
             next_send: s.next_send.max(self.peer.next_send),
             send_floor: s.send_floor.max(self.peer.send_floor),
         };
-        Ok(self.take_acknowledged())
+        let mut events = Vec::new();
+        if !self.peer_seen {
+            self.peer_seen = true;
+            // The inviter has taken the reply: it need not be re-put any more.
+            if self.intro.take().is_some() {
+                events.push(Event::Accepted);
+            }
+        }
+        events.extend(self.take_acknowledged());
+        Ok(events)
     }
 
     /// Removes what the peer has; reports messages all of whose parts it has.
@@ -411,11 +479,20 @@ impl Pair {
     }
 
     /// The peer's parts to ask for now, with their addresses.
+    ///
+    /// Until the peer's state has been read once, `next_recv` itself is asked for blindly. After
+    /// that the state is trusted: asking for an address nobody has put yet waits for the whole
+    /// DHT query, seconds of every idle round, for nothing.
     pub fn wanted(&self) -> Result<Vec<(u64, [u8; 32])>, TransportError> {
+        let probe = if self.peer_seen {
+            self.next_recv
+        } else {
+            self.next_recv.saturating_add(1)
+        };
         let end = self
             .peer
             .next_send
-            .max(self.next_recv.saturating_add(1))
+            .max(probe)
             .min(self.next_recv.saturating_add(MAX_FETCH));
         (self.next_recv..end)
             .filter(|i| !self.inbound.contains_key(i))

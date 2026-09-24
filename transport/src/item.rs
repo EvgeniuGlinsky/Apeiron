@@ -54,6 +54,27 @@ impl SignedItem {
         })
     }
 
+    /// Signs a value made elsewhere — the inbox reply of an invitation, which has its own outer
+    /// layer (`crate::invite`). Still exactly [`ITEM_BYTES`] long, like every item.
+    pub(crate) fn sign_value(
+        slot: &Slot,
+        seq: i64,
+        value: Vec<u8>,
+    ) -> Result<Self, TransportError> {
+        if value.len() != ITEM_BYTES {
+            return Err(TransportError::Internal(
+                "an item came out of the wrong length",
+            ));
+        }
+        let signature = slot.signer().sign(&signable(seq, &value)).to_bytes();
+        Ok(Self {
+            key: slot.public_key(),
+            seq,
+            value,
+            signature,
+        })
+    }
+
     /// The item as `mainline` puts it.
     pub fn to_mutable(&self) -> MutableItem {
         MutableItem::new_signed_unchecked(self.key, self.signature, &self.value, self.seq, None)

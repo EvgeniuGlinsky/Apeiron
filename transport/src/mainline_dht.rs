@@ -8,7 +8,12 @@
 // the transport are sequential and short; the async API comes with the active polling task.
 #![allow(deprecated)]
 
+use std::time::{Duration, Instant};
+
 use crate::dht::{Dht, DhtError, Found};
+
+/// How long [`MainlineDht::get_latest`] keeps listening after the first answer.
+const LATEST_WINDOW: Duration = Duration::from_millis(500);
 use crate::item::SignedItem;
 
 pub struct MainlineDht {
@@ -65,14 +70,56 @@ impl Dht for MainlineDht {
             .map_err(|e| DhtError::Refused(e.to_string()))
     }
 
+    fn put_many(&self, items: &[SignedItem]) -> Vec<Result<(), DhtError>> {
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = items
+                .iter()
+                .map(|item| scope.spawn(move || self.put(item)))
+                .collect();
+            handles
+                .into_iter()
+                .map(|h| {
+                    h.join()
+                        .unwrap_or(Err(DhtError::Unreachable("a put thread died".to_string())))
+                })
+                .collect()
+        })
+    }
+
+    /// The highest `seq` among the answers that come within [`LATEST_WINDOW`] of the first
+    /// one — not of the whole query, which waits for the slowest nodes and took seconds.
+    ///
+    /// A state item is the only thing asked for this way, and an older one costs nothing: the
+    /// pair takes every field of the peer's state only upwards, so a stale answer cannot take
+    /// anything back, and the next round sees the newer one.
     fn get_latest(&self, key: &[u8; 32]) -> Result<Option<Found>, DhtError> {
-        Ok(self
-            .dht
-            .get_mutable_most_recent(key, None)
-            .map(|item| Found {
-                seq: item.seq(),
-                value: item.value().to_vec(),
-            }))
+        let (tx, rx) = std::sync::mpsc::channel();
+        let dht = self.dht.clone();
+        let key = *key;
+        // The lookup runs on in its thread after we stop listening; it ends with its query.
+        std::thread::spawn(move || {
+            for item in dht.get_mutable(&key, None, None) {
+                if tx.send(item).is_err() {
+                    break;
+                }
+            }
+        });
+        // Nothing at all: the query ended without an answer.
+        let Ok(mut best) = rx.recv() else {
+            return Ok(None);
+        };
+        let deadline = Instant::now() + LATEST_WINDOW;
+        while let Some(left) = deadline.checked_duration_since(Instant::now()) {
+            match rx.recv_timeout(left) {
+                Ok(item) if item.seq() > best.seq() => best = item,
+                Ok(_) => {}
+                Err(_) => break,
+            }
+        }
+        Ok(Some(Found {
+            seq: best.seq(),
+            value: best.value().to_vec(),
+        }))
     }
 
     fn get_first(&self, key: &[u8; 32]) -> Result<Option<Found>, DhtError> {

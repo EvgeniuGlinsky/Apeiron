@@ -236,6 +236,13 @@ appears, which is the acknowledgement. At expiry A stops asking and removes the 
 (`Account::remove_one_time_key`). A forwarded invitation serves the first valid reply; the others
 never get A's state and stay "waiting", then "not accepted".
 
+**Done (24.09.2026)** in `transport/src/invite.rs`: the invitation is 261 bytes —
+`version ‖ bundle (224) ‖ S ‖ expiry day` — and as text `apeiron:` plus URL-safe base64 (whitespace
+a messenger adds is ignored); the first text fits in 447 bytes of UTF-8; the reply rides in the
+pair (`Pair::with_intro`), is re-put until the inviter's first state arrives (`Event::Accepted`),
+and a taken inbox is reported (`Event::InvitationTaken`). Tests in `transport/tests/invite.rs`,
+one for every check above.
+
 **Verified is always the person's own act, on each side.** Either both compare the safety number
 (`PublicIdentity::safety_number`) and confirm it, or one scans the other's verification code with
 the camera. Scanning an *invitation* never marks anything as verified: the app cannot tell a screen

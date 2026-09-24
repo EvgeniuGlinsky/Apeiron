@@ -13,6 +13,9 @@ apeiron-core = { path = "../core" }
 # conscious step with its changelog read, as for vodozemac.
 mainline = { version = "=8.0.0", default-features = false, features = ["node"] }
 ed25519-dalek.workspace = true
+x25519-dalek.workspace = true
+# Already in the tree through vodozemac, the same version: the text form of an invitation.
+base64 = "0.23"
 hkdf.workspace = true
 sha2.workspace = true
 hex.workspace = true

@@ -8,6 +8,7 @@
 //!
 //! - [`address`] — where items live: addresses only the two people can compute;
 //! - [`envelope`] and [`item`] — what an item is: one length, sealed, signed once;
+//! - [`invite`] — getting to know each other through a one-time inbox;
 //! - [`pair`] — the state of one conversation, pure;
 //! - [`engine`] — a round of sending and one of receiving against a [`dht::Dht`];
 //! - [`mainline_dht`] — the real one;
@@ -19,6 +20,7 @@ pub mod address;
 pub mod dht;
 pub mod engine;
 pub mod envelope;
+pub mod invite;
 pub mod item;
 pub mod mainline_dht;
 pub mod pair;
@@ -36,6 +38,8 @@ pub enum TransportError {
     Envelope(#[from] envelope::EnvelopeError),
     #[error("the value is not an item of this conversation")]
     NotOurs,
+    #[error("invitation: {0}")]
+    Invitation(String),
     #[error("the text needs {parts} parts; at most {} fit", envelope::MAX_PARTS)]
     TooLong { parts: usize },
     #[error("key derivation failed")]

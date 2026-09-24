@@ -28,6 +28,12 @@ pub struct Found {
 pub trait Dht {
     fn put(&self, item: &SignedItem) -> Result<(), DhtError>;
 
+    /// [`Dht::put`] for many items. The real DHT puts them all at once: one after another,
+    /// a round of five items takes twenty seconds.
+    fn put_many(&self, items: &[SignedItem]) -> Vec<Result<(), DhtError>> {
+        items.iter().map(|i| self.put(i)).collect()
+    }
+
     /// The value with the highest `seq` any node returns. For state items, which change.
     fn get_latest(&self, key: &[u8; 32]) -> Result<Option<Found>, DhtError>;
 

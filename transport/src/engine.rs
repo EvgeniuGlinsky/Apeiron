@@ -3,9 +3,12 @@
 //! The caller owns the contact: it loads the [`Pair`] and the `Chat`, runs a round, and commits
 //! both — with what the round reported — in one transaction.
 
+use std::collections::HashSet;
+
 use apeiron_core::Chat;
 
 use crate::dht::Dht;
+use crate::item::SignedItem;
 use crate::pair::{Event, Pair};
 use crate::TransportError;
 
@@ -28,23 +31,36 @@ pub fn round(
 pub fn send_round(pair: &mut Pair, dht: &impl Dht, now: u64) -> Result<Vec<Event>, TransportError> {
     let due = pair.due(now)?;
     let mut events = due.events;
-    for item in due.items {
-        // A message found squatted a moment ago takes its other parts with it.
-        if !pair.is_pending(&item.key) {
-            continue;
-        }
-        if due.first_puts.contains(&item.key) {
-            match dht.get_first(&item.key) {
-                Ok(Some(found)) if found.value != item.value => {
-                    events.extend(pair.squatted(&item.key));
-                    continue;
-                }
-                Ok(_) => {}
-                // Unknown whether the address is free: not now.
-                Err(_) => continue,
+
+    // The addresses used for the first time are asked for all at once, then everything is put
+    // all at once: one after another, a round took ten seconds and more.
+    let fresh: Vec<&SignedItem> = due
+        .items
+        .iter()
+        .filter(|i| due.first_puts.contains(&i.key))
+        .collect();
+    let keys: Vec<[u8; 32]> = fresh.iter().map(|i| i.key).collect();
+    let mut not_now = HashSet::new();
+    for (item, found) in fresh.iter().zip(dht.get_first_many(&keys)) {
+        match found {
+            Ok(Some(f)) if f.value != item.value => events.extend(pair.squatted(&item.key)),
+            // Free, or holding exactly this item (put before a crash): go ahead.
+            Ok(_) => {}
+            // Unknown whether the address is free: not now.
+            Err(_) => {
+                not_now.insert(item.key);
             }
         }
-        if dht.put(&item).is_ok() {
+    }
+
+    // A message found squatted takes its other parts with it.
+    let to_put: Vec<SignedItem> = due
+        .items
+        .into_iter()
+        .filter(|i| pair.is_pending(&i.key) && !not_now.contains(&i.key))
+        .collect();
+    for (item, result) in to_put.iter().zip(dht.put_many(&to_put)) {
+        if result.is_ok() {
             pair.mark_put(&item.key, now);
         }
     }

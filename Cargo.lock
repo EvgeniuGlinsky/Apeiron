@@ -139,6 +139,7 @@ name = "apeiron-transport"
 version = "0.1.0"
 dependencies = [
  "apeiron-core",
+ "base64",
  "ed25519-dalek",
  "getrandom",
  "hex",
@@ -146,6 +147,7 @@ dependencies = [
  "mainline",
  "sha2",
  "thiserror",
+ "x25519-dalek",
  "zeroize",
 ]
 
