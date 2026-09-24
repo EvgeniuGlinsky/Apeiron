@@ -98,18 +98,40 @@ object Vault {
     /** Что произошло при последней попытке создать ключ — для отчёта. */
     private var lastKeyNote: String = "ключ ещё не запрашивался"
 
+    /** Чем кончилась попытка связаться с ядром. Единственный способ узнать о
+     * неудаче: до появления движка Flutter показать её негде. */
+    private var registrationNote: String = "связь с ядром ещё не устанавливалась"
+
     /**
      * Вызывается из [MainActivity] до старта Dart.
      *
      * Здесь же грузится библиотека: `System.loadLibrary` и `dlopen` из Dart
      * попадают в одно пространство имён компоновщика и находят один и тот же
      * объект по soname, поэтому копия кода остаётся одна.
+     *
+     * **Наружу не бросает ничего, и это не перестраховка.** Вызов приходит из
+     * `onCreate` до того, как поднят движок Flutter: исключение отсюда — это
+     * чёрный экран и ни одной строчки на экране, потому что показывать её
+     * нечем. `UnsatisfiedLinkError` тут вполне достижим (нет `.so` под эту
+     * архитектуру, не нашёлся символ нативного метода), и разница между
+     * «приложение не запускается» и «приложение запустилось и говорит, что
+     * именно не вышло» — это ровно та разница, ради которой пишется
+     * диагностика.
+     *
+     * При неудаче Rust просто остаётся без ссылок и отвечает внятной ошибкой,
+     * а причина ложится в отчёт.
      */
     @JvmStatic
     fun register(context: Context) {
         appContext = context.applicationContext
-        System.loadLibrary("rust_lib_apeiron")
-        nativeRegister(this, appContext.filesDir.absolutePath)
+        try {
+            System.loadLibrary("rust_lib_apeiron")
+            nativeRegister(this, appContext.filesDir.absolutePath)
+            registrationNote = "связь с ядром установлена"
+        } catch (e: Throwable) {
+            // Throwable, а не Exception: UnsatisfiedLinkError — это Error.
+            registrationNote = "СВЯЗЬ С ЯДРОМ НЕ УСТАНОВЛЕНА: ${describe(e)}"
+        }
     }
 
     /**
