@@ -1,7 +1,7 @@
 # Transport: messages through Mainline DHT (stage 3)
 
-**Status: design, revised after review (24.09.2026).** Decision record: R-012 in
-`docs/threat-log.md`. Nothing here is built yet. §12 lists what the review found and what it
+**Status: being built (24.09.2026) — steps 1–4 of §10 done, the screens of step 5 outlined.**
+Decision record: R-012 in `docs/threat-log.md`. §12 lists what the reviews found and what they
 changed; it is kept so the same holes are not dug again.
 
 The shape of the problem: two phones, no server of ours, and neither is reachable while it is
@@ -84,6 +84,11 @@ device keys in pre-key messages), and occupy future addresses ahead of time to s
 the check above detects that, it does not prevent it. The fix is address epochs rotated in-band;
 it is required **before any public release**, not after it.
 
+**One device per identity.** Addresses and the `seq` of state items belong to the identity, not the
+device. A second device of the same identity (the sigchain allows `AddDevice`) would sign state
+items with the same `seq` and different values, and the nodes would keep whichever came first.
+Until devices get schedules of their own, an identity lives on one phone.
+
 ## 3. Items
 
 The value of every item is exactly `E = 900` bytes, the measured size. 996 is allowed by BEP 44
@@ -127,7 +132,9 @@ truncates; corrected there.)
 
 One owner per contact — a task holding that contact's `Chat` and pair state — does all sending and
 receiving for it, one thing at a time. Two load-modify-save cycles on one `Chat` would reuse an Olm
-message key or lose a ratchet step.
+message key or lose a ratchet step. **Checked, not assumed** (`apeiron-messenger`): every commit
+first compares the stored conversation record with the one this owner last loaded or wrote, and a
+stale owner is refused and must load again, instead of writing an old session over a new one.
 
 1. Split the text; for each part Olm-encrypt, wrap into an envelope for index `next_send + i`,
    sign.
@@ -147,6 +154,9 @@ message key or lose a ratchet step.
 - The state item is re-put every `R` and re-signed when it changes. Signing needs the pair secret,
   so it happens only while the vault is open; **when the vault locks**, the state items for today
   and the next 6 days are signed with the values of that moment and left to the background job.
+  The `seq` numbers they take must be committed **in the same transaction as the outbox**
+  (step 7): otherwise the pair, restored on day d+2, signs the `seq` the background job already
+  put with another value, and the nodes refuse it.
 - After `T = 7 days` a part stops being re-put: `send_floor` rises above it, the receiver learns
   from the state that it is gone and marks it lost, and the sender shows the message as **not
   delivered**. Nothing is dropped silently, on either side.
@@ -176,8 +186,13 @@ through the four well-known nodes.
   no longer keeps is classified as lost, not retried.
 - One transaction per received batch: the Olm session, the messages, `next_recv`/`recv_bits`, the
   inbound rows removed, the new state item.
-- A round is **receive, then send** (`engine::round`): what arrived is acknowledged in the same
-  round, not the next one.
+- A round is **receive, then send**: what arrived is acknowledged in the same round, not the next
+  one. **But nothing that acknowledges is put before it is stored**: receive → choose what to put
+  (`Pair::due`, which makes the new state item) → commit → put (`engine::put_due`) → commit the
+  times of the puts. `engine::round` puts before the caller can commit; a crash in between leaves
+  the peer believing messages arrived that were never kept — it stops re-putting them — and the
+  state item's `seq` taken by a value the restored pair does not know. `apeiron-messenger` runs
+  the order above; its test fails a commit mid-round and checks that nothing was acknowledged.
 - **In the background the phone does not listen and, for now, does not fetch** (R-012). Fetching in
   the background, to show "a new message" without content, is a separate later step, and only if
   the battery measurement allows it.
@@ -243,6 +258,29 @@ pair (`Pair::with_intro`), is re-put until the inviter's first state arrives (`E
 and a taken inbox is reported (`Event::InvitationTaken`). Tests in `transport/tests/invite.rs`,
 one for every check above.
 
+**With the store (`apeiron-messenger`, 24.09.2026):**
+
+- An invitation is saved **with the account** that published its one-time key, in one
+  transaction: saved without it, the reply could never be opened. Opening a reply writes the
+  contact, the session, the pair, the first text and the account, and forgets the invitation, in
+  one transaction (`Storage::introduce`); the contact's other sessions are removed.
+- **Expiry.** B accepts through day `expires`; A still opens a reply on day `expires + 1` and
+  retires the invitation after that, removing its one-time key (vodozemac `low-level-api`, for
+  this one function). B stops re-putting the reply after the same day and shows "not accepted" —
+  but keeps listening for another `T`: if A took the reply at the last moment, A's state still
+  makes the contact accepted. B removes the one-time key of its own bundle at once: it travels
+  only for its signature.
+- **Who is already a contact.** B refuses an invitation from someone it has a working (live or
+  waiting) conversation with: pasting the same invitation twice would otherwise replace a live
+  conversation by one whose reply is squatted by its own first reply. A closed conversation, or
+  one that does not load, is replaced — that is the way back. To introduce again after deleting a
+  contact, the other side deletes it too.
+- **Crossed invitations** (A accepted B's, B accepted A's): each side keeps the session of the
+  invitation made by the **lower** identity (bytewise, as for `K_pair`). Decided by how the session
+  was made, never by its state: a waiting session can become live before the second reply is
+  opened, and a rule by state leaves the two sides on different sessions for good. The losing
+  side's queued messages are shown as not delivered.
+
 **Verified is always the person's own act, on each side.** Either both compare the safety number
 (`PublicIdentity::safety_number`) and confirm it, or one scans the other's verification code with
 the camera. Scanning an *invitation* never marks anything as verified: the app cannot tell a screen
@@ -271,6 +309,20 @@ code kept as a known answer (`a_record_sealed_by_schema_v1_still_opens`), every 
 read back after the migration, a step cut short leaves v1 as it was (`store/tests/migration.rs`,
 `store/src/lib.rs`).
 
+**Records of the messenger** (`messenger/src/record.rs`), sealed by the store in their place:
+
+- a message: `format ‖ kind (mine / theirs / lost) ‖ status ‖ first index? ‖ time ‖ [to, for a
+  loss] ‖ text`. The status of mine only moves forward: queued < sent < delivered; not delivered
+  and "address taken" are final. The first text of an introduction has no index — it travels in
+  the reply, not in the schedule;
+- a conversation, in `pair_state`: `format ‖ origin (I invited / I accepted) ‖ the first text's
+  row? ‖ the pending messages (first index → row) ‖ the pair`. The pair holds its session id and
+  refuses to be restored for another session.
+
+**Order of the history** is the order in which entries appeared on this phone; the time of a
+received message is when it was decrypted. An envelope carries no time of its sender, and sorting
+by the sender's clock is not worth trusting it.
+
 **The background key.** The background re-put needs the outbox without the PIN, so the signed items
 are sealed under a separate Keystore key without user authentication. Such a key also works on a
 phone that is locked but has been unlocked once since boot — the usual state in which phones are
@@ -293,9 +345,13 @@ never migrates and refuses a `SCHEMA_VERSION` other than its own.
 2. The real DHT behind the same trait, and two instances talking through the real DHT from the
    desktop.
 3. Schema v2 (`RECORD_FORMAT` split, new tables) and its migration tests.
-4. The bridge: history and sessions in Rust (R-004).
-5. Screens: contacts, invitation (QR and text), verification, chat.
-6. Active polling (a tokio task while the app is in front).
+4. The bridge: history and sessions in Rust (R-004). **Done:** `apeiron-messenger`, the owner of a
+   conversation, and a thin chat API in the bridge.
+5. Screens: contacts, invitation (QR and text), verification, chat. **Outlined** with the text
+   invitation; QR waits for the scanner below.
+6. Active polling while the app is in front. For now a timer in Dart (the open chat 5 s, the list
+   60 s) calls a round; a thread of its own, and a send that never waits for a round in flight,
+   come here.
 7. Background re-put (WorkManager → Kotlin → JNI → Rust); the saved routing table.
 8. Two phones. Stage 4 then measures the battery and the real background interval.
 
@@ -344,3 +400,10 @@ All are fixed above:
 Minor: contributory and not-self agreement (§2); sizes recomputed from vodozemac's encoding (§3);
 what an identity compromise gives (§2); `mainline` specifics (§1, §7); and R-009 had the truncated
 MAC on the wrong Olm version (§3).
+
+**The second review (24.09.2026), of the plan for step 4**, found one critical and three major
+problems in it, all fixed before the code: crossed invitations were settled by the state of the
+session, which changes before the second reply is opened (→ by origin, §8); B closed the contact at
+expiry while A might have opened the reply on its last day (→ B keeps listening, §8); the `seq`
+numbers signed at lock were not saved (→ with the outbox, §5); two owners of one conversation could
+write an old session over a new one (→ the stored record is compared before every commit, §4).
