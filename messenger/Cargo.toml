@@ -1,0 +1,28 @@
+[package]
+name = "apeiron-messenger"
+description = "The owner of a conversation: the store, the ratchet and the DHT together (docs/transport.md §4–§8)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+apeiron-core = { path = "../core" }
+apeiron-store = { path = "../store" }
+apeiron-transport = { path = "../transport" }
+zeroize.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+apeiron-store = { path = "../store", features = ["testing"] }
+tempfile = "3"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "warn"
