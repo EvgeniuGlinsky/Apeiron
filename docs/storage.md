@@ -1,7 +1,8 @@
 # Storage: what is where, what is protected and what leaks
 
-A document about how state survives a restart — decision **R-002** with the
-corrections from **R-010** (`docs/threat-log.md`).
+A document about how state survives a restart and what the PIN protects —
+decision **R-002** with the corrections from **R-010**, and **R-011**, the PIN
+(`docs/threat-log.md`).
 
 Before storage existed, every launch created a new identity and a new device:
 the fingerprint read aloud during verification was different after a restart,
@@ -10,14 +11,14 @@ itself pointless — all of them are built on top of storage.
 
 ---
 
-## 1. Two levels of keys
+## 1. Keys
 
 ```
-KEK  — AES-256-GCM in AndroidKeyStore, alias apeiron.kek.v1, non-exportable
-       setIsStrongBoxBacked(true) → fallback to TEE
-       setUnlockedDeviceRequired(true)
-       setRandomizedEncryptionRequired(true)
-  └ wraps → DEK, the database key: 32 random bytes, file vault.bin
+HMAC key — HMAC-SHA256 in AndroidKeyStore, alias apeiron.kek.v2, non-exportable
+           setIsStrongBoxBacked(true) → fallback to TEE
+           setUnlockedDeviceRequired(true)
+  PIN ──Argon2id──▶ x0 ──k × HMAC in the hardware──▶ xk ──HKDF──▶ W
+  W seals → DEK, the database key: 32 random bytes, file vault.bin
        └ derive(purpose) → subkeys
             apeiron/storage/identity/v1    identity secret
             apeiron/storage/account/v1     this device's Olm account
@@ -28,73 +29,93 @@ KEK  — AES-256-GCM in AndroidKeyStore, alias apeiron.kek.v1, non-exportable
             apeiron/storage/tag/v1         lookup tags
 ```
 
-Two levels rather than one, for a single reason: **Keystore key parameters
-cannot be changed after creation.** When the PIN arrives (R-001),
-`apeiron.kek.v1` will have to be discarded and a `v2` created. With two levels
-this means re-wrapping thirty-two bytes; with one, re-encrypting all
-conversations — that is, in practice, "it will never be done".
+Why the PIN goes **into** the hardware on every attempt, and not next to it,
+is R-011: a secret the hardware unwraps once gives someone with root all PINs
+offline; a chain of hardware operations per guess does not.
 
-The same technique gives **cryptographic erasure** (R-005) for free: destroy the
-alias and `vault.bin`, and the database turns into noise, even if a copy has
-already been taken.
+Still two levels: the PIN seals the database key, and the subkeys come from the
+database key. Changing the PIN or the hardware key later (for example
+`setUserAuthenticationParameters` at stage 6) means re-sealing thirty-two bytes,
+not re-encrypting every conversation — that is, in practice, "it will never be
+done".
+
+The same technique gives **cryptographic erasure** (R-005): destroy the alias and
+`vault.bin`, and the database turns into noise. With the limit R-005 now names:
+an image of the keystore's own files taken earlier still holds the key blob,
+because Android does not let an app ask for rollback-resistant keys.
 
 Purpose labels are kept as a registry in `core/src/aead.rs` (`purpose`), not as
 strings at the call site. A typo in a string gives **a different key**,
 everything keeps working, and this is discovered only once data has already been
-written under the wrong key.
+written under the wrong key. `apeiron/storage/pin-wrap/v1` joined it with the PIN.
 
-### Alias migration v1 → v2
+### No migration from builds before the PIN
 
-The order is non-negotiable, and it is written down here in advance because it
-will have to be executed on live data:
+Builds before the PIN wrapped the database key with an AES key
+(`apeiron.kek.v1`, `kdf_id = 1`). Such data existed only on test phones, and it is
+**not** carried over. The migration would have been the riskiest code in the
+vault: unwrap with the old key, create the new one, re-seal, and delete the old
+key only once the new wrapper is durably on disk — where "durably" on f2fs
+depends on checkpoints, and deleting the key too early loses everything. All of
+that for one run on test data.
 
-1. unwrap the database key via `v1`;
-2. create `v2` with the new access conditions;
-3. wrap the same database key under `v2`;
-4. **atomically** write the new wrapper and flush it to disk;
-5. **and only then** `deleteEntry("apeiron.kek.v1")`.
-
-A crash in the middle with any other order means losing everything.
-
-**So far this order is only written down, not programmed.** The second alias
-will not exist until there is a PIN, and writing the migration "just in case"
-would mean writing untestable code next to a key. What has been done now is the
-place for it: the `kdf_id` field in the wrapper format and a versioned alias
-name. What must be done together with the PIN is the migration itself **and a
-test that pins down the order of the steps**, because it will have to be checked
-on the owner's live data.
+Instead the app recognises `kdf_id = 1` and says so, and offers to start over.
+It never starts over on its own; `destroy()` removes the legacy alias together
+with the new one. The migration order written here before is kept for the day a
+real change of the hardware key comes — then it is written together with its
+test, as this document demanded.
 
 ---
 
 ## 2. Wrapper format (`vault.bin`)
 
 ```
-"APVLT1" (6) ‖ kdf_id (1) ‖ level at creation (1) ‖ sealed
-sealed = AES-GCM(KEK, kdf_id ‖ level ‖ database key)
+"APVLT1" (6) ‖ kdf_id = 2 (1) ‖ level at creation (1) ‖ rounds k (4, BE)
+  ‖ Argon2id KiB (4, BE) ‖ Argon2id passes (4, BE) ‖ Argon2id lanes (1)
+  ‖ salt (16) ‖ key check value (16)
+  ‖ XChaCha20-Poly1305(W, aad = the whole header above, DEK)
 ```
 
-The header is repeated **inside** the sealed text. After opening, the recovered
-values are compared with those in the file; a mismatch means refusal. Otherwise
-a tweaked level byte would change the label on screen in a reassuring
-direction, without touching anything else.
+The whole header is the authenticated data of the sealed key: a tweaked level
+byte, a smaller `k` or a different salt all make opening fail. This became
+possible with the PIN: the AEAD is our own now, and the question of `updateAAD`
+in a particular StrongBox is gone.
 
-Doing the same through additional authenticated data on the Keystore side would
-be more natural, but the behavior of `updateAAD` in a specific StrongBox
-implementation cannot be checked on the development machine, and there is no
-point spending the single round with the phone on it. AES-256-GCM is guaranteed
-to be available in StrongBox; there is no such certainty about AAD.
+Bounds are checked **before** anything is computed or counted: `0 < k ≤ 20 000`,
+Argon2id memory up to 256 MiB, up to 10 passes, one lane. A planted header must
+not be able to hang the app or make it allocate gigabytes.
 
-`kdf_id` is a slot for the PIN: `1` means "the database key is the KEK output as
-is", `2` will appear together with mixing in the PIN.
+The key check value is `HMAC_hw("apeiron/key-check/v1")[..16]`. It does not
+depend on the PIN and leaks nothing about it. It exists so that a key that is
+present but not the one — reissued by firmware, restored from somewhere — is
+reported as such instead of as a wrong PIN.
 
-The nonce is issued by Keystore: the key has
-`setRandomizedEncryptionRequired` enabled, and supplying our own IV on
-encryption is forbidden. This is a decision, not a default — it directly closes
-off nonce reuse, which is what CVE-2021-25444 in Samsung's keymaster is built
-on.
+`k` is calibrated when the PIN is set: sixteen operations are discarded (cold
+keystore, JIT), three batches of 64 are timed, the **fastest** is taken — a slow
+moment would give a short chain, the direction that must not happen — and `k`
+is chosen for about 0.7 s of chain, but never below 128 on a TEE (4 on
+StrongBox, which is tens of times slower).
 
-The write is atomic: temporary file → flush to disk → rename → flush the
-directory.
+Before the new wrapper is used, it is read back from disk and opened again with
+the same PIN. A chain that is not reproducible would otherwise lock the owner
+out of everything written from then on.
+
+The write is atomic: temporary file (`vault.bin.tmp`) → flush to disk → rename →
+flush the directory.
+
+### The attempt counter (`pin.state`)
+
+```
+"APPIN1" (6) ‖ in a row (4) ‖ total (4) ‖ has anchor (1) ‖ BOOT_COUNT (8)
+  ‖ elapsedRealtime (8) ‖ writer mark (8)
+```
+
+Not in the database — the database cannot be opened without the PIN. Written
+**before** the chain is asked, so that cutting power at the verdict does not
+leave the attempt uncounted; put back only if the hardware failed before
+producing a result. A missing or unreadable counter while a vault exists means
+the first delay step, not zero. Against root the file is worthless and
+`docs/threat-log.md` (R-011) says so.
 
 ---
 
@@ -215,6 +236,11 @@ That is why creating a key is allowed **only** when there is no wrapper yet. If
 the wrapper exists but the key does not, that is "key gone", and the app says so
 directly instead of creating a new key and destroying the conversations.
 
+With the PIN there is a fourth way to the same outcome, and it is deterministic:
+the key is present but its check value does not match the header — a key that is
+not the one. It gets its own state, "the key is not the one", so that it never
+reads as a wrong PIN and never costs an attempt.
+
 Backup is disabled in two ways at once — `allowBackup="false"` (works on API
 28–30) and `dataExtractionRules` excluding both cloud backup and device-to-device
 transfer (read on 31+). Some firmware ignores this anyway, so the "key gone"
@@ -228,9 +254,10 @@ embellishment at the end.
 ### About Direct Boot mode — for stage 3
 
 It is safe now: the files live in storage encrypted with the user's credential
-key, there are no components with `directBootAware`, and the release manifest
-does not even have the internet permission. The app simply does not work until
-the phone has been unlocked at least once after boot.
+key and there are no components with `directBootAware`. The release manifest
+requests the network since the DHT measurement (R-012), but nothing runs before
+the first unlock. The app simply does not work until the phone has been unlocked
+at least once after boot.
 
 Stage 3 will bring receiving push notifications, and with it a window in which
 code runs before the first unlock. There `setUnlockedDeviceRequired` will fail
@@ -242,10 +269,18 @@ device then.
 
 ## 7. Memory wiping: what can honestly be said
 
-The database key arrives from Kotlin as a byte array. The array is wiped both on
-the Kotlin side and, after copying, on the Rust side — but **this narrows the
-window rather than closing it**: the ART garbage collector moves objects, and
-`Cipher` has its own intermediate buffers that cannot be reached.
+With the PIN the database key no longer passes through Kotlin at all: Kotlin
+returns the end of the HMAC chain, and the key is derived and opened in Rust. What
+does pass through Kotlin is `x0` (the Argon2id output) and the chain's values.
+They are wiped as the loop goes and, after copying, on the Rust side — but
+**this narrows the window rather than closing it**: the ART garbage collector
+moves objects, the returned array stays on the heap until collected, and `Mac`
+has its own buffers that cannot be reached. Someone who reads `x0` from the
+Java heap can test PINs against the next hardware output, so the window matters.
+
+The PIN itself is never a string anywhere: Rust assembles it from tapped
+positions of a layout it drew, keeps the digits in a wiped buffer, and compares
+the two entries of a new PIN itself.
 
 Writing "wiped" would be untrue. The same argument is the basis of R-004 — why
 secrets are not handed to Dart — and holding Java to a weaker standard would be
@@ -279,9 +314,16 @@ not a restart, and it earns no green check mark. A random number rather than a
 process ID: the system reuses those, and a collision would give a false answer in
 exactly the direction that must not happen.
 
+The PIN adds lines that only the phone can answer: the parameters of the vault,
+the time of this unlock, one hardware operation (the fastest of three batches),
+whether the hardware serves several operations at once, the resulting estimate
+of guessing with root, a random wrong PIN rejected (born inside, not counted — not
+an oracle), whether the attempt counter survived a restart, and whether the boot
+clock is readable.
+
 ### What was verified on a live device and what was not
 
-Passed on a phone with **TEE**: the StrongBox attempt with fallback, honest
+Before the PIN, passed on a phone with **TEE**: the StrongBox attempt with fallback, honest
 naming of the level, survival of the identity, the device account and the
 ratchet state across a real process restart, locking and unlocking, binding a
 record to its location with production keys.

@@ -250,10 +250,10 @@ What goes in:
 | foreground layer | `drawable/ic_launcher_foreground.xml` | same |
 | monochrome layer | `drawable/ic_launcher_monochrome.xml` | themed icons, Android 13+ |
 | backplate | `values/ic_launcher_background.xml` — basalt | same |
-| the whole icon | `mipmap-anydpi/ic_launcher.xml` | Android 7, which has no masks yet |
+| the whole icon | `mipmap-anydpi/ic_launcher.xml` | Android 7, which has no masks yet — kept as a fallback, although since `minSdk = 28` (Android 9) no supported device reads it |
 
 There are no density PNGs at all: the `anydpi` qualifier is older than the project's lower bound
-(Android 7). Flutter's stock PNGs have been removed — a test makes sure they do not come back.
+(Android 9). Flutter's stock PNGs have been removed — a test makes sure they do not come back.
 
 Sizes. The adaptive icon canvas is 108 dp, of which the system shows the central 72 — that is the
 backplate, whose role in the app is played by the circle. The bird takes the same 0.70 of it.

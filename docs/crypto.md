@@ -231,8 +231,9 @@ StrongBox", not "key in StrongBox, verified".
 
 * ~~master key in the hardware store and a local DB under AEAD (R-002)~~ —
   half done: the hardware is there, the PIN is not, see R-010;
-* PIN and a shuffled PIN pad (R-001, R-007) — which is also the second half of
-  R-002;
+* ~~PIN and a shuffled PIN pad (R-001, R-007)~~ — done as R-011, see
+  `docs/storage.md`;
 * the chat screen and the mandatory verification screen;
 * moving the core behind the FFI boundary so that plaintext does not reach Dart
-  (R-004) — for now only the identity is exposed in the bridge.
+  (R-004) — for now the bridge exposes the identity, the state of the vault and
+  the PIN pad; `Chat`, `Sigchain` and `PrekeyBundle` are not there yet.

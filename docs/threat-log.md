@@ -116,6 +116,10 @@ messenger, and against P2 a catastrophic one. Against P8 nothing that lives insi
   because there is nothing to demand: the data does not exist, rather than being hidden. This is
   also the path to GDPR compliance with undeletable distributed storage.
 - **Cost:** zero; the mechanism is needed anyway for fragment lifetimes.
+- **A limit on the phone, said plainly:** Android does not let an app request
+  rollback-resistant keys. Deleting a keystore alias makes the key unusable from now on, but an
+  image of the keystore's own files taken **earlier** still holds the key blob. On the phone,
+  "the key is destroyed" means "from now on", not "retroactively".
 
 ### R-006. Short retention / auto-delete per chat
 - **Works against:** P2, P3, P7.
@@ -211,6 +215,11 @@ written for:
 The first half is done now. Until the second one, this is exactly how it must be
 stated: a copied data directory is useless, but a phone seized unlocked is not.
 
+**Superseded by R-011.** Point 2, read literally, does not deliver its own promise:
+mixing the PIN in *after* the hardware has unwrapped a secret gives that secret to
+anyone with root in one call. The PIN has to go into a hardware operation on every
+attempt; R-011 does that, and the AES key of this decision is gone.
+
 `setUserAuthenticationRequired` **is not enabled**, and not because it is hard.
 It adds one more — guaranteed — item to the list of ways to lose everything:
 changing or removing the screen lock, after which the key is irreversibly
@@ -272,6 +281,119 @@ And one more thing about wording: for symmetric keys attestation does not exist;
 interface says "The system reports: StrongBox", not "key in StrongBox,
 verified".
 
+### R-011. The PIN goes into the hardware on every attempt
+- **Works against:** P2 — a phone seized **unlocked**, including by someone with root on it
+  (forensic tooling, that is, P7 in practice): the vault does not open without the PIN, and every
+  guess costs `k` sequential operations in the secure hardware of this very phone. Also everything
+  R-010 already covered: a copied data directory, a backup, transfer to another phone.
+- **Does NOT work against:** P8 (while the app is open, the data is decrypted). Against extraction
+  of the key from the secure hardware it holds only as far as Argon2id and the length of the PIN
+  do. P1, P5–P7 otherwise.
+- **Verdict:** **accepted**, and implemented. It replaces the second half of R-010 as it was
+  written there.
+- **Rationale.** R-010 planned to "mix the PIN into the derivation of the database key". Read
+  literally — unwrap with the hardware key, then combine with the PIN in software — that does not
+  deliver what it promises: someone with root makes **one** call to the keystore as the app, gets
+  the unwrapped secret, and tries all 10⁶ six-digit PINs offline in milliseconds, or in minutes
+  with Argon2id. "The phone is present for every attempt" holds only if the PIN goes **into** a
+  hardware operation on every attempt. Hence:
+
+  ```
+  x0 = Argon2id(pin, salt; 64 MiB, 2 passes)       on the CPU
+  xk = HMAC_hw(… HMAC_hw(x0) …), k rounds           non-exportable key, one operation per round
+  W  = HKDF(xk, "apeiron/storage/pin-wrap/v1")
+  vault.bin = header ‖ XChaCha20-Poly1305(W, aad = header, DEK)
+  ```
+
+  The chain is sequential: one guess cannot be parallelised and cannot be moved to other hardware.
+  `k` is calibrated on the phone so that the chain costs about 0.7 s. The same idea as a passcode
+  entangled with a device UID key, minus the hardware-enforced delays that Android does not offer
+  to apps (see R-010: the hardware counter counts only the system PIN).
+
+  **What the numbers are, honestly.** The self-check measures one operation and the parallelism of
+  the hardware on the phone itself and reports the estimate. With the chain at 0.7 s and a safety
+  factor of ten (root can talk to the secure hardware directly and skip keystore2, the database
+  and the HAL), someone with root on this phone needs on average: 6 digits — hours; 8 digits —
+  weeks; 10 digits — years. The length of the PIN is the lever, and the setup screen says so.
+
+  **Argon2id — kept, and for a reason other than the obvious one.** Against the person holding the
+  phone it adds nothing: they can compute it elsewhere, for all PINs, in advance, and the chain is
+  the bottleneck. It matters in one case — the key extracted from the secure hardware, when the
+  chain becomes free (key-blob extraction bugs in Samsung's keymaster TA, CVE-2021-25444 and
+  CVE-2021-25490, and boot-ROM attacks on some chip families are real). Then 6–8 digits fall
+  anyway; with 10 digits and more Argon2id is the difference between hours and years on a GPU.
+  An earlier draft of this decision rejected Argon2id with a wrong estimate; the review caught it.
+
+  **Order of an attempt:** header and bounds (a planted `k = 2³²` must not hang the app) → key
+  present → key check value → delay gate → **count the attempt and flush to disk** → derive → open.
+  Counting before the verdict is what stops the power-cut trick that once bypassed the iOS passcode
+  counter. A hardware failure before the chain produced its result is not a verdict and puts the
+  counter back. Tests: `store/tests/pin.rs`, including one where the test key records what the
+  counter file held at the moment the hardware was asked.
+
+  **Key check value.** The header carries `HMAC_hw(label)[..16]`. A key that is present but not the
+  one the vault was made with — reissued by firmware, restored from somewhere — is reported as its
+  own state, not as a wrong PIN: otherwise the owner would collect delays for a PIN that was right
+  and never learn why. This is a fourth condition for "the data cannot be opened", next to the
+  three of R-010, and it is deterministic.
+
+  **Delays, not auto-wipe.** Five attempts are free; then 30 s, 1 min, 5 min, 15 min, then an hour
+  each. They run on the boot clock (`elapsedRealtime` plus `BOOT_COUNT`): changing the time does not
+  shorten them, and a reboot restarts the current step in full — never shorter, never longer.
+  Against root the counter is worthless (the file can be put back), and this is said: what holds
+  there is the cost of an attempt, not the file. There is no wipe after N failures: against root it
+  does not trigger, against a thief the delays suffice, and a child playing with the phone is a
+  real way to lose everything. It stays an open question, together with the duress PIN.
+
+  **The PIN does not pass through Dart as a string.** Rust draws the layout (R-007) for every
+  attempt, Dart sends the position tapped, Rust maps it to a digit and keeps the digits in a wiped
+  buffer; the two entries of a new PIN are compared in Rust. What Dart does see, said plainly: the
+  layout and the pointer events. What Kotlin sees: `x0`, which is enough to test PINs offline
+  against the next hardware output — it lives on the Java heap until collected. The window is
+  narrowed, not closed, as in `docs/storage.md` §7. `FLAG_SECURE` keeps the pad out of
+  screenshots, screen recordings and the recent-apps thumbnail. An accessibility service reads the
+  keys — that is P8, a compromised device, and nothing inside the app changes that.
+
+  **No migration of pre-PIN data.** Data written before the PIN existed only on test phones. Carrying
+  it over would have been the riskiest code in the vault — unwrap with the old key, create the new
+  one, re-seal, and delete the old key only after the new wrapper is durably on disk, where f2fs
+  checkpoints make "durably" subtle — for one run on test data. The app recognises such data and
+  offers to start over; it never does so on its own.
+
+  **Forgotten PIN = everything lost** until the recovery scheme (stage 6). The setup screen says it.
+- **Cost:** about a second on every return to the app (R-001 locks on every exit); a forgotten PIN
+  cannot be recovered; Keystore blobs cannot be revoked (see R-005); the honest estimate for six
+  digits against a forensic lab is hours.
+
+### R-012. Delivery without servers: a dead drop in Mainline DHT
+- **Works against:** P1 and P7 in the sense that matters to the project: there is no operator,
+  no relay of ours and no cloud to be compelled or switched off. Envelopes go into Mainline DHT —
+  millions of machines running BitTorrent clients, owned by nobody, which twenty years of attempts
+  have not shut down.
+- **Does NOT work against:** P5 and P6 for metadata: the DHT nodes near an envelope's address see
+  the IP of whoever puts it and of whoever fetches it, and a P4 adversary can run such nodes
+  (around 300 000 Sybil nodes were measured in Mainline, R16 of the research). A provider in a
+  censoring country can throttle DHT traffic. Content stays end-to-end encrypted regardless.
+- **Verdict:** **under measurement.** Nothing is built on it until `tools/dht-probe` and the
+  self-check measurement on a phone show that envelopes survive long enough.
+- **Rationale.** No always-on intermediary at all is impossible for a logical reason, not a
+  technical one: if the sender's phone is asleep when the receiver's wakes up, the message has to
+  be somewhere in between. The research concludes that this role cannot be removed (§2.1, §10.3)
+  and assigns it to blind relays. The DHT plays the same role without anyone owning it.
+
+  **Two modes.** While the app is open it asks the DHT every few seconds. In the background it does
+  **not** listen: staying reachable through carrier NAT means keep-alives every few tens of seconds,
+  ~150 mW, about a quarter of the battery a day (§10.4 of the research) — exactly what Briar paid.
+  Instead a periodic job (every 15 minutes at best, rarer in Doze) re-puts unacknowledged envelopes
+  — the signed packet is repeated, no keys are needed — and, as a separate later step, fetches new
+  ones undecrypted. Checking is cheap; listening is expensive.
+
+  **What it costs:** an envelope is at most 1000 bytes (about 700 characters of text; longer
+  messages go in parts; media do not go this way); background delivery takes minutes to hours;
+  entry into the network goes through well-known bootstrap addresses — losing them does not stop a
+  phone that already knows nodes, and those are cached.
+- **Cost:** the release build requests the network permission from now on.
+
 ---
 
 ## Open questions
@@ -280,6 +402,8 @@ verified".
   jurisdictions compelling someone to apply a finger is legally easier than compelling them to
   hand over a password. The case law is contradictory and changing. To be decided after consulting
   a lawyer, not before.
+- **Wiping after N wrong PINs.** Deliberately not done (R-011): useless against root, dangerous
+  in a child's hands. Belongs with the duress PIN below and is decided together with it.
 - **A duress PIN that wipes data, instead of showing a decoy account.** It does not create the
   "prove there is no second PIN" trap, but destroying data is itself prosecuted in many
   jurisdictions. Both options are bad in different ways.
@@ -293,7 +417,7 @@ verified".
 
 ## Wordings that must not be used in the interface and materials
 
-A direct consequence of §16.7 of the research and of the verification above.
+A direct consequence of §16.7 of the research and of its verification in `docs/research-verification.md`.
 
 | Not allowed | Allowed |
 |---|---|

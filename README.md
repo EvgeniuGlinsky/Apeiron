@@ -41,6 +41,7 @@ docs/     decisions and specifications
 | File | About |
 |---|---|
 | [`docs/threat-log.md`](docs/threat-log.md) | Adversaries P1–P8 and the log of protection decisions |
+| [`docs/storage.md`](docs/storage.md) | Storage and the PIN: key hierarchy, formats, what is protected and what leaks |
 | [`docs/crypto.md`](docs/crypto.md) | Crypto core: what it is built from, what is checked, what cryptography does not do |
 | [`docs/build-guards.md`](docs/build-guards.md) | Build guards: why an unusable APK was once produced and what now prevents a repeat |
 | [`docs/design.md`](docs/design.md) | Design system |
@@ -72,10 +73,13 @@ After changing the public API in `app/rust/src/api/`, the bindings must be regen
 cd app && flutter_rust_bridge_codegen generate
 ```
 
-Variants of the mark are laid out on a single sheet for comparison:
+Variants of the mark are laid out on contact sheets for comparison (the process does not
+exit — wait for the PNG to appear):
 
 ```bash
-cd app && flutter test test/mark_sheet.dart   # → build/mark/contact-sheet.png
+cd app && flutter test test/wordmark_sheet.dart      # → build/mark/wordmark-sheet.png
+cd app && flutter test test/raven_sheet.dart         # → build/mark/raven-sheet.png
+cd app && flutter test test/android_icon_sheet.dart  # → build/mark/android-icon-sheet.png
 ```
 
 ## Pitfalls
