@@ -1,0 +1,11 @@
+# Interface strings: English is the template and the fallback, Russian is the second language.
+# The generated Dart lives next to the ARB files and is committed, so `flutter analyze` and the
+# tests see it without a build step.
+#
+# gen-l10n does not fail on a key missing from the Russian file — it silently falls back to
+# English. `test/l10n_test.dart` makes that a test failure instead.
+arb-dir: lib/l10n
+template-arb-file: app_en.arb
+output-localization-file: app_localizations.dart
+output-class: AppLocalizations
+nullable-getter: false

@@ -9,9 +9,12 @@
 /// explicitly forbids promising more than has been done. With the PIN (R-011)
 /// a phone taken away unlocked no longer opens the vault — but a guess is still
 /// possible on this very phone for someone with root, and extraction of the key
-/// from the hardware leaves only the length of the PIN. That is what is said.
+/// from the hardware leaves only the length of the PIN. That is what is said,
+/// in every language: the texts live in `lib/l10n/*.arb`, and the tests check
+/// the same promises in each of them.
 library;
 
+import 'l10n/app_localizations.dart';
 import 'src/rust/api/vault.dart' show VaultState, VaultStatus;
 
 /// How serious the state is.
@@ -49,180 +52,142 @@ class VaultMessage {
   final String action;
 }
 
+/// Raw security levels as `KeyProperties` defines them (and `platform/src/lib.rs`).
+const _levelSoftware = 0;
+const _levelTee = 1;
+const _levelStrongBox = 2;
+const _levelUnknownSecure = -1;
+
 /// Level name together with the raw number.
 ///
 /// The raw number is shown alongside on purpose: the system has five values,
 /// not three, and an unfamiliar one must be visible rather than replaced by
-/// the nearest familiar one.
-String levelLabel(VaultStatus status) =>
-    '${status.levelName} (${status.levelRaw})';
-
-/// A wait as people say it: "40 с", "5 мин", "1 ч".
-String waitLabel(int seconds) {
-  if (seconds < 60) return '$seconds с';
-  final minutes = (seconds / 60).ceil();
-  if (minutes < 60) return '$minutes мин';
-  return '${(minutes / 60).ceil()} ч';
+/// the nearest familiar one. The name is chosen here by the number, in the
+/// interface language; the name Rust sends stays for the diagnostics.
+String levelLabel(VaultStatus status, AppLocalizations l) {
+  final name = switch (status.levelRaw) {
+    _levelStrongBox => 'StrongBox',
+    _levelTee => 'TEE',
+    _levelSoftware => l.levelSoftware,
+    _levelUnknownSecure => l.levelUnknownSecure,
+    _ => l.levelUnknown,
+  };
+  return '$name (${status.levelRaw})';
 }
 
-const _keyNotExported =
-    'Ключ лежал в защищённом модуле этого телефона и наружу не выгружался — '
-    'в этом и был смысл, — поэтому достать его неоткуда.';
+/// A wait as people say it: "40 s", "5 min", "1 h".
+String waitLabel(int seconds, AppLocalizations l) {
+  if (seconds < 60) return l.waitSeconds(seconds);
+  final minutes = (seconds / 60).ceil();
+  if (minutes < 60) return l.waitMinutes(minutes);
+  return l.waitHours((minutes / 60).ceil());
+}
+
+/// How serious the current state of the vault is. Does not depend on the
+/// language, so the decisions made on it do not either.
+VaultTone vaultTone(VaultStatus status) => switch (status.state) {
+  VaultState.keyGone ||
+  VaultState.keyMismatch ||
+  VaultState.legacyData ||
+  VaultState.unavailable => VaultTone.blocked,
+  VaultState.pinSetupRequired ||
+  VaultState.pinMismatch ||
+  VaultState.wrongPin ||
+  VaultState.delayed ||
+  VaultState.retry ||
+  VaultState.locked => VaultTone.warning,
+  // R-002 explicitly requires: where there is no hardware keystore — an
+  // honest warning, not a silent fallback to a weak scheme.
+  VaultState.opened =>
+    status.hardwareBacked ? VaultTone.good : VaultTone.warning,
+};
 
 /// What to show for the current state of the vault.
-VaultMessage describeVault(VaultStatus status) {
+VaultMessage describeVault(VaultStatus status, AppLocalizations l) {
+  VaultMessage say(String title, String detail, [String action = '']) =>
+      VaultMessage(
+        tone: vaultTone(status),
+        title: title,
+        detail: detail,
+        action: action,
+      );
+
   switch (status.state) {
     case VaultState.keyGone:
-      return const VaultMessage(
-        tone: VaultTone.blocked,
-        title: 'Ключ этого телефона исчез',
-        detail:
-            'Ключ хранилища пропал из защищённого модуля. Так бывает после '
-            'обновления прошивки, при снятии блокировки экрана и при '
-            'восстановлении данных из резервной копии. $_keyNotExported',
-        action: 'Начать заново. Прежняя переписка не вернётся.',
+      return say(
+        l.vaultKeyGoneTitle,
+        '${l.vaultKeyGoneDetail} ${l.keyNotExported}',
+        l.startOverAction,
       );
 
     case VaultState.keyMismatch:
-      return const VaultMessage(
-        tone: VaultTone.blocked,
-        title: 'Ключ в защищённом модуле не тот',
-        detail:
-            'В защищённом модуле лежит ключ, но не тот, которым сделано '
-            'хранилище. Это не неверный пин: попытки не тратились. '
-            '$_keyNotExported',
-        action: 'Начать заново. Прежняя переписка не вернётся.',
+      return say(
+        l.vaultKeyMismatchTitle,
+        '${l.vaultKeyMismatchDetail} ${l.keyNotExported}',
+        l.startOverAction,
       );
 
     case VaultState.legacyData:
-      return const VaultMessage(
-        tone: VaultTone.blocked,
-        title: 'Данные тестовой сборки до пина',
-        detail:
-            'Эти данные записала сборка, в которой ещё не было пина. Переносить '
-            'их на пин эта сборка не умеет — намеренно: перенос был бы самым '
-            'рискованным кодом во всём хранилище ради одного запуска на '
-            'тестовых данных. Контактов там нет; новая личность получит новый '
-            'отпечаток.',
-        action: 'Начать заново с пином.',
-      );
+      return say(l.vaultLegacyTitle, l.vaultLegacyDetail, l.vaultLegacyAction);
 
     case VaultState.pinSetupRequired:
-      return const VaultMessage(
-        tone: VaultTone.warning,
-        title: 'Задайте пин',
-        detail:
-            'Без пина хранилище не открыть даже на этом телефоне, даже '
-            'разблокированном. Каждую попытку подбора проверяет защищённый '
-            'модуль этого телефона, и перенести подбор на другое железо '
-            'нельзя. Забытый пин — это потеря всей переписки: восстановления '
-            'пока нет.',
-        action:
-            'От 6 до 16 цифр. 6 цифр держат вора и досмотр; против лаборатории '
-            'с root на этом телефоне это часы. 10 цифр — годы. Каждая лишняя '
-            'цифра — подбор в 10 раз дольше.',
+      return say(
+        l.vaultPinSetupTitle,
+        l.vaultPinSetupDetail,
+        l.vaultPinSetupAction,
       );
 
     case VaultState.pinMismatch:
-      return const VaultMessage(
-        tone: VaultTone.warning,
-        title: 'Пины не совпали',
-        detail: 'Второй ввод отличается от первого. Ничего не сохранено.',
-        action: 'Задайте пин заново.',
+      return say(
+        l.vaultPinMismatchTitle,
+        l.vaultPinMismatchDetail,
+        l.vaultPinMismatchAction,
       );
 
     case VaultState.wrongPin:
-      return VaultMessage(
-        tone: VaultTone.warning,
-        title: 'Неверный пин',
-        detail:
-            'Ошибок подряд: ${status.failures}. Пять попыток бесплатны, '
-            'дальше каждая стоит ожидания: 30 с, 1 мин, 5 мин, 15 мин, потом '
-            'по часу.',
-        action: status.waitSeconds > 0
-            ? 'Следующая попытка через ${waitLabel(status.waitSeconds)}.'
-            : 'Попробуйте ещё раз.',
+      return say(
+        l.vaultWrongPinTitle,
+        l.vaultWrongPinDetail(status.failures),
+        status.waitSeconds > 0
+            ? l.nextAttemptIn(waitLabel(status.waitSeconds, l))
+            : l.tryAgain,
       );
 
     case VaultState.delayed:
-      return VaultMessage(
-        tone: VaultTone.warning,
-        title: 'Слишком много ошибок',
-        detail:
-            'Ошибок подряд: ${status.failures}. Пока идёт ожидание, пин не '
-            'проверяется вовсе. Перевод часов не помогает, перезагрузка '
-            'начинает ожидание заново.',
-        action: 'Следующая попытка через ${waitLabel(status.waitSeconds)}.',
+      return say(
+        l.vaultDelayedTitle,
+        l.vaultDelayedDetail(status.failures),
+        l.nextAttemptIn(waitLabel(status.waitSeconds, l)),
       );
 
     case VaultState.retry:
-      return VaultMessage(
-        tone: VaultTone.warning,
-        title: 'Хранилище сейчас недоступно',
-        detail: status.message.isEmpty
-            ? 'Защищённый модуль устройства не ответил.'
-            : status.message,
-        action: 'Данные целы, попытка не потрачена. Повторите.',
+      // The platform's own words, when there are any: they are diagnostics,
+      // and replacing them with a friendlier guess would hide the cause.
+      return say(
+        l.vaultRetryTitle,
+        status.message.isEmpty ? l.vaultRetryFallback : status.message,
+        l.vaultRetryAction,
       );
 
     case VaultState.unavailable:
-      return const VaultMessage(
-        tone: VaultTone.blocked,
-        title: 'На этой платформе хранилища нет',
-        detail:
-            'Аппаратного хранилища ключей здесь не существует, а класть ключ '
-            'в файл рядом с данными и называть это защитой — неправда. '
-            'Сборка для этой платформы заморожена.',
-        action: '',
-      );
+      return say(l.vaultUnavailableTitle, l.vaultUnavailableDetail);
 
     case VaultState.locked:
-      return const VaultMessage(
-        tone: VaultTone.warning,
-        title: 'Заперто',
-        detail:
-            'Ключ хранилища затёрт в памяти. Собрать его заново можно только '
-            'из пина, и каждую попытку проверяет защищённый модуль этого '
-            'телефона.',
-        action: 'Введите пин.',
-      );
+      return say(l.vaultLockedTitle, l.vaultLockedDetail, l.vaultLockedAction);
 
     case VaultState.opened:
-      return _opened(status);
+      if (!status.hardwareBacked) {
+        return say(
+          l.vaultSoftwareTitle,
+          l.vaultSoftwareDetail(levelLabel(status, l)),
+        );
+      }
+      return say(
+        l.vaultOpenedTitle,
+        l.vaultOpenedDetail(levelLabel(status, l)),
+        status.unlockMs > 0 ? l.vaultUnlockTook(status.unlockMs) : '',
+      );
   }
-}
-
-VaultMessage _opened(VaultStatus status) {
-  if (!status.hardwareBacked) {
-    // R-002 explicitly requires: where there is no hardware keystore — an
-    // honest warning, not a silent fallback to a weak scheme.
-    return VaultMessage(
-      tone: VaultTone.warning,
-      title: 'Ключ не в железе',
-      detail:
-          'Система сообщает: ${levelLabel(status)}. Значит, ключ пина лежит '
-          'не в защищённом модуле, а в обычной памяти устройства, и подбор '
-          'пина не упирается в железо. Приложение работает, но защита '
-          'слабее обещанной.',
-      action: '',
-    );
-  }
-
-  return VaultMessage(
-    tone: VaultTone.good,
-    title: 'Хранилище под пином',
-    detail:
-        'Система сообщает: ${levelLabel(status)}. Скопированный каталог, '
-        'резервная копия и телефон, отобранный разблокированным, без пина '
-        'бесполезны. Подбирать пин можно только на этом телефоне, по одной '
-        'проверке железом за попытку. С root на этом телефоне 6 цифр — от '
-        'часов до дней, 8 — от недель до года, 10 — годы; оценка для этого '
-        'телефона — в самопроверке. Если ключ извлекут из железа, держит '
-        'только длина пина.',
-    action: status.unlockMs > 0
-        ? 'Разблокировка заняла ${status.unlockMs} мс.'
-        : '',
-  );
 }
 
 /// Whether "start over" may be offered.
@@ -251,4 +216,4 @@ bool needsPinSetup(VaultStatus status) =>
 
 /// Whether to show a warning next to the normal screen.
 bool needsHonestWarning(VaultStatus status) =>
-    describeVault(status).tone != VaultTone.good;
+    vaultTone(status) != VaultTone.good;

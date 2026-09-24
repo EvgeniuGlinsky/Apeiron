@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'l10n/app_localizations.dart';
 import 'pin_pad.dart';
 import 'src/rust/api/pin.dart';
 import 'src/rust/api/vault.dart';
@@ -135,11 +136,12 @@ class _PinScreenState extends State<PinScreen> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
-    final message = describeVault(_status);
+    final l = AppLocalizations.of(context);
+    final message = describeVault(_status, l);
     final waiting = _waitLeft > 0;
     final heading = _setup
-        ? (_confirming ? 'ПОВТОРИТЕ ПИН' : 'НОВЫЙ ПИН')
-        : 'ВВЕДИТЕ ПИН';
+        ? (_confirming ? l.pinRepeat : l.pinNew)
+        : l.pinEnter;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -150,9 +152,7 @@ class _PinScreenState extends State<PinScreen> {
         if (!_confirming && message.action.isNotEmpty) ...[
           const SizedBox(height: Ap.s8),
           Text(
-            waiting
-                ? 'Следующая попытка через ${waitLabel(_waitLeft)}.'
-                : message.action,
+            waiting ? l.nextAttemptIn(waitLabel(_waitLeft, l)) : message.action,
             style: t.bodySmall?.copyWith(color: Ap.bone100),
           ),
         ],
@@ -172,12 +172,7 @@ class _PinScreenState extends State<PinScreen> {
           onSubmit: _submit,
         ),
         const SizedBox(height: Ap.s16),
-        Text(
-          'Раскладка новая на каждую попытку: смотреть на палец бесполезно, '
-          'на экран — нет. Экран закрыт от снимков и записи.',
-          style: t.bodySmall,
-          textAlign: TextAlign.center,
-        ),
+        Text(l.pinLayoutNote, style: t.bodySmall, textAlign: TextAlign.center),
       ],
     );
   }

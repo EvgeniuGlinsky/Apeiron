@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'l10n/app_localizations.dart';
 import 'src/rust/api/probe.dart';
 import 'src/rust/api/vault.dart';
 import 'theme/tokens.dart';
@@ -31,6 +32,9 @@ class _CheckScreenState extends State<CheckScreen> {
   /// survives leaving this screen and stopping the app; this is only its copy.
   String _probe = '';
   bool _probing = false;
+
+  /// Items one press of "put" places in the DHT.
+  static const _putCount = 12;
 
   @override
   void initState() {
@@ -119,10 +123,13 @@ class _CheckScreenState extends State<CheckScreen> {
   }
 
   /// Everything at once, as text — to send in a single message.
+  ///
+  /// Always in English, whatever the interface language: it is a diagnostic
+  /// report for the developer, and one format is read without mistakes.
   String _asText() {
-    final buffer = StringBuffer('Apeiron — самопроверка\n\n');
+    final buffer = StringBuffer('Apeiron — self-check\n\n');
     for (final c in _checks ?? const <CheckLine>[]) {
-      buffer.writeln('${c.passed ? "[ да ]" : "[ НЕТ]"}  ${c.name}');
+      buffer.writeln('${c.passed ? "[ ok ]" : "[FAIL]"}  ${c.name}');
       buffer.writeln('        ${c.detail}');
     }
     buffer.writeln();
@@ -137,29 +144,30 @@ class _CheckScreenState extends State<CheckScreen> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
+    final l = AppLocalizations.of(context);
     final checks = _checks;
     final failed = checks?.where((c) => !c.passed).length ?? 0;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('САМОПРОВЕРКА'),
+        title: Text(l.selfCheckTitle),
         actions: [
           IconButton(
-            tooltip: 'Скопировать отчёт целиком',
+            tooltip: l.copyReport,
             onPressed: checks == null
                 ? null
                 : () async {
                     await Clipboard.setData(ClipboardData(text: _asText()));
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Отчёт скопирован')),
-                      );
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text(l.reportCopied)));
                     }
                   },
             icon: const Icon(Icons.copy_all_outlined, color: Ap.fog400),
           ),
           IconButton(
-            tooltip: 'Прогнать заново',
+            tooltip: l.runAgain,
             onPressed: _busy ? null : _run,
             icon: const Icon(Icons.refresh, color: Ap.fog400),
           ),
@@ -185,8 +193,8 @@ class _CheckScreenState extends State<CheckScreen> {
                   if (checks != null) ...[
                     Text(
                       failed == 0
-                          ? 'Всё прошло.'
-                          : 'Не прошло: $failed из ${checks.length}.',
+                          ? l.allPassed
+                          : l.failedCount(failed, checks.length),
                       style: t.labelLarge?.copyWith(
                         color: failed == 0 ? Ap.glacier400 : Ap.ember400,
                       ),
@@ -195,16 +203,9 @@ class _CheckScreenState extends State<CheckScreen> {
                     for (final c in checks) _CheckRow(line: c),
                   ],
                   const SizedBox(height: Ap.s28),
-                  Text('ЗАМЕР DHT', style: t.labelLarge),
+                  Text(l.dhtTitle, style: t.labelLarge),
                   const SizedBox(height: Ap.s8),
-                  Text(
-                    'Можно ли доставлять сообщения без единого сервера. '
-                    'Конверты тестовые: случайные байты, ничего о вас. '
-                    'Положите, через несколько часов проверьте свои, и '
-                    'заберите конверты, которые положил ПК. Журнал '
-                    'сохраняется между запусками.',
-                    style: t.bodySmall,
-                  ),
+                  Text(l.dhtBody, style: t.bodySmall),
                   const SizedBox(height: Ap.s12),
                   Wrap(
                     spacing: Ap.s8,
@@ -213,14 +214,15 @@ class _CheckScreenState extends State<CheckScreen> {
                       OutlinedButton(
                         onPressed: _probing
                             ? null
-                            : () => _measure(() => dhtProbePut(count: 12)),
-                        child: const Text('ПОЛОЖИТЬ 12'),
+                            : () =>
+                                  _measure(() => dhtProbePut(count: _putCount)),
+                        child: Text(l.dhtPut(_putCount)),
                       ),
                       OutlinedButton(
                         onPressed: _probing
                             ? null
                             : () => _measure(dhtProbeGetOwn),
-                        child: const Text('ПРОВЕРИТЬ СВОИ'),
+                        child: Text(l.dhtCheckOwn),
                       ),
                       OutlinedButton(
                         onPressed: _probing
@@ -235,13 +237,13 @@ class _CheckScreenState extends State<CheckScreen> {
                                   count: 24,
                                 ),
                               ),
-                        child: const Text('ЗАБРАТЬ С ПК'),
+                        child: Text(l.dhtFetchDesktop),
                       ),
                       TextButton(
                         onPressed: _probing || _probe.isEmpty
                             ? null
                             : _clearProbeLog,
-                        child: const Text('ОЧИСТИТЬ ЖУРНАЛ'),
+                        child: Text(l.dhtClearLog),
                       ),
                     ],
                   ),
@@ -263,12 +265,9 @@ class _CheckScreenState extends State<CheckScreen> {
                   ],
                   if (_diagnostics != null) ...[
                     const SizedBox(height: Ap.s28),
-                    Text('ПЛАТФОРМА', style: t.labelLarge),
+                    Text(l.platformTitle, style: t.labelLarge),
                     const SizedBox(height: Ap.s8),
-                    Text(
-                      'Секретов здесь нет. Это то, что можно переслать целиком.',
-                      style: t.bodySmall,
-                    ),
+                    Text(l.platformBody, style: t.bodySmall),
                     const SizedBox(height: Ap.s12),
                     Container(
                       width: double.infinity,
@@ -298,6 +297,7 @@ class _CheckRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
+    final l = AppLocalizations.of(context);
     final color = line.passed ? Ap.glacier400 : Ap.ember400;
     return Padding(
       padding: const EdgeInsets.only(bottom: Ap.s12),
@@ -307,7 +307,7 @@ class _CheckRow extends StatelessWidget {
           SizedBox(
             width: 52,
             child: Text(
-              line.passed ? '[ да ]' : '[ НЕТ]',
+              line.passed ? l.checkPassed : l.checkFailed,
               style: Ap.mono(size: 12, color: color),
             ),
           ),

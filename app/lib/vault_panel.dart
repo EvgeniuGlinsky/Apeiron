@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'l10n/app_localizations.dart';
 import 'src/rust/api/vault.dart';
 import 'theme/tokens.dart';
 import 'vault_status.dart';
@@ -33,7 +34,8 @@ class VaultPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
-    final message = describeVault(status);
+    final l = AppLocalizations.of(context);
+    final message = describeVault(status, l);
     final accent = _accent(message.tone);
 
     return Container(
@@ -78,7 +80,7 @@ class VaultPanel extends StatelessWidget {
                     // The label must match what the text next to it offers:
                     // "retry" after "unlock" reads as two different actions,
                     // although it is one.
-                    child: const Text('ПОВТОРИТЬ'),
+                    child: Text(l.retry),
                   ),
                 // The "start over" button exists in exactly one state.
                 // Offering to erase everything on a transient firmware failure
@@ -87,13 +89,13 @@ class VaultPanel extends StatelessWidget {
                   const SizedBox(width: Ap.s12),
                   OutlinedButton(
                     onPressed: onFreshStart,
-                    child: const Text('НАЧАТЬ ЗАНОВО'),
+                    child: Text(l.startOver),
                   ),
                 ],
                 if (onResetLegacy != null && isLegacy(status))
                   OutlinedButton(
                     onPressed: onResetLegacy,
-                    child: const Text('НАЧАТЬ ЗАНОВО С ПИНОМ'),
+                    child: Text(l.startOverWithPin),
                   ),
               ],
             ),

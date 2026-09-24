@@ -1,5 +1,7 @@
 import 'package:flutter/widgets.dart';
 
+import 'l10n/app_localizations.dart';
+
 /// When the identity locks by itself.
 ///
 /// Decision R-001 ("PIN on every return") was written for the phone: the most
@@ -55,17 +57,14 @@ class LockPolicy {
   };
 
   /// How to explain this to the user. The promise in the UI must match what
-  /// the code does on **this** platform, not in general.
-  String get explanation {
-    if (locksOnFocusLoss) {
-      return 'При уходе приложения в фон личность уничтожается вместе '
-          'с ключами.';
-    }
+  /// the code does on **this** platform, not in general — and the timeout in
+  /// the text is the one in the code, not a number written into a translation.
+  String explanation(AppLocalizations l) {
+    if (locksOnFocusLoss) return l.lockExplainMobile;
     final minutes = idleTimeout?.inMinutes;
-    return 'Личность уничтожается вместе с ключами, когда окно свёрнуто'
-        '${minutes == null ? '' : ' или $minutes минуты нет действий'}. '
-        'Переключение на другое окно её не трогает: на рабочем столе это '
-        'происходит слишком часто, чтобы что-то значить.';
+    return minutes == null
+        ? l.lockExplainDesktopNoTimeout
+        : l.lockExplainDesktop(minutes);
   }
 
   @override

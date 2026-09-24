@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'l10n/app_localizations.dart';
 import 'theme/tokens.dart';
 
 /// Scrambled PIN pad (R-007).
@@ -41,6 +42,7 @@ class PinPad extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final canPress = !busy && entered < maxLength && layout.length == 10;
     final canSubmit = !busy && entered >= minLength;
 
@@ -73,13 +75,13 @@ class PinPad extends StatelessWidget {
           children: [
             _Key(
               onTap: !busy && entered > 0 ? onErase : null,
-              semanticLabel: 'Стереть',
+              semanticLabel: l.pinErase,
               child: const Icon(Icons.backspace_outlined, color: Ap.fog400),
             ),
             digitKey(9),
             _Key(
               onTap: canSubmit ? onSubmit : null,
-              semanticLabel: 'Готово',
+              semanticLabel: l.pinDone,
               child: busy
                   ? const SizedBox(
                       width: 20,

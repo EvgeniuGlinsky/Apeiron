@@ -1,0 +1,162 @@
+{
+  "@@locale": "en",
+
+  "selfCheckTooltip": "Self-check",
+  "lockTooltip": "Lock",
+
+  "noIdentityTitle": "NO IDENTITY YET",
+  "noIdentityBody": "The vault on this device has no identity yet. The device keys and the identity log are created together with it — apart they are meaningless.",
+  "createIdentity": "CREATE IDENTITY",
+
+  "fingerprintTitle": "FINGERPRINT",
+  "fingerprintBody": "This is read aloud to the person you talk to. A difference in even one digit means someone is between you.",
+  "notVerified": "NOT VERIFIED WITH ANYONE",
+  "keySigning": "ED25519 · SIGNING",
+  "keyAgreement": "X25519 · AGREEMENT",
+  "copy": "Copy",
+  "copied": "Copied",
+
+  "trueNowTitle": "WHAT IS ALREADY TRUE HERE",
+  "trueNowBody": "Secret keys never leave Rust — only the public halves and the fingerprint came here. {explanation}",
+  "@trueNowBody": {
+    "placeholders": {
+      "explanation": {"type": "String", "example": "When the app goes to the background, the identity is destroyed together with the keys."}
+    }
+  },
+  "notYetTitle": "WHAT IS NOT HERE YET",
+  "notYetBody": "There are no conversations yet. The app goes online only for the DHT measurement on the self-check screen: test envelopes with no content.",
+
+  "lockExplainMobile": "When the app goes to the background, the identity is destroyed together with the keys.",
+  "lockExplainDesktop": "The identity is destroyed together with the keys when the window is minimised or there is no activity for {minutes, plural, one{1 minute} other{{minutes} minutes}}. Switching to another window leaves it alone: on a desktop that happens too often to mean anything.",
+  "@lockExplainDesktop": {
+    "placeholders": {
+      "minutes": {"type": "int"}
+    }
+  },
+  "lockExplainDesktopNoTimeout": "The identity is destroyed together with the keys when the window is minimised. Switching to another window leaves it alone: on a desktop that happens too often to mean anything.",
+
+  "keyNotExported": "The key lived in this phone's secure hardware and was never exported from it — that was the point — so there is nowhere to get it back from.",
+  "startOverAction": "Start over. Earlier messages will not come back.",
+
+  "vaultKeyGoneTitle": "This phone's key is gone",
+  "vaultKeyGoneDetail": "The vault key has disappeared from the secure hardware. This happens after a firmware update, when the screen lock is removed, and when data is restored from a backup.",
+
+  "vaultKeyMismatchTitle": "The key in the secure hardware is the wrong one",
+  "vaultKeyMismatchDetail": "There is a key in the secure hardware, but not the one the vault was made with. This is not a wrong PIN: no attempts were spent.",
+
+  "vaultLegacyTitle": "Test-build data from before the PIN",
+  "vaultLegacyDetail": "This data was written by a build that had no PIN yet. This build cannot move it under a PIN — on purpose: the move would be the riskiest code in the whole vault, for the sake of one launch on test data. There are no contacts there; a new identity will get a new fingerprint.",
+  "vaultLegacyAction": "Start over with a PIN.",
+
+  "vaultPinSetupTitle": "Set a PIN",
+  "vaultPinSetupDetail": "Without the PIN the vault cannot be opened even on this phone, even unlocked. Every guess is checked by this phone's secure hardware, and guessing cannot be moved to other hardware. A forgotten PIN means losing all messages: there is no recovery yet.",
+  "vaultPinSetupAction": "6 to 16 digits. 6 digits hold against a thief and a search; against a lab with root on this phone that is hours. 10 digits — years. Every extra digit makes guessing 10 times longer.",
+
+  "vaultPinMismatchTitle": "The PINs did not match",
+  "vaultPinMismatchDetail": "The second entry differs from the first. Nothing was saved.",
+  "vaultPinMismatchAction": "Set the PIN again.",
+
+  "vaultWrongPinTitle": "Wrong PIN",
+  "vaultWrongPinDetail": "Failures in a row: {failures}. Five attempts are free; after that each one costs a wait: 30 s, 1 min, 5 min, 15 min, then an hour each.",
+  "@vaultWrongPinDetail": {
+    "placeholders": {
+      "failures": {"type": "int"}
+    }
+  },
+  "tryAgain": "Try again.",
+  "nextAttemptIn": "Next attempt in {wait}.",
+  "@nextAttemptIn": {
+    "placeholders": {
+      "wait": {"type": "String", "example": "5 min"}
+    }
+  },
+
+  "vaultDelayedTitle": "Too many failures",
+  "vaultDelayedDetail": "Failures in a row: {failures}. While the wait runs, the PIN is not checked at all. Changing the clock does not help; a reboot starts the wait over.",
+  "@vaultDelayedDetail": {
+    "placeholders": {
+      "failures": {"type": "int"}
+    }
+  },
+
+  "vaultRetryTitle": "The vault is unavailable right now",
+  "vaultRetryFallback": "The device's secure hardware did not answer.",
+  "vaultRetryAction": "The data is intact, the attempt was not spent. Retry.",
+
+  "vaultUnavailableTitle": "No vault on this platform",
+  "vaultUnavailableDetail": "There is no hardware key store here, and putting the key in a file next to the data and calling that protection would be a lie. The build for this platform is frozen.",
+
+  "vaultLockedTitle": "Locked",
+  "vaultLockedDetail": "The vault key has been wiped from memory. It can be put together again only from the PIN, and every attempt is checked by this phone's secure hardware.",
+  "vaultLockedAction": "Enter the PIN.",
+
+  "vaultSoftwareTitle": "The key is not in hardware",
+  "vaultSoftwareDetail": "The system reports: {level}. So the PIN key lives not in the secure hardware but in the device's ordinary memory, and guessing the PIN is not bound by hardware. The app works, but the protection is weaker than promised.",
+  "@vaultSoftwareDetail": {
+    "placeholders": {
+      "level": {"type": "String", "example": "software (0)"}
+    }
+  },
+
+  "vaultOpenedTitle": "Vault under PIN",
+  "vaultOpenedDetail": "The system reports: {level}. A copied data directory, a backup and a phone taken away unlocked are useless without the PIN. The PIN can be guessed only on this phone, one hardware check per attempt. With root on this phone 6 digits take hours to days, 8 — weeks to a year, 10 — years; the estimate for this phone is in the self-check. If the key is extracted from the hardware, only the length of the PIN holds.",
+  "@vaultOpenedDetail": {
+    "placeholders": {
+      "level": {"type": "String", "example": "TEE (1)"}
+    }
+  },
+  "vaultUnlockTook": "Unlocking took {ms} ms.",
+  "@vaultUnlockTook": {
+    "placeholders": {
+      "ms": {"type": "int"}
+    }
+  },
+
+  "levelSoftware": "software",
+  "levelUnknownSecure": "secure hardware, unspecified",
+  "levelUnknown": "unknown",
+
+  "waitSeconds": "{n} s",
+  "@waitSeconds": {"placeholders": {"n": {"type": "int"}}},
+  "waitMinutes": "{n} min",
+  "@waitMinutes": {"placeholders": {"n": {"type": "int"}}},
+  "waitHours": "{n} h",
+  "@waitHours": {"placeholders": {"n": {"type": "int"}}},
+
+  "pinRepeat": "REPEAT THE PIN",
+  "pinNew": "NEW PIN",
+  "pinEnter": "ENTER THE PIN",
+  "pinLayoutNote": "The layout is new on every attempt: watching the finger is useless, watching the screen is not. The screen is closed to screenshots and recording.",
+  "pinErase": "Erase",
+  "pinDone": "Done",
+
+  "retry": "RETRY",
+  "startOver": "START OVER",
+  "startOverWithPin": "START OVER WITH A PIN",
+
+  "selfCheckTitle": "SELF-CHECK",
+  "copyReport": "Copy the whole report",
+  "reportCopied": "Report copied",
+  "runAgain": "Run again",
+  "allPassed": "All passed.",
+  "failedCount": "Failed: {failed} of {total}.",
+  "@failedCount": {
+    "placeholders": {
+      "failed": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "checkPassed": "[ ok ]",
+  "checkFailed": "[FAIL]",
+
+  "dhtTitle": "DHT MEASUREMENT",
+  "dhtBody": "Whether messages can be delivered without a single server. The envelopes are test ones: random bytes, nothing about you. Put some, check your own a few hours later, and fetch the envelopes the desktop put. The log is kept between launches.",
+  "dhtPut": "PUT {count}",
+  "@dhtPut": {"placeholders": {"count": {"type": "int"}}},
+  "dhtCheckOwn": "CHECK OWN",
+  "dhtFetchDesktop": "FETCH FROM DESKTOP",
+  "dhtClearLog": "CLEAR LOG",
+
+  "platformTitle": "PLATFORM",
+  "platformBody": "There are no secrets here. This is what can be sent as a whole."
+}

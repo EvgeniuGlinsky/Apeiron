@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 
 import 'check_screen.dart';
 import 'fingerprint.dart';
+import 'l10n/app_localizations.dart';
+import 'locale_choice.dart';
 import 'lock_policy.dart';
 import 'raven.dart';
 import 'pin_screen.dart';
@@ -32,6 +34,9 @@ class ApeironApp extends StatelessWidget {
       title: 'Apeiron',
       debugShowCheckedModeBanner: false,
       theme: Ap.dark(),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localeListResolutionCallback: chooseLocale,
       home: const IdentityScreen(),
     );
   }
@@ -203,7 +208,7 @@ class _IdentityScreenState extends State<IdentityScreen>
           actions: [
             if (id != null)
               IconButton(
-                tooltip: 'Самопроверка',
+                tooltip: AppLocalizations.of(context).selfCheckTooltip,
                 onPressed: _busy
                     ? null
                     : () => Navigator.of(context).push(
@@ -215,7 +220,7 @@ class _IdentityScreenState extends State<IdentityScreen>
               ),
             if (id != null)
               IconButton(
-                tooltip: 'Заблокировать',
+                tooltip: AppLocalizations.of(context).lockTooltip,
                 onPressed: _busy ? null : _lock,
                 icon: const Icon(Icons.lock_outline, color: Ap.fog400),
               ),
@@ -279,28 +284,23 @@ class _LockedState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
+    final l = AppLocalizations.of(context);
     return Column(
       children: [
         const SizedBox(height: Ap.s40),
         const ApeironRaven(size: 92, color: Ap.stone600),
         const SizedBox(height: Ap.s28),
         Text(
-          'ЛИЧНОСТИ ЕЩЁ НЕТ',
+          l.noIdentityTitle,
           style: t.labelLarge?.copyWith(color: Ap.bone100),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: Ap.s12),
-        Text(
-          'В хранилище этого устройства личности ещё нет. Вместе с ней будут '
-          'заведены ключи устройства и журнал личности — порознь они '
-          'бессмысленны.',
-          style: t.bodySmall,
-          textAlign: TextAlign.center,
-        ),
+        Text(l.noIdentityBody, style: t.bodySmall, textAlign: TextAlign.center),
         const SizedBox(height: Ap.s28),
         FilledButton(
           onPressed: busy ? null : onGenerate,
-          child: const Text('СОЗДАТЬ ЛИЧНОСТЬ'),
+          child: Text(l.createIdentity),
         ),
       ],
     );
@@ -315,18 +315,15 @@ class _IdentityView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
+    final l = AppLocalizations.of(context);
     final groups = identity.fingerprint.split(' ');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('ОТПЕЧАТОК', style: t.labelLarge),
+        Text(l.fingerprintTitle, style: t.labelLarge),
         const SizedBox(height: Ap.s8),
-        Text(
-          'Это читают вслух собеседнику. Расхождение хотя бы в одной цифре '
-          'означает, что между вами кто-то есть.',
-          style: t.bodySmall,
-        ),
+        Text(l.fingerprintBody, style: t.bodySmall),
         const SizedBox(height: Ap.s16),
 
         // The copper accent is used only here. Key verification looks like
@@ -383,19 +380,16 @@ class _IdentityView extends StatelessWidget {
             Container(width: 7, height: 7, color: Ap.ember400),
             const SizedBox(width: Ap.s8),
             Text(
-              'НЕ СВЕРЕНО НИ С КЕМ',
+              l.notVerified,
               style: t.labelMedium?.copyWith(color: Ap.ember400),
             ),
           ],
         ),
 
         const SizedBox(height: Ap.s28),
-        _KeyRow(label: 'ED25519 · ПОДПИСЬ', value: identity.signingKeyHex),
+        _KeyRow(label: l.keySigning, value: identity.signingKeyHex),
         const SizedBox(height: Ap.s16),
-        _KeyRow(
-          label: 'X25519 · СОГЛАСОВАНИЕ',
-          value: identity.agreementKeyHex,
-        ),
+        _KeyRow(label: l.keyAgreement, value: identity.agreementKeyHex),
       ],
     );
   }
@@ -409,6 +403,7 @@ class _KeyRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -423,12 +418,12 @@ class _KeyRow extends StatelessWidget {
             IconButton(
               iconSize: 16,
               visualDensity: VisualDensity.compact,
-              tooltip: 'Скопировать',
+              tooltip: l.copy,
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: value));
                 ScaffoldMessenger.of(
                   context,
-                ).showSnackBar(const SnackBar(content: Text('Скопировано')));
+                ).showSnackBar(SnackBar(content: Text(l.copied)));
               },
               icon: const Icon(Icons.content_copy, color: Ap.fog400),
             ),
@@ -449,27 +444,20 @@ class _HonestNote extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
+    final l = AppLocalizations.of(context);
     return Container(
       padding: const EdgeInsets.all(Ap.s16),
       decoration: BoxDecoration(border: Border.all(color: Ap.stone700)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('ЧТО ЗДЕСЬ УЖЕ ПРАВДА', style: t.labelLarge),
+          Text(l.trueNowTitle, style: t.labelLarge),
           const SizedBox(height: Ap.s8),
-          Text(
-            'Секретные ключи не покидают Rust — сюда пришли только публичные '
-            'половины и отпечаток. ${policy.explanation}',
-            style: t.bodySmall,
-          ),
+          Text(l.trueNowBody(policy.explanation(l)), style: t.bodySmall),
           const SizedBox(height: Ap.s16),
-          Text('ЧЕГО ЕЩЁ НЕТ', style: t.labelLarge),
+          Text(l.notYetTitle, style: t.labelLarge),
           const SizedBox(height: Ap.s8),
-          Text(
-            'Переписки пока нет. В сеть приложение ходит только ради замера '
-            'DHT на экране самопроверки: тестовые конверты без содержимого.',
-            style: t.bodySmall,
-          ),
+          Text(l.notYetBody, style: t.bodySmall),
         ],
       ),
     );

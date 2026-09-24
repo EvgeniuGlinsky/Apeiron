@@ -5,11 +5,14 @@
 /// tests pin down.
 library;
 
+import 'package:apeiron/l10n/app_localizations.dart';
 import 'package:apeiron/pin_pad.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Widget host(Widget child) => MaterialApp(
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
   home: Scaffold(body: Center(child: child)),
 );
 

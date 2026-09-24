@@ -1,3 +1,4 @@
+import 'package:apeiron/l10n/app_localizations.dart';
 import 'package:apeiron/lock_policy.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -89,23 +90,50 @@ void main() {
     }
   });
 
-  group('explanation matches behaviour', () {
-    test('on the phone, background is promised', () {
-      expect(
-        LockPolicy.of(TargetPlatform.android).explanation,
-        contains('фон'),
-      );
-    });
+  // The same promise in every language: the words differ, the behaviour named
+  // must not.
+  const words = {
+    'ru': (background: 'в фон', minimised: 'свёрнут', minutes: 'минут'),
+    'en': (background: 'background', minimised: 'minimised', minutes: 'minute'),
+  };
 
-    test('desktop: window and timeout promised, timeout named honestly', () {
-      final policy = LockPolicy.of(TargetPlatform.windows);
-      expect(policy.explanation, contains('свёрнут'));
-      expect(
-        policy.explanation,
-        contains('${policy.idleTimeout!.inMinutes} минут'),
-        reason: 'the text must state the same timeout as the code',
-      );
-      expect(policy.explanation, isNot(contains('в фон')));
-    });
+  test('every language of the interface is checked below', () {
+    expect(
+      AppLocalizations.supportedLocales.map((l) => l.languageCode).toSet(),
+      words.keys.toSet(),
+    );
   });
+
+  for (final MapEntry(key: lang, value: w) in words.entries) {
+    final l = lookupAppLocalizations(Locale(lang));
+
+    group('[$lang] explanation matches behaviour', () {
+      test('on the phone, background is promised', () {
+        expect(
+          LockPolicy.of(TargetPlatform.android).explanation(l),
+          contains(w.background),
+        );
+      });
+
+      test('desktop: window and timeout promised, timeout named honestly', () {
+        final policy = LockPolicy.of(TargetPlatform.windows);
+        final text = policy.explanation(l);
+        expect(text, contains(w.minimised));
+        expect(
+          text,
+          contains('${policy.idleTimeout!.inMinutes} ${w.minutes}'),
+          reason: 'the text must state the same timeout as the code',
+        );
+        expect(text, isNot(contains(w.background)));
+      });
+
+      test('the timeout in the text follows the code, not the translation', () {
+        const policy = LockPolicy(
+          locksOnFocusLoss: false,
+          idleTimeout: Duration(minutes: 7),
+        );
+        expect(policy.explanation(l), contains('7 ${w.minutes}'));
+      });
+    });
+  }
 }
