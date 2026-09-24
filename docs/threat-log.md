@@ -395,6 +395,79 @@ verified".
   phone that already knows nodes, and those are cached.
 - **Cost:** the release build requests the network permission from now on.
 
+### R-013. Verification: the 30 digits are a collision target; short codes only with a commitment
+- **Works against:** an active intermediary in the channel that carries the invitation — P5, or P7
+  compelling the messenger or the carrier the invitation text travels through. It is the one
+  attack verification exists for (`docs/transport.md` §8).
+- **Does NOT work against:** P8; a person who taps "match" without comparing.
+- **Verdict:** **accepted with changes.** Done 24.09.2026: the screen in steps, with "do not match"
+  as a branch of its own that shows the two fingerprints. Next: SAS with a commitment. After it: QR
+  in person.
+- **Rationale.** **The finding.** The safety number is 30 digits of one SHA-256 over the two sorted
+  public identities, about 100 bits. An intermediary gives each side an identity of its own, M1 to A
+  and M2 to B; A's screen then shows the number of (A, M1), B's the number of (M2, B), and both M1
+  and M2 are the intermediary's to choose. When A's and B's identities are known in advance — they
+  are long-lived, and a journalist may well publish theirs — finding M1 and M2 with equal numbers is
+  a **collision, not a preimage**: about 2⁵⁰ key-and-hash evaluations by a parallel collision
+  search with little memory, days on a cluster of GPUs. Signal's numbers are 60 digits for exactly
+  this reason: each half is one person's fingerprint, and the intermediary needs a second preimage
+  of 30 digits, 2¹⁰⁰.
+
+  **Words or emoji from the same hash are rejected.** A hundred bits is 9 words or 17 emoji — not
+  simpler — and the words differ between the Russian and the English interface of the two people.
+  Shortened without a commitment, the code is a second preimage the intermediary computes while the
+  exchange is under way: 2⁴⁰ is minutes.
+
+  **SAS with a commitment** (as Matrix does it): both have the chat open; A sends a commitment to an
+  ephemeral key, B answers with its own, A reveals; both derive 6–7 emoji from the agreement of the
+  two ephemeral keys, bound to both identities as each side holds them. The intermediary must commit
+  before it sees the other side's key, so grinding buys nothing: one attempt, a chance of 2⁻⁴² with
+  7 emoji of 64, and a failed attempt shows as a mismatch. Three service messages through the DHT,
+  10–20 s. **QR in person** compares the full keys by camera; it needs a scanner without Google
+  Play services — CameraX and a QR decoder in Rust.
+
+  Until SAS, the 30 digits stay, and hold against anyone who does not know both identities in
+  advance or cannot spend 2⁵⁰.
+- **Cost:** SAS is a protocol step — service messages inside the Olm conversation, told apart from
+  text by a type — and needs both phones online at once. The 30 digits remain the fallback for
+  those who cannot be, with the bound above said.
+
+### R-014. Background delivery by a foreground service, not WorkManager
+- **Works against:** what made background delivery impossible to promise: WorkManager runs every
+  15 minutes at best, hours to a day under Doze and the restricted buckets (`docs/transport.md` §5).
+  Asked for by the owner, 24.09.2026.
+- **Does NOT work against:** anything of P1–P8 by itself: it is a way of delivering. It **adds** to
+  what the background key opens on a seized locked phone (below).
+- **Verdict:** **accepted** as the design of step 7 (`docs/transport.md` §10); built after SAS,
+  measured in stage 4.
+- **Rationale.** Three contradictions, decided:
+  1. **R-001 — the vault locks when the app leaves the front.** It still does. The service holds
+     neither the PIN key nor the storage; it opens only what the background key (Keystore, no user
+     authentication) seals: the outbox of signed items and the addresses prepared at lock.
+  2. **R-012 — the background does not listen.** It still does not: no open socket, no keep-alive.
+     The service wakes on a timer, bootstraps from the saved routing table, re-puts, asks, and
+     sleeps. Being in the foreground keeps the process alive and lifts the background limits; it
+     does not make the phone reachable.
+  3. **Battery — stage 4, at most 5 % a day.** The interval is a constant that measurement decides;
+     it starts at 15 minutes. An estimate, to be measured rather than believed: a wake-up is a
+     bootstrap of about 3 s and a few lookups; on LTE the radio's tail dominates, around 10 J; 96 a
+     day is about 1 kJ, some 2 % of a 15 Wh battery.
+
+  **What it does without the PIN:** re-puts the outbox (a signed item needs no keys); asks whether
+  anything is at the address of each contact's `next_recv` — address public keys for a few indices
+  ahead, prepared at lock, **not** the envelope keys, so it learns that something arrived and never
+  what — and then shows "a new message" with neither name nor text. Opening it asks for the PIN.
+
+  **Android:** type `remoteMessaging` on 14 and later (`dataSync` is capped at 6 hours a day on 15,
+  and the service is stopped after them), `dataSync` on 10–13, no type on 9. Started only while the
+  app is in front — Android 12 forbids starting one from the background. `POST_NOTIFICATIONS` on 13
+  and later. The notification says what runs. The `seq` numbers of the state items signed ahead for
+  7 days are committed in the same transaction as the outbox (§5).
+- **Cost:** a permanent notification; the battery, to be measured; and one more thing the
+  background key opens — the addresses of incoming parts, so whoever holds the locked phone can
+  watch who puts to them: the IP addresses of the people writing to its owner (`docs/transport.md`
+  §9).
+
 ---
 
 ## Open questions

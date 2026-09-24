@@ -1,6 +1,7 @@
 # Transport: messages through Mainline DHT (stage 3)
 
-**Status: being built (24.09.2026) — steps 1–4 of §10 done, the screens of step 5 outlined.**
+**Status: being built (24.09.2026) — steps 1–4 of §10 done, the screens of step 5 outlined, read
+receipts in the state (§3), step 7 redesigned as a foreground service (R-014).**
 Decision record: R-012 in `docs/threat-log.md`. §12 lists what the reviews found and what they
 changed; it is kept so the same holes are not dug again.
 
@@ -120,8 +121,19 @@ from the peer and what it has sent to the peer:
     recv_bits (8)  which of the next 64 I also have
     next_send (8)  how many indices I have used towards the peer
     send_floor (8) the lowest index I still re-put; below it, I have given up
+    [next_read (8)] the peer's messages whose first index is below this were shown to me
 
 State items are never acknowledged. Their `seq` grows within the day.
+
+**The read mark** (24.09.2026) is the read receipt: the first index of the newest message of the
+peer's that the open chat has shown, plus one. The peer's messages arrive in order, so everything
+before it was shown too; the sender's message turns "read" when the mark passes its first index.
+The body length tells the two forms apart — 32 bytes without the mark, 40 with it — so a state of
+the first builds still reads, and a side that does not send receipts makes its state the old way:
+nothing in it says the setting exists. The setting is mutual, as in Signal: off, no mark is sent
+and none is shown. What it tells: the peer learns when a message was shown. The network learns
+little new — an open chat already shows in how often it asks (§7) — except that the state item is
+re-put when the chat is opened.
 
 **Olm version.** Sessions are V1: 8-byte MACs (`encrypt_truncated_mac`). A third party cannot even
 submit a forgery — the outer Poly1305 and the address signature stop it first — and the peer holds
@@ -161,19 +173,22 @@ stale owner is refused and must load again, instead of writing an old session ov
   from the state that it is gone and marks it lost, and the sender shows the message as **not
   delivered**. Nothing is dropped silently, on either side.
 
-**The background job is not the app's to schedule.** WorkManager runs every 15 minutes at best;
-under Doze and the rare/restricted App Standby buckets, hours to a day. So background delivery
-works only if items survive longer than the real interval between background runs of a locked
-phone. That interval is measured on a phone in stage 4, per bucket, and compared with the survival
-rows of §1 — that comparison, not `R`, decides whether background delivery is promised at all.
-Each run bootstraps from the routing table saved by the previous one (`Dht::to_bootstrap`), not
-through the four well-known nodes.
+**The background job is not the app's to schedule — unless it is a foreground service.**
+WorkManager runs every 15 minutes at best; under Doze and the rare/restricted App Standby buckets,
+hours to a day. So the background job is a **foreground service** with its notification (R-014,
+decided 24.09.2026): the process is not killed and the background limits do not apply. It still
+does not listen. It wakes on a timer, bootstraps from the routing table saved by the previous run
+(`Dht::to_bootstrap`, not the four well-known nodes), re-puts the outbox, asks, and sleeps. The
+interval starts at 15 minutes and is a constant for stage 4 to decide against the battery budget
+(≤ 5 % a day); background delivery is promised only if items survive longer than that interval
+(§1 — they do: 24/24 at 8 h).
 
 ## 6. Receiving
 
 - One lookup per contact per round: the peer's state item for today (and yesterday's, in the first
-  hour after UTC midnight). The open chat every 5 s, other contacts every 60 s, only while the app
-  is in front and the vault is open.
+  hour after UTC midnight). The open chat every 5 s, the list of all contacts every 15 s (60 s in
+  the first outline — nearly the whole of the wait, since a message is found in 1–4 s), only while
+  the app is in front and the vault is open, and the list not while a chat is open over it.
 - The state says exactly which indices exist (`next_send`) and which are gone (`send_floor`); the
   missing ones in between are fetched at once (`probe::get_many` already does this). If no state is
   found — the peer has been away for days — `next_recv` itself is still asked for.
@@ -193,9 +208,10 @@ through the four well-known nodes.
   the peer believing messages arrived that were never kept — it stops re-putting them — and the
   state item's `seq` taken by a value the restored pair does not know. `apeiron-messenger` runs
   the order above; its test fails a commit mid-round and checks that nothing was acknowledged.
-- **In the background the phone does not listen and, for now, does not fetch** (R-012). Fetching in
-  the background, to show "a new message" without content, is a separate later step, and only if
-  the battery measurement allows it.
+- **In the background the phone does not listen and does not fetch** (R-012). The service of R-014
+  only asks whether anything is at the address of each contact's `next_recv` — address public keys
+  for a few indices ahead, prepared when the vault locks, without `K_env` — and shows "a new
+  message" with neither name nor text. Everything else waits for the PIN.
 
 ## 7. What is seen
 
@@ -287,6 +303,15 @@ the camera. Scanning an *invitation* never marks anything as verified: the app c
 across the table from a photo of it or a forwarded picture. Until then the contact is marked **not
 verified** everywhere it is shown.
 
+**How it is done today (24.09.2026):** in steps — call by voice, not through the channel the
+invitation went through; both open the screen; each reads one row; "match" or "do not match".
+"Do not match" takes the mark back and shows the two fingerprints the number is made of, so the two
+people can tell a replaced key from a fault of the app. The owner's own fingerprint is drawn plain
+and says it is not what is compared; copper belongs to the safety number alone — the first build
+drew both alike and said the fingerprint was read aloud, and on two phones people compared one with
+the other. **The 30 digits are a collision target** for an intermediary who knows both identities
+in advance (≈ 2⁵⁰, R-013); short codes with a commitment (SAS) replace them next.
+
 ## 9. Storage (schema v2)
 
 **Records are not re-sealed.** Today `SCHEMA_VERSION` is part of every record's AAD, so raising it
@@ -312,12 +337,16 @@ read back after the migration, a step cut short leaves v1 as it was (`store/test
 **Records of the messenger** (`messenger/src/record.rs`), sealed by the store in their place:
 
 - a message: `format ‖ kind (mine / theirs / lost) ‖ status ‖ first index? ‖ time ‖ [to, for a
-  loss] ‖ text`. The status of mine only moves forward: queued < sent < delivered; not delivered
-  and "address taken" are final. The first text of an introduction has no index — it travels in
-  the reply, not in the schedule;
+  loss] ‖ text`. The status of mine only moves forward: queued < sent < delivered < read; not
+  delivered and "address taken" are final, and what was delivered can only become read. The first
+  text of an introduction has no index — it travels in the reply, not in the schedule — and so is
+  never marked read;
 - a conversation, in `pair_state`: `format ‖ origin (I invited / I accepted) ‖ the first text's
-  row? ‖ the pending messages (first index → row) ‖ the pair`. The pair holds its session id and
-  refuses to be restored for another session.
+  row? ‖ read mark (the last row shown; from format 2) ‖ the pending messages (first index → row)
+  ‖ the pair`. The pair holds its session id and refuses to be restored for another session; from
+  its format 2 it also holds both read marks, the peer's and mine. A record of format 1 reads with
+  the mark at 0, so what arrived before the update counts as unread until the chat is shown once.
+  Each record kind has its own format number; each old one has a test on bytes laid out by hand.
 
 **Order of the history** is the order in which entries appeared on this phone; the time of a
 received message is when it was decrypted. An envelope carries no time of its sender, and sorting
@@ -332,7 +361,10 @@ seized — not only on one taken unlocked. What it opens:
   a DHT node, or as the provider) one learns **the IP address of each contact** the owner is waiting
   on;
 - when those items were made and how many parts they have: message lengths to about 780 bytes. Only
-  hour-granular times are stored.
+  hour-granular times are stored;
+- with the service of R-014, the address public keys of the next few **incoming** parts of every
+  contact: whoever holds the locked phone can watch who puts to them — the contacts' IP addresses
+  again, now also of those who write to the owner, not only of those the owner waits on.
 
 Not the content, not the names, not the pair secrets: those stay under the PIN. The background path
 never migrates and refuses a `SCHEMA_VERSION` other than its own.
@@ -350,9 +382,12 @@ never migrates and refuses a `SCHEMA_VERSION` other than its own.
 5. Screens: contacts, invitation (QR and text), verification, chat. **Outlined** with the text
    invitation; QR waits for the scanner below.
 6. Active polling while the app is in front. For now a timer in Dart (the open chat 5 s, the list
-   60 s) calls a round; a thread of its own, and a send that never waits for a round in flight,
+   15 s) calls a round; a thread of its own, and a send that never waits for a round in flight,
    come here.
-7. Background re-put (WorkManager → Kotlin → JNI → Rust); the saved routing table.
+7. Background re-put by a **foreground service** (R-014; revised 24.09.2026 from WorkManager):
+   Kotlin service → JNI → Rust, the background key in Keystore, the outbox and the `seq` numbers
+   signed ahead in one transaction, the incoming addresses prepared at lock, the saved routing
+   table, "a new message" without content.
 8. Two phones. Stage 4 then measures the battery and the real background interval.
 
 Open before step 5: a QR scanner that needs neither Google Play services nor the network.
@@ -366,7 +401,8 @@ Open before step 5: a QR scanner that needs neither Google Play services nor the
 | `R` | 60 min | BEP 44; survival ≥ 4 h measured |
 | `T` | 7 days | then "not delivered" |
 | state items pre-signed at lock | 7 days | covers a week without opening the app |
-| open chat / other contacts | 5 s / 60 s | while the app is in front |
+| open chat / the list | 5 s / 15 s | while the app is in front |
+| service wake-up | 15 min | a start; stage 4 decides against ≤ 5 % battery a day |
 
 ## 12. What the review changed
 
