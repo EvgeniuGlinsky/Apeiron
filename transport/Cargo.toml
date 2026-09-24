@@ -1,6 +1,6 @@
 [package]
 name = "apeiron-transport"
-description = "Delivery without servers: envelopes in Mainline DHT (BEP 44). For now only the measurement that decides whether this works."
+description = "Delivery without servers: envelopes in Mainline DHT (BEP 44), docs/transport.md."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,12 +8,17 @@ license.workspace = true
 publish = false
 
 [dependencies]
+apeiron-core = { path = "../core" }
 # Exact version: the DHT client is on the path of every message, and an update is a
 # conscious step with its changelog read, as for vodozemac.
 mainline = { version = "=8.0.0", default-features = false, features = ["node"] }
+ed25519-dalek.workspace = true
+hkdf.workspace = true
 sha2.workspace = true
 hex.workspace = true
 getrandom.workspace = true
+thiserror.workspace = true
+zeroize.workspace = true
 
 [lints.rust]
 unsafe_code = "forbid"

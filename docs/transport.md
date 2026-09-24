@@ -98,11 +98,14 @@ could link all of that person's conversations. Under it every value is random-lo
 length. The nonce is random: an item is created once and committed before its first put (§4), and a
 random nonce keeps even a bug there from exposing two plaintexts under one key.
 
-**Message part** (`kind = 1`): `message_id (8) ‖ part (1) ‖ parts (1) ‖ olm_type (1) ‖ olm bytes`,
-so at most 845 bytes of Olm message. vodozemac V1 adds 48 bytes to a normal message and 154 to a
-pre-key message, plus PKCS#7 padding: **783 bytes of UTF-8 per part in a normal message, 687 in a
-pre-key message** — 391 or 343 Cyrillic characters. The splitter checks the encoded Olm length, not
-a character count. At most **32 parts** a message (≈ 25 KB of Latin text, ≈ 12 KB of Cyrillic).
+**Message part** (`kind = 1`): `part (1) ‖ parts (1) ‖ olm_type (1) ‖ olm bytes`, so at most 853
+bytes of Olm message. A message is a run of consecutive indices, so it needs no identifier of its
+own: it is named by the index of its first part. vodozemac V1 adds 48 bytes to a normal message and
+154 to a pre-key message, plus PKCS#7 padding: **799 bytes of UTF-8 per part in a normal message,
+687 in a pre-key message** — about 399 or 343 Cyrillic characters. The budgets are the largest that
+fit, far into a chain too (test `budgets_fit_the_envelope`), and an Olm message that outgrew its
+budget is an error, never cut. At most **32 parts** a message (≈ 25 KB of Latin text, ≈ 12 KB of
+Cyrillic).
 
 **State** (`kind = 2`): each side keeps one live item per contact and day, at the state address of
 its own outgoing direction (`state_d` of `K_dir(me→peer)`). It says what this side has received
@@ -173,6 +176,8 @@ through the four well-known nodes.
   no longer keeps is classified as lost, not retried.
 - One transaction per received batch: the Olm session, the messages, `next_recv`/`recv_bits`, the
   inbound rows removed, the new state item.
+- A round is **receive, then send** (`engine::round`): what arrived is acknowledged in the same
+  round, not the next one.
 - **In the background the phone does not listen and, for now, does not fetch** (R-012). Fetching in
   the background, to show "a new message" without content, is a separate later step, and only if
   the battery measurement allows it.

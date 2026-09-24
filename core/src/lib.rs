@@ -22,7 +22,7 @@ pub mod session;
 pub mod sigchain;
 
 pub use aead::{open, purpose, seal, AeadError, SecretKey};
-pub use identity::{Identity, IdentityError, PublicIdentity, SecretBytes};
+pub use identity::{Identity, IdentityError, PairSecret, PublicIdentity, SecretBytes};
 pub use prekey::{PrekeyBundle, PrekeyError, UnverifiedPrekeyBundle};
 pub use session::{pickle_account, unpickle_account, Chat, ChatError};
 pub use sigchain::{ChainSigner, ChainState, EntryBody, Sigchain, SigchainError};

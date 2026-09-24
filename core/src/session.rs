@@ -115,9 +115,11 @@ impl Chat {
     /// The Olm protocol version.
     ///
     /// Explicitly the first. The second is hidden in vodozemac behind an experimental
-    /// feature flag and is not standardized; the February 2026 finding about version
-    /// downgrade and truncated MACs also concerned it. Until V2 is standardized there
-    /// is no reason to take it. Decision R-009 in `docs/threat-log.md`.
+    /// feature flag and is not standardized, so there is nothing to be downgraded from.
+    /// V1 is the version with 8-byte (truncated) MACs; that costs nothing here, because a
+    /// third party cannot submit a message at all — the transport's outer AEAD layer and
+    /// address signatures reject it first (`docs/transport.md` §3). Decision R-009 in
+    /// `docs/threat-log.md`.
     fn config() -> SessionConfig {
         SessionConfig::version_1()
     }
@@ -160,7 +162,6 @@ impl Chat {
         ))
     }
 
-    /// The peer's identity: the one whose fingerprint is shown on the verification screen.
     /// Saves the conversation state.
     ///
     /// Layout: `peer's public identity (64) ‖ serde_json(SessionPickle)`.
@@ -201,8 +202,18 @@ impl Chat {
         })
     }
 
+    /// The peer's identity: the one whose fingerprint is shown on the verification screen.
     pub fn peer(&self) -> &PublicIdentity {
         &self.peer
+    }
+
+    /// Whether the next message will be a pre-key message.
+    ///
+    /// Until the peer answers, every message carries what the peer needs to create the
+    /// session, about a hundred bytes more. Where every envelope has one fixed size, the
+    /// sender has to know that before cutting a text into parts.
+    pub fn sends_prekey_messages(&self) -> bool {
+        !self.session.has_received_message()
     }
 
     /// The session identifier. Identical on both sides.

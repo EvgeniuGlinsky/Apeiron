@@ -40,6 +40,31 @@ pub enum IdentityError {
     MalformedVerifyingKey,
     #[error("the signature does not verify")]
     BadSignature,
+    #[error("the peer's agreement key gives no secret: it is a low-order point")]
+    NonContributory,
+    #[error("an identity cannot share a pair secret with itself")]
+    SelfAgreement,
+}
+
+/// Domain separator of the pair secret (`docs/transport.md` §2).
+const PAIR_DOMAIN: &[u8] = b"apeiron/pair/v1";
+
+/// The secret two identities share: `K_pair` of `docs/transport.md`.
+///
+/// Wiped when dropped, like every other secret here, and never printed.
+#[derive(Clone, Zeroize, ZeroizeOnDrop)]
+pub struct PairSecret([u8; 32]);
+
+impl PairSecret {
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for PairSecret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("PairSecret(<hidden>)")
+    }
 }
 
 /// The public part of an identity. Passed around freely, contains no secrets.
@@ -265,6 +290,43 @@ impl Identity {
     pub fn diffie_hellman(&self, peer: &X25519Public) -> x25519_dalek::SharedSecret {
         self.agreement.diffie_hellman(peer)
     }
+
+    /// The secret this identity shares with `peer`, which only the two of them can compute:
+    /// the addresses of their envelopes follow from it (`docs/transport.md` §2).
+    ///
+    /// `HKDF-SHA256(X25519(mine, theirs), info = "apeiron/pair/v1" ‖ lower ‖ higher)`, the two
+    /// 64-byte public identities ordered bytewise, so both sides get the same key.
+    ///
+    /// Refused where it would not be secret: a low-order agreement key gives the same result
+    /// for every secret, so anyone who knows the two public identities could compute it; and the
+    /// agreement with oneself is not a pair at all — both directions would share addresses.
+    pub fn pair_secret(&self, peer: &PublicIdentity) -> Result<PairSecret, IdentityError> {
+        let mine = self.public().to_bytes();
+        let theirs = peer.to_bytes();
+        if mine == theirs {
+            return Err(IdentityError::SelfAgreement);
+        }
+        let shared = self.agreement.diffie_hellman(peer.agreement_key());
+        if !shared.was_contributory() {
+            return Err(IdentityError::NonContributory);
+        }
+        let (lower, higher) = if mine <= theirs {
+            (mine, theirs)
+        } else {
+            (theirs, mine)
+        };
+        let mut info = Vec::with_capacity(PAIR_DOMAIN.len() + 2 * PUBLIC_IDENTITY_BYTES);
+        info.extend_from_slice(PAIR_DOMAIN);
+        info.extend_from_slice(&lower);
+        info.extend_from_slice(&higher);
+        let mut out = [0u8; 32];
+        // Unreachable at this length; if it ever happened, a zero key would be computable by
+        // anyone, so it is an error, not a silently weak key.
+        hkdf::Hkdf::<Sha256>::new(None, shared.as_bytes())
+            .expand(&info, &mut out)
+            .map_err(|_| IdentityError::NonContributory)?;
+        Ok(PairSecret(out))
+    }
 }
 
 impl std::fmt::Debug for Identity {
@@ -347,6 +409,64 @@ mod tests {
         let ab = a.diffie_hellman(b.public().agreement_key());
         let ba = b.diffie_hellman(a.public().agreement_key());
         assert_eq!(ab.as_bytes(), ba.as_bytes());
+    }
+
+    #[test]
+    fn pair_secret_is_the_same_on_both_sides_and_differs_between_pairs() {
+        let a = Identity::generate().unwrap();
+        let b = Identity::generate().unwrap();
+        let c = Identity::generate().unwrap();
+        let ab = a.pair_secret(&b.public()).unwrap();
+        let ba = b.pair_secret(&a.public()).unwrap();
+        assert_eq!(ab.as_bytes(), ba.as_bytes());
+        let ac = a.pair_secret(&c.public()).unwrap();
+        assert_ne!(ab.as_bytes(), ac.as_bytes());
+        // Not the raw Diffie-Hellman output: the identities are mixed in.
+        let raw = a.diffie_hellman(b.public().agreement_key());
+        assert_ne!(ab.as_bytes(), raw.as_bytes());
+    }
+
+    #[test]
+    fn pair_secret_with_oneself_is_refused() {
+        let a = Identity::generate().unwrap();
+        assert!(matches!(
+            a.pair_secret(&a.public()),
+            Err(IdentityError::SelfAgreement)
+        ));
+    }
+
+    /// A peer who presents a low-order agreement key would make the pair secret computable by
+    /// anyone who knows the two public identities.
+    #[test]
+    fn pair_secret_with_a_low_order_key_is_refused() {
+        let a = Identity::generate().unwrap();
+        let real = Identity::generate().unwrap().public().to_bytes();
+        // The identity point and a point of order 8 on Curve25519 (both low order).
+        let low_order: [[u8; 32]; 2] = [
+            [0; 32],
+            [
+                0xe0, 0xeb, 0x7a, 0x7c, 0x3b, 0x41, 0xb8, 0xae, 0x16, 0x56, 0xe3, 0xfa, 0xf1, 0x9f,
+                0xc4, 0x6a, 0xda, 0x09, 0x8d, 0xeb, 0x9c, 0x32, 0xb1, 0xfd, 0x86, 0x62, 0x05, 0x16,
+                0x5f, 0x49, 0xb8, 0x00,
+            ],
+        ];
+        for point in low_order {
+            let mut bytes = real;
+            bytes[32..].copy_from_slice(&point);
+            let peer = PublicIdentity::from_bytes(&bytes).unwrap();
+            assert!(matches!(
+                a.pair_secret(&peer),
+                Err(IdentityError::NonContributory)
+            ));
+        }
+    }
+
+    #[test]
+    fn pair_secret_is_not_printed() {
+        let a = Identity::generate().unwrap();
+        let b = Identity::generate().unwrap();
+        let s = a.pair_secret(&b.public()).unwrap();
+        assert_eq!(format!("{s:?}"), "PairSecret(<hidden>)");
     }
 
     #[test]

@@ -388,9 +388,9 @@ verified".
   — the signed packet is repeated, no keys are needed — and, as a separate later step, fetches new
   ones undecrypted. Checking is cheap; listening is expensive.
 
-  **What it costs:** an envelope is at most 1000 bytes (783 bytes of text per part: about 780
-  Latin characters, but only about 390 Cyrillic ones; longer messages go in up to 32 parts; media
-  do not go this way); background delivery takes minutes to hours;
+  **What it costs:** an envelope is at most 1000 bytes (up to 799 bytes of text per part: about
+  800 Latin characters, but only about 400 Cyrillic ones, and less in the first messages of a
+  conversation; longer messages go in up to 32 parts; media do not go this way); background delivery takes minutes to hours;
   entry into the network goes through well-known bootstrap addresses — losing them does not stop a
   phone that already knows nodes, and those are cached.
 - **Cost:** the release build requests the network permission from now on.
