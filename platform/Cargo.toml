@@ -4,27 +4,27 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Доступ к аппаратному хранилищу ключей платформы. Один вызов JNI, только Android."
+description = "Access to the platform's hardware key store. One JNI call, Android only."
 publish = false
 
 [dependencies]
 zeroize.workspace = true
 thiserror.workspace = true
 
-# Только Android. Иначе jni поедет и в сборку под Windows, которая объявлена
-# в [graph] targets файла deny.toml.
+# Android only. Otherwise jni would also end up in the Windows build, which is declared
+# in the [graph] targets of deny.toml.
 [target.'cfg(target_os = "android")'.dependencies]
 jni.workspace = true
 
 [lints.rust]
-# Не forbid: JNI без unsafe не бывает. Каждое снятие именованное и с
-# объяснением на месте — их перечень держится в src/lib.rs.
+# Not forbid: there is no JNI without unsafe. Every exemption is named and has an
+# explanation on the spot; their list is kept in src/lib.rs.
 unsafe_code = "deny"
 
 [lints.clippy]
-# В релизе panic = "abort": паника здесь — мгновенная смерть процесса без
-# единого слова в журнале. Поэтому запрещено всё, что паникует, включая
-# индексирование и усечение при приведении типов.
+# In release panic = "abort": a panic here is instant death of the process without
+# a single word in the log. So everything that panics is forbidden, including
+# indexing and truncation in type casts.
 unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"

@@ -1,19 +1,19 @@
-//! Подставное аппаратное хранилище — только для проверок на рабочей машине.
+//! A test hardware vault: only for checks on the development machine.
 //!
-//! Существует затем, что весь `apeiron-store` обязан проверяться без телефона.
-//! Проверка на устройстве одна, и тратить её на то, что можно выяснить здесь,
-//! нельзя.
+//! It exists because the whole of `apeiron-store` must be testable without a phone.
+//! There is only one on-device check, and spending it on what can be found out here
+//! is not acceptable.
 //!
-//! Настоящей защиты не даёт и не притворяется: ключ лежит в памяти процесса.
+//! It gives no real protection and does not pretend to: the key lies in process memory.
 
-// Оно и не должно собираться под устройство. Фича `testing` не включается в
-// сборке приложения нигде, и это место следит, чтобы так и осталось: строка
-// ниже превращает случайное включение в ошибку компиляции, а не в APK с
-// программным ключом внутри.
+// Nor must it ever be built for a device. The `testing` feature is not enabled anywhere in
+// the application build, and this spot makes sure it stays that way: the line
+// below turns an accidental enablement into a compile error rather than into an APK with
+// a software key inside.
 #[cfg(all(feature = "testing", target_os = "android"))]
 compile_error!(
-    "подставное хранилище ключей не должно попадать в сборку для устройства: \
-     фича `testing` включена вместе с target_os = \"android\""
+    "the test key vault must not get into a device build: \
+     the `testing` feature is enabled together with target_os = \"android\""
 );
 
 use std::sync::Mutex;
@@ -22,19 +22,19 @@ use apeiron_core::{open, seal, SecretKey};
 use apeiron_platform::{KeyStatus, KeyWrapper, PlatformError, SecurityLevel};
 use zeroize::Zeroizing;
 
-/// Чем подставное хранилище отвечает вместо работы.
+/// What the test vault answers with instead of working.
 ///
-/// Нужно для проверки самого дорогого свойства: преходящий сбой не должен
-/// превращаться в «ключ исчез».
+/// Needed to check the most valuable property: a transient failure must not
+/// turn into "key gone".
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Behaviour {
-    /// Работать как обычно.
+    /// Work as usual.
     Normal,
-    /// Отказывать преходяще: данные целы, надо повторить.
+    /// Fail transiently: the data is intact, retry.
     Transient,
-    /// Ключа нет. Единственное, что даёт право начинать заново.
+    /// The key is gone. The only thing that gives the right to start over.
     Gone,
-    /// Своя ошибка.
+    /// Its own error.
     Internal,
 }
 
@@ -44,18 +44,18 @@ struct State {
     behaviour: Behaviour,
 }
 
-/// Подставное хранилище ключей.
+/// The test key vault.
 pub struct TestVault {
     state: Mutex<State>,
 }
 
 impl TestVault {
-    /// Пустое хранилище: ключа ещё нет, как при первом запуске.
+    /// An empty vault: no key yet, as on first launch.
     pub fn empty() -> Self {
         Self::with_level(SecurityLevel::from_raw(SecurityLevel::STRONGBOX))
     }
 
-    /// То же, но с заданным уровнем железа — чтобы проверять надписи.
+    /// The same, but with a given hardware level, to check the labels.
     pub fn with_level(level: SecurityLevel) -> Self {
         Self {
             state: Mutex::new(State {
@@ -66,24 +66,24 @@ impl TestVault {
         }
     }
 
-    /// Как себя вести дальше.
+    /// How to behave from now on.
     pub fn set_behaviour(&self, behaviour: Behaviour) {
         if let Ok(mut state) = self.state.lock() {
             state.behaviour = behaviour;
         }
     }
 
-    /// Забыть ключ, оставив файл обёртки на месте.
+    /// Forget the key, leaving the wrapper file in place.
     ///
-    /// Так выглядит то, что в поле случается регулярно: обновление прошивки,
-    /// снятие блокировки экрана, восстановление данных из бэкапа без ключей.
+    /// This is what regularly happens in the field: a firmware update,
+    /// removal of the screen lock, restoring data from a backup without the keys.
     pub fn forget_key(&self) {
         if let Ok(mut state) = self.state.lock() {
             state.key = None;
         }
     }
 
-    /// Есть ли сейчас ключ.
+    /// Whether there is a key right now.
     pub fn has_key(&self) -> bool {
         self.state.lock().map(|s| s.key.is_some()).unwrap_or(false)
     }
@@ -91,15 +91,15 @@ impl TestVault {
     fn fail(behaviour: Behaviour) -> Option<PlatformError> {
         match behaviour {
             Behaviour::Normal => None,
-            Behaviour::Transient => Some(PlatformError::Transient("подстава".to_string())),
+            Behaviour::Transient => Some(PlatformError::Transient("the fake".to_string())),
             Behaviour::Gone => Some(PlatformError::Gone),
-            Behaviour::Internal => Some(PlatformError::Internal("подстава".to_string())),
+            Behaviour::Internal => Some(PlatformError::Internal("the fake".to_string())),
         }
     }
 }
 
-/// Область, в которой подставное хранилище запечатывает. Отдельная, чтобы эти
-/// байты нельзя было спутать с записями базы.
+/// The domain in which the test vault seals. Separate, so that these
+/// bytes cannot be confused with database records.
 const TEST_AAD: &[u8] = b"apeiron/testing/vault/v1";
 
 impl KeyWrapper for TestVault {
@@ -107,7 +107,7 @@ impl KeyWrapper for TestVault {
         let mut state = self
             .state
             .lock()
-            .map_err(|_| PlatformError::Internal("блокировка повреждена".to_string()))?;
+            .map_err(|_| PlatformError::Internal("lock is poisoned".to_string()))?;
         if let Some(e) = Self::fail(state.behaviour) {
             return Err(e);
         }
@@ -119,7 +119,7 @@ impl KeyWrapper for TestVault {
                 Some(SecretKey::generate().map_err(|e| PlatformError::Internal(e.to_string()))?);
             return Ok(KeyStatus {
                 level: state.level,
-                note: "создан подставой, настоящей защиты нет".to_string(),
+                note: "created by the fake, no real protection".to_string(),
             });
         }
         Ok(KeyStatus {
@@ -129,16 +129,16 @@ impl KeyWrapper for TestVault {
     }
 
     fn wrap(&self, plain: &[u8]) -> Result<Vec<u8>, PlatformError> {
-        // Тот же предел, что и на устройстве: через KEK проходят десятки байт.
+        // The same limit as on the device: tens of bytes go through the KEK.
         if plain.is_empty() || plain.len() > 64 {
             return Err(PlatformError::Internal(
-                "через KEK пропускают не больше 64 байт".to_string(),
+                "no more than 64 bytes go through the KEK".to_string(),
             ));
         }
         let state = self
             .state
             .lock()
-            .map_err(|_| PlatformError::Internal("блокировка повреждена".to_string()))?;
+            .map_err(|_| PlatformError::Internal("lock is poisoned".to_string()))?;
         if let Some(e) = Self::fail(state.behaviour) {
             return Err(e);
         }
@@ -150,13 +150,13 @@ impl KeyWrapper for TestVault {
         let state = self
             .state
             .lock()
-            .map_err(|_| PlatformError::Internal("блокировка повреждена".to_string()))?;
+            .map_err(|_| PlatformError::Internal("lock is poisoned".to_string()))?;
         if let Some(e) = Self::fail(state.behaviour) {
             return Err(e);
         }
         let key = state.key.as_ref().ok_or(PlatformError::Gone)?;
-        // Повреждённая обёртка — это НЕ «ключ исчез»: данные на месте, просто
-        // этому файлу верить нельзя. Различие то же, что и на устройстве.
+        // A damaged wrapper is NOT "key gone": the data is in place, it is just that
+        // this file cannot be trusted. The same distinction as on the device.
         open(key, TEST_AAD, blob)
             .map(Zeroizing::new)
             .map_err(|e| PlatformError::Transient(e.to_string()))
@@ -166,7 +166,7 @@ impl KeyWrapper for TestVault {
         let mut state = self
             .state
             .lock()
-            .map_err(|_| PlatformError::Internal("блокировка повреждена".to_string()))?;
+            .map_err(|_| PlatformError::Internal("lock is poisoned".to_string()))?;
         state.key = None;
         Ok(())
     }
@@ -175,15 +175,15 @@ impl KeyWrapper for TestVault {
         let state = self
             .state
             .lock()
-            .map_err(|_| PlatformError::Internal("блокировка повреждена".to_string()))?;
+            .map_err(|_| PlatformError::Internal("lock is poisoned".to_string()))?;
         Ok(format!(
-            "ПОДСТАВНОЕ хранилище ключей, настоящей защиты нет\n\
-             ключ в памяти: {}\n\
-             уровень: {} ({})\n",
+            "TEST key vault, no real protection\n\
+             key in memory: {}\n\
+             level: {} ({})\n",
             if state.key.is_some() {
-                "да"
+                "present"
             } else {
-                "нет"
+                "absent"
             },
             state.level.name(),
             state.level.raw()

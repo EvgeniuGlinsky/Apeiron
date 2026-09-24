@@ -1,29 +1,29 @@
-//! Доступ к аппаратному хранилищу ключей платформы.
+//! Access to the platform's hardware key store.
 //!
-//! Крейт делает ровно одно: даёт хранилищу обернуть и развернуть тридцать два
-//! байта ключом, который лежит в защищённом модуле устройства и наружу не
-//! выгружается. Формата обёртки, файлов, мьютексов и какого-либо состояния
-//! здесь нет — всё это принадлежит `apeiron-store`, который проверяется на
-//! рабочей машине целиком.
+//! The crate does exactly one thing: it lets the storage wrap and unwrap thirty-two
+//! bytes with a key that lives in the device's secure module and is never
+//! exported. There is no wrapper format, no files, no mutexes and no state of any kind
+//! here: all of that belongs to `apeiron-store`, which is tested in full on the
+//! development machine.
 //!
-//! # Почему это отдельный крейт
+//! # Why this is a separate crate
 //!
-//! `apeiron-core` объявляет `unsafe_code = "forbid"`, и снять это нельзя даже
-//! осознанно. JNI без `unsafe` не бывает: экспорт символа для виртуальной
-//! машины Java — это `#[export_name]`, а он подпадает под тот же линт. Поэтому
-//! здесь `deny`, а не `forbid`, и снятие ровно одно — на модуле `jni_entry` в
-//! `android.rs`.
+//! `apeiron-core` declares `unsafe_code = "forbid"`, and that cannot be lifted even
+//! deliberately. There is no JNI without `unsafe`: exporting a symbol for the Java
+//! virtual machine is `#[export_name]`, and that falls under the same lint. That is why
+//! it is `deny` here, not `forbid`, and there is exactly one exemption: on the `jni_entry`
+//! module in `android.rs`.
 //!
-//! # Где логика работы с Keystore
+//! # Where the Keystore logic is
 //!
-//! На Kotlin, в `app/android/app/src/main/kotlin/io/apeiron/apeiron/Vault.kt`.
-//! Обоснование разворота — там же в заголовке файла и в решении R-010
-//! (`docs/threat-log.md`). Коротко: запрет из записки этапа был на **Dart**,
-//! потому что оттуда ключ уже не затереть; Kotlin — не Dart, ключ идёт
-//! Keystore → Kotlin → JNI → Rust и в Dart не попадает. Зато вся возня с
-//! дескрипторами методов, таблицей локальных ссылок и разбором исключений Java
-//! пропадает, а Gradle проверяет получившийся код при каждой сборке — вместо
-//! того чтобы отказ обнаруживался на телефоне.
+//! In Kotlin, in `app/android/app/src/main/kotlin/io/apeiron/apeiron/Vault.kt`.
+//! The rationale for the reversal is there too, in the file header, and in decision R-010
+//! (`docs/threat-log.md`). In short: the ban in the stage memo was on **Dart**,
+//! because from there the key can no longer be wiped; Kotlin is not Dart, the key goes
+//! Keystore → Kotlin → JNI → Rust and never reaches Dart. In exchange, all the fuss with
+//! method descriptors, the local reference table and parsing Java exceptions
+//! goes away, and Gradle checks the resulting code on every build, instead of
+//! the failure being discovered on the phone.
 
 use zeroize::Zeroizing;
 
@@ -33,92 +33,92 @@ mod android;
 #[cfg(target_os = "android")]
 pub use android::{storage_dir, AndroidVault};
 
-/// Что пошло не так при обращении к аппаратному хранилищу.
+/// What went wrong when accessing the hardware store.
 ///
-/// Трёх вариантов достаточно, и разделены они не по причине отказа, а по тому,
-/// **что приложению делать дальше**. Это единственное различие, у которого есть
-/// последствия.
+/// Three variants are enough, and they are split not by the cause of the failure but by
+/// **what the application should do next**. That is the only distinction that has
+/// consequences.
 #[derive(Debug, thiserror::Error)]
 pub enum PlatformError {
-    /// Повторить позже. Данные целы.
+    /// Retry later. The data is intact.
     ///
-    /// Сюда попадает всё, кроме трёх явных условий из [`PlatformError::Gone`],
-    /// и это сделано нарочно. `setUnlockedDeviceRequired` отказывает на
-    /// **разблокированном** устройстве, если его разблокировали слабой
-    /// биометрией — подтверждённый дефект прошивок. Истолковать преходящий сбой
-    /// как «ключ потерян» значило бы уничтожить переписку владельца.
+    /// Everything ends up here except the three explicit conditions of [`PlatformError::Gone`],
+    /// and this is done on purpose. `setUnlockedDeviceRequired` fails on an
+    /// **unlocked** device if it was unlocked with weak
+    /// biometrics: a confirmed firmware defect. Interpreting a transient failure
+    /// as "key lost" would mean destroying the owner's conversations.
     #[error("защищённый модуль устройства сейчас недоступен: {0}")]
     Transient(String),
 
-    /// Ключ исчез. Расшифровать хранилище нельзя ничем.
+    /// The key is gone. Nothing can decrypt the storage.
     ///
-    /// Приходит ровно из трёх условий, проверяемых на стороне Kotlin:
-    /// `containsAlias` вернул false, `getKey` вернул null,
-    /// `KeyPermanentlyInvalidatedException`. Случается не только при
-    /// переустановке: ключи Keystore пропадают при снятии блокировки экрана и,
-    /// по многолетним жалобам разработчиков, после обновлений прошивки на части
-    /// устройств.
+    /// Comes from exactly three conditions checked on the Kotlin side:
+    /// `containsAlias` returned false, `getKey` returned null,
+    /// `KeyPermanentlyInvalidatedException`. It happens not only on
+    /// reinstall: Keystore keys disappear when the screen lock is removed and,
+    /// according to years of developer complaints, after firmware updates on some
+    /// devices.
     #[error(
         "КЛЮЧ ХРАНИЛИЩА ИСЧЕЗ ИЗ ЗАЩИЩЁННОГО МОДУЛЯ ЭТОГО ТЕЛЕФОНА. \
          Переписку расшифровать нельзя ничем. Единственный выход — начать заново."
     )]
     Gone,
 
-    /// Наша собственная ошибка. Как и [`PlatformError::Transient`], данных не
-    /// трогает.
+    /// Our own error. Like [`PlatformError::Transient`], it does not touch the
+    /// data.
     #[error("внутренняя ошибка обращения к хранилищу ключей: {0}")]
     Internal(String),
 }
 
 impl PlatformError {
-    /// Можно ли повторить попытку, не потеряв данные.
+    /// Whether the attempt can be retried without losing data.
     pub fn is_retryable(&self) -> bool {
         !matches!(self, Self::Gone)
     }
 }
 
-/// Что система **сообщает** об уровне защиты ключа.
+/// What the system **reports** about the key's protection level.
 ///
-/// Именно «сообщает», и слово выбрано точно. Для симметричных ключей аттестации
-/// не существует: цепочки сертификатов у них нет, а `KeyInfo` — это самоотчёт
-/// фреймворка, исполняемый в нашем же процессе. Скомпрометированное устройство
-/// вернёт что угодно. Число годится для честной надписи на экране и не годится
-/// как доказательство — так его и надо показывать.
+/// Precisely "reports", and the word was chosen with care. For symmetric keys there is no
+/// attestation: they have no certificate chain, and `KeyInfo` is the framework's
+/// self-report, executed in our own process. A compromised device
+/// will return anything at all. The number is fit for an honest label on the screen and
+/// unfit as proof, and that is how it must be shown.
 ///
-/// Сырое число сохраняется как есть. Значений у `KeyInfo.getSecurityLevel()`
-/// пять, а не три: кроме «программный», «TEE» и «StrongBox» есть «неизвестно»
-/// и «железо без уточнения», и последнее реально приходит с устройств со старым
-/// keymaster. Свести их к трём веткам значило бы уронить такие устройства в
-/// «программный ключ» и напугать владельца зря.
+/// The raw number is kept as is. `KeyInfo.getSecurityLevel()` has five values,
+/// not three: besides "software", "TEE" and "StrongBox" there are "unknown"
+/// and "hardware, unspecified", and the latter really does come from devices with an old
+/// keymaster. Collapsing them into three branches would drop such devices into
+/// "software key" and scare the owner for nothing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SecurityLevel {
     raw: i32,
 }
 
 impl SecurityLevel {
-    /// Неизвестно (`KeyProperties.SECURITY_LEVEL_UNKNOWN`).
+    /// Unknown (`KeyProperties.SECURITY_LEVEL_UNKNOWN`).
     pub const UNKNOWN: i32 = -2;
-    /// Железо, но какое именно — сказать нельзя (`SECURITY_LEVEL_UNKNOWN_SECURE`).
+    /// Hardware, but which exactly cannot be said (`SECURITY_LEVEL_UNKNOWN_SECURE`).
     pub const UNKNOWN_SECURE: i32 = -1;
-    /// Программная реализация (`SECURITY_LEVEL_SOFTWARE`).
+    /// Software implementation (`SECURITY_LEVEL_SOFTWARE`).
     pub const SOFTWARE: i32 = 0;
-    /// Доверенная среда исполнения (`SECURITY_LEVEL_TRUSTED_ENVIRONMENT`).
+    /// Trusted execution environment (`SECURITY_LEVEL_TRUSTED_ENVIRONMENT`).
     pub const TRUSTED_ENVIRONMENT: i32 = 1;
-    /// Отдельный защищённый элемент (`SECURITY_LEVEL_STRONGBOX`).
+    /// A separate secure element (`SECURITY_LEVEL_STRONGBOX`).
     pub const STRONGBOX: i32 = 2;
 
-    /// Из сырого числа, как его вернула система.
+    /// From the raw number, as the system returned it.
     pub fn from_raw(raw: i32) -> Self {
         Self { raw }
     }
 
-    /// Сырое число. Показывается рядом с названием, чтобы незнакомое значение
-    /// было видно, а не подменялось ближайшим знакомым.
+    /// The raw number. Shown next to the name, so that an unfamiliar value
+    /// is visible rather than replaced by the nearest familiar one.
     pub fn raw(&self) -> i32 {
         self.raw
     }
 
-    /// Название по-русски.
+    /// The name, in Russian.
     pub fn name(&self) -> &'static str {
         match self.raw {
             Self::STRONGBOX => "StrongBox",
@@ -129,10 +129,10 @@ impl SecurityLevel {
         }
     }
 
-    /// Лежит ли ключ в железе.
+    /// Whether the key lives in hardware.
     ///
-    /// «Неизвестно» считается отрицательным ответом намеренно: сомнение должно
-    /// решаться в пользу предупреждения, а не в пользу спокойствия.
+    /// "Unknown" is counted as a negative answer on purpose: doubt must be
+    /// resolved in favor of a warning, not in favor of reassurance.
     pub fn is_hardware(&self) -> bool {
         matches!(
             self.raw,
@@ -141,50 +141,50 @@ impl SecurityLevel {
     }
 }
 
-/// Состояние аппаратного ключа: где он лежит и как появился.
+/// The state of the hardware key: where it lives and how it came about.
 #[derive(Debug, Clone)]
 pub struct KeyStatus {
-    /// Что система сообщает об уровне защиты.
+    /// What the system reports about the protection level.
     pub level: SecurityLevel,
-    /// Как ключ появился: пробовался ли StrongBox и чем кончилась попытка.
+    /// How the key came about: whether StrongBox was tried and how the attempt ended.
     ///
-    /// Пусто, если ключ был создан не в этом запуске. Заметка живёт на стороне
-    /// платформы только до конца процесса, и в этом вся причина её отдавать:
-    /// иначе она пропадает ровно к тому моменту, когда её захотят прочитать —
-    /// а это самая интересная строка отчёта на устройстве, где StrongBox есть,
-    /// но капризничает.
+    /// Empty if the key was not created during this launch. The note lives on the platform
+    /// side only until the end of the process, and that is the whole reason to hand it over:
+    /// otherwise it disappears exactly by the time someone wants to read it,
+    /// and it is the most interesting line of the report on a device where StrongBox exists
+    /// but misbehaves.
     pub note: String,
 }
 
-/// Аппаратный ключ, которым оборачивают ключ базы.
+/// The hardware key that wraps the database key.
 ///
-/// Порт объявлен здесь, а не в `apeiron-store`, по одной причине: иначе
-/// android-крейту пришлось бы зависеть от хранилища и тянуть за собой сборку
-/// SQLite из исходников — ради пяти вызовов JNI.
+/// The port is declared here and not in `apeiron-store` for one reason: otherwise
+/// the android crate would have to depend on the storage and drag along a build of
+/// SQLite from source, for the sake of five JNI calls.
 ///
-/// Через [`KeyWrapper::wrap`] проходят десятки байт, а не мегабайты, и это
-/// ограничение проверяется на стороне Kotlin. StrongBox медленнее TEE в десятки
-/// раз: мегабайт через него шифруется порядка пятнадцати секунд, и приложение
-/// замерло бы на глазах у владельца.
+/// Tens of bytes go through [`KeyWrapper::wrap`], not megabytes, and this
+/// limit is checked on the Kotlin side. StrongBox is tens of times slower than TEE:
+/// a megabyte takes on the order of fifteen seconds to encrypt through it, and the
+/// application would freeze before the owner's eyes.
 pub trait KeyWrapper {
-    /// Убеждается, что ключ на месте, и сообщает уровень железа.
+    /// Makes sure the key is in place and reports the hardware level.
     ///
-    /// `allow_create` — создавать ли ключ, если его нет. Передавать `true`
-    /// можно **только** когда обёртки ещё не существует: иначе отсутствие ключа
-    /// означает не «первый запуск», а «ключ исчез», и создание нового
-    /// уничтожило бы данные безвозвратно.
+    /// `allow_create`: whether to create the key if it is missing. Passing `true`
+    /// is allowed **only** when the wrapper does not exist yet: otherwise a missing key
+    /// means not "first launch" but "key gone", and creating a new one
+    /// would destroy the data irrecoverably.
     fn ensure_key(&self, allow_create: bool) -> Result<KeyStatus, PlatformError>;
 
-    /// Запечатывает короткие данные. Возвращает `одноразовое число ‖ шифртекст`.
+    /// Seals short data. Returns `nonce ‖ ciphertext`.
     fn wrap(&self, plain: &[u8]) -> Result<Vec<u8>, PlatformError>;
 
-    /// Распечатывает то, что вернул [`KeyWrapper::wrap`].
+    /// Opens what [`KeyWrapper::wrap`] returned.
     fn unwrap(&self, iv_and_ct: &[u8]) -> Result<Zeroizing<Vec<u8>>, PlatformError>;
 
-    /// Стирает ключ. После этого хранилище не восстановить — в этом и смысл
-    /// (R-005, криптографическое стирание: уничтожается ключ, а не данные).
+    /// Erases the key. After this the storage cannot be recovered, and that is the point
+    /// (R-005, cryptographic erasure: the key is destroyed, not the data).
     fn destroy(&self) -> Result<(), PlatformError>;
 
-    /// Отчёт о платформе. Секретов не содержит.
+    /// The platform report. Contains no secrets.
     fn diagnostics(&self) -> Result<String, PlatformError>;
 }

@@ -1,18 +1,18 @@
-//! Иерархия подключей.
+//! The subkey hierarchy.
 //!
-//! Из одного ключа базы выводится по ключу на каждое назначение. Метка
-//! назначения обязательна и берётся из реестра `apeiron_core::purpose`, а не
-//! пишется строкой по месту вызова: опечатка в строке даёт **другой ключ**, всё
-//! продолжает работать, и обнаруживается это тогда, когда данные уже записаны
-//! чужим ключом.
+//! One key per purpose is derived from the single database key. The purpose
+//! label is mandatory and is taken from the `apeiron_core::purpose` registry rather than
+//! written as a string at the call site: a typo in a string gives **a different key**,
+//! everything keeps working, and this is discovered when the data has already been written
+//! under the wrong key.
 //!
-//! Зачем разделять вообще: без разделения одна и та же ключевая последовательность
-//! оказалась бы у разных подсистем, и ошибка в одной из них стала бы ошибкой во
-//! всех.
+//! Why separate at all: without separation the same key stream
+//! would end up in different subsystems, and a bug in one of them would become a bug in
+//! all of them.
 
 use apeiron_core::{purpose, SecretKey};
 
-/// Подключи по назначениям.
+/// Subkeys by purpose.
 pub struct Keys {
     identity: SecretKey,
     account: SecretKey,
@@ -24,7 +24,7 @@ pub struct Keys {
 }
 
 impl Keys {
-    /// Выводит все подключи из ключа базы.
+    /// Derives all subkeys from the database key.
     pub fn derive(dek: &SecretKey) -> Self {
         Self {
             identity: dek.derive(purpose::IDENTITY),
@@ -61,10 +61,10 @@ impl Keys {
         &self.meta
     }
 
-    /// Ключ меток поиска.
+    /// The lookup tag key.
     ///
-    /// Отдельная ветвь, не связанная с расшифровкой: знание метки не приближает
-    /// к содержимому. Тот же приём, что `K_addr` в исследовании (§16.2).
+    /// A separate branch, unrelated to decryption: knowing a tag brings one no closer
+    /// to the content. The same technique as `K_addr` in the research (§16.2).
     pub(crate) fn tag(&self) -> &SecretKey {
         &self.tag
     }

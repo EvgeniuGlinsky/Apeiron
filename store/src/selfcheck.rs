@@ -1,19 +1,19 @@
-//! Самопроверка хранилища на живом устройстве.
+//! Self-check of the storage on a live device.
 //!
-//! Существует затем, что проверка на телефоне одна. Всё, что можно выяснить на
-//! рабочей машине, выяснено тестами; сюда вынесено ровно то, что на рабочей
-//! машине не выяснишь, — поведение **настоящего** Keystore и то, что состояние
-//! действительно пережило настоящий перезапуск настоящего приложения.
+//! It exists because there is only one check on the phone. Everything that can be found
+//! out on the development machine has been found out by tests; what is moved here is
+//! exactly what cannot be found out on the development machine: the behavior of the
+//! **real** Keystore, and that the state really survived a real restart of the real app.
 //!
-//! Результат — список строк «прошло / НЕ ПРОШЛО», который можно сфотографировать
-//! и прислать целиком.
+//! The result is a list of "passed / DID NOT PASS" lines that can be photographed
+//! and sent in full.
 //!
-//! # Чего здесь нет
+//! # What is not here
 //!
-//! Ничего разрушающего. Проверки на подмену работают с копиями в памяти, а
-//! стирание не проверяется вовсе: оно уничтожает данные владельца, и вызывать
-//! его втихую, под видом проверки, нельзя. Для него отдельное осознанное
-//! действие.
+//! Nothing destructive. The substitution checks work with in-memory copies, and
+//! erasure is not checked at all: it destroys the owner's data, and invoking it
+//! quietly, under the guise of a check, is not allowed. It has a separate deliberate
+//! action.
 
 use std::sync::OnceLock;
 
@@ -23,7 +23,7 @@ use apeiron_core::{random_bytes, Chat, Identity, PrekeyBundle};
 use crate::record::{open_record, seal_record, Table};
 use crate::{Storage, StorageError};
 
-/// Ключи служебных записей, по которым узнаётся прошлый запуск.
+/// Keys of the internal records by which the previous launch is recognized.
 const META_FINGERPRINT: &str = "самопроверка/отпечаток";
 const META_DEVICE_KEY: &str = "самопроверка/ключ устройства";
 const META_PROBE_CHAT: &str = "самопроверка/проба переписки";
@@ -33,39 +33,39 @@ const META_PROBE_ACCOUNT: &str = "самопроверка/проба аккау
 const META_RUNS: &str = "самопроверка/число прогонов";
 const META_SEED_PROCESS: &str = "самопроверка/процесс, заложивший пробу";
 
-/// Текст пробного сообщения. Хранится зашифрованным между запусками.
+/// The text of the probe message. Stored encrypted between launches.
 const PROBE_TEXT: &str = "это сообщение зашифровано до перезапуска";
 
-/// Случайная метка **этого** процесса.
+/// A random mark of **this** process.
 ///
-/// Нужна затем, что иначе самопроверка не отличает «приложение перезапустили»
-/// от «экран проверки открыли второй раз». Во втором случае все строки про
-/// выживание состояния стали бы зелёными, ничего не доказав, — а зелёная
-/// отметка там, где ничего не проверялось, это ровно та ложная уверенность,
-/// против которой самопроверка и затевалась.
+/// Needed because otherwise the self-check cannot tell "the app was restarted"
+/// from "the check screen was opened a second time". In the second case all the lines
+/// about state survival would turn green without proving anything, and a green
+/// mark where nothing was checked is exactly the false confidence
+/// the self-check was undertaken against.
 ///
-/// Случайное число, а не идентификатор процесса: тот система переиспользует, и
-/// совпадение, пусть и маловероятное, дало бы ложный ответ именно в ту сторону,
-/// в которую нельзя.
+/// A random number, not a process identifier: the system reuses those, and a
+/// coincidence, however unlikely, would give a false answer in exactly the direction
+/// where that is not allowed.
 static PROCESS_MARK: OnceLock<String> = OnceLock::new();
 
 fn process_mark() -> &'static str {
     PROCESS_MARK.get_or_init(|| match random_bytes::<16>() {
         Ok(bytes) => hex::encode(bytes),
-        // Отказ ОС в случайности здесь не повод падать: метка станет пустой,
-        // сравнение никогда не сойдётся, и проверка честно скажет «не доказано».
+        // The OS refusing randomness is no reason to crash here: the mark becomes empty,
+        // the comparison will never match, and the check will honestly say "not proven".
         Err(_) => String::new(),
     })
 }
 
-/// Одна строка отчёта.
+/// One line of the report.
 #[derive(Debug, Clone)]
 pub struct Check {
-    /// Что проверялось.
+    /// What was checked.
     pub name: String,
-    /// Прошло ли.
+    /// Whether it passed.
     pub passed: bool,
-    /// Подробность — то, что имеет смысл прочитать глазами.
+    /// Detail: what makes sense to read with one's own eyes.
     pub detail: String,
 }
 
@@ -87,21 +87,21 @@ impl Check {
     }
 }
 
-/// Прогоняет самопроверку.
+/// Runs the self-check.
 ///
-/// При первом вызове засевает то, что понадобится на следующем запуске, и
-/// честно пишет об этом: доказать, что состояние пережило перезапуск, на первом
-/// запуске невозможно, и делать вид, что проверка прошла, нельзя.
+/// On the first call it seeds what will be needed on the next launch, and
+/// honestly says so: proving that the state survived a restart is impossible on the first
+/// launch, and pretending the check passed is not allowed.
 pub fn run(storage: &Storage) -> Vec<Check> {
     run_with_mark(storage, process_mark())
 }
 
-/// То же, но с заданной меткой процесса.
+/// The same, but with a given process mark.
 ///
-/// Существует ради проверок на рабочей машине: тест живёт в одном процессе, и
-/// без этого свойство «зелёного не будет, пока приложение не перезапустили»
-/// проверить было бы нечем — то есть самое важное здесь свойство осталось бы
-/// на честном слове.
+/// Exists for checks on the development machine: a test lives in one process, and
+/// without this the property "there will be no green until the app is restarted"
+/// could not be checked at all, i.e. the most important property here would rest
+/// on a word of honor.
 pub fn run_with_mark(storage: &Storage, mark: &str) -> Vec<Check> {
     let mut out = Vec::new();
 
@@ -131,26 +131,26 @@ pub fn run_with_mark(storage: &Storage, mark: &str) -> Vec<Check> {
     out.push(check_record_binding(storage));
     out.push(check_damaged_record(storage));
 
-    // Метка пишется последней: до этого момента её читали проверки выше.
+    // The mark is written last: up to this point the checks above were reading it.
     let _ = storage.meta_set(META_SEED_PROCESS, mark.as_bytes());
 
     out
 }
 
-/// Заложена ли проба другим процессом, а не этим же.
+/// Whether the probe was seeded by another process rather than this one.
 fn is_fresh_process(storage: &Storage, mark: &str) -> bool {
     match storage.meta_get(META_SEED_PROCESS) {
         Ok(Some(saved)) => !mark.is_empty() && String::from_utf8_lossy(&saved) != mark,
-        // Метки ещё нет — значит это первый прогон вообще, и доказывать нечего.
+        // No mark yet: so this is the very first run, and there is nothing to prove.
         _ => false,
     }
 }
 
-/// Считает прогоны и заодно проверяет, что служебные записи вообще пишутся.
+/// Counts runs and at the same time checks that internal records get written at all.
 ///
-/// Именно прогоны, а не запуски: само по себе это число ничего не
-/// доказывает, и выдавать его за число запусков было бы враньём. За
-/// перезапуск отвечает [`is_fresh_process`].
+/// Runs specifically, not launches: by itself this number proves
+/// nothing, and passing it off as the number of launches would be a lie.
+/// [`is_fresh_process`] is responsible for the restart.
 fn bump_runs(storage: &Storage) -> u64 {
     let previous = storage
         .meta_get(META_RUNS)
@@ -175,9 +175,9 @@ fn check_level(storage: &Storage) -> Check {
             at_creation.raw()
         ));
     }
-    // Слово «сообщает» здесь не смягчение, а точность: для симметричных ключей
-    // аттестации не существует, и KeyInfo — самоотчёт фреймворка в нашем же
-    // процессе. Проверкой это не является и называться так не должно.
+    // The word "reports" here is not a softening but precision: for symmetric keys
+    // there is no attestation, and KeyInfo is the framework's self-report in our own
+    // process. It is not a check and must not be called one.
     Check {
         name: "где лежит ключ".to_string(),
         passed: level.is_hardware(),
@@ -243,12 +243,12 @@ fn check_account(storage: &Storage, fresh: bool) -> Check {
     }
 }
 
-/// Главная проверка: сообщение, зашифрованное в прошлый запуск, читается в этот.
+/// The main check: a message encrypted during the previous launch is read during this one.
 ///
-/// Делается настоящей парой аккаунтов Olm и настоящим храповиком. Если
-/// состояние храповика теряется между запусками, собеседники расходятся
-/// навсегда, и починить это нечем — поэтому проверять надо именно его, а не
-/// «файл на месте».
+/// It is done with a real pair of Olm accounts and a real ratchet. If the
+/// ratchet state is lost between launches, the peers diverge
+/// forever, and there is nothing to fix it with; that is why it is exactly this that must
+/// be checked, not "the file is in place".
 fn check_conversation(storage: &Storage, fresh: bool) -> Check {
     let name = "переписка читается после перезапуска";
 
@@ -272,7 +272,7 @@ fn check_conversation(storage: &Storage, fresh: bool) -> Check {
     }
 }
 
-/// Закладывает пробу: две личности, пакет пред-ключей, сессия и одно сообщение.
+/// Seeds the probe: two identities, a prekey bundle, a session and one message.
 fn seed_probe(storage: &Storage) -> Result<(), StorageError> {
     let sender = Identity::generate()?;
     let receiver = Identity::generate()?;
@@ -286,10 +286,10 @@ fn seed_probe(storage: &Storage) -> Result<(), StorageError> {
         .and_then(|b| b.verify())
         .map_err(|e| StorageError::Wrapper(e.to_string()))?;
 
-    // Пакет отправителя собирается из ТОГО ЖЕ аккаунта, которым потом
-    // создаётся сессия. Иначе ключ устройства в сообщении не сойдётся с ключом
-    // в пакете, и приём откажет — ровно так и должно быть, это проверка от
-    // подмены, а не придирка.
+    // The sender's bundle is assembled from THE SAME account that is later used to
+    // create the session. Otherwise the device key in the message will not match the key
+    // in the bundle, and receiving will fail; that is exactly as it should be, it is a check
+    // against substitution, not nitpicking.
     let sender_bundle = PrekeyBundle::create(&sender, &mut sender_account)
         .map_err(|e| StorageError::Wrapper(e.to_string()))?
         .to_bytes();
@@ -316,7 +316,7 @@ fn seed_probe(storage: &Storage) -> Result<(), StorageError> {
     Ok(())
 }
 
-/// Расшифровывает пробу тем состоянием, которое пережило перезапуск.
+/// Decrypts the probe with the state that survived the restart.
 fn replay(ciphertext: &[u8], bundle: &[u8], account: &[u8]) -> Result<String, StorageError> {
     let mut receiver_account = apeiron_core::unpickle_account(account)?;
     let sender_bundle = PrekeyBundle::parse(bundle)
@@ -331,9 +331,9 @@ fn replay(ciphertext: &[u8], bundle: &[u8], account: &[u8]) -> Result<String, St
     Ok(decrypted)
 }
 
-/// Запись, переложенная на чужое место, не читается.
+/// A record moved to someone else's place is not readable.
 ///
-/// Проверяется на пробных байтах, боевые записи не трогаются.
+/// Checked on probe bytes; production records are not touched.
 fn check_record_binding(storage: &Storage) -> Check {
     let name = "запись нельзя переложить на чужое место";
     let key = storage.probe_key();
@@ -355,7 +355,7 @@ fn check_record_binding(storage: &Storage) -> Check {
     }
 }
 
-/// Повреждённая запись отвергается, а не читается наполовину.
+/// A damaged record is rejected, not half-read.
 fn check_damaged_record(storage: &Storage) -> Check {
     let name = "повреждённая запись отвергается";
     let key = storage.probe_key();
@@ -375,11 +375,11 @@ fn check_damaged_record(storage: &Storage) -> Check {
     }
 }
 
-/// Проверять ещё нечего: закладка только что сделана.
+/// Nothing to check yet: the seed has just been planted.
 ///
-/// Не помечается пройденным. Зелёная строка там, где ничего не проверялось, —
-/// это ровно та ложная уверенность, против которой затевалась вся
-/// самопроверка.
+/// Not marked as passed. A green line where nothing was checked is
+/// exactly the false confidence the whole self-check was undertaken
+/// against.
 fn not_yet(name: &str, detail: impl Into<String>) -> Check {
     Check {
         name: name.to_string(),
@@ -391,11 +391,11 @@ fn not_yet(name: &str, detail: impl Into<String>) -> Check {
     }
 }
 
-/// Состояние сошлось — но зачесть это можно, только если закладку делал другой
-/// процесс.
+/// The state matched, but this can be counted only if the seed was planted by another
+/// process.
 ///
-/// Иначе доказано лишь то, что база читается тем же приложением, которое её
-/// только что записало, а проверяется совсем не это.
+/// Otherwise all that is proven is that the database is readable by the same app that
+/// has just written it, and that is not at all what is being checked.
 fn verified(name: &str, fresh: bool, detail: impl Into<String>) -> Check {
     let detail = detail.into();
     if fresh {

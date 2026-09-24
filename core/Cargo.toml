@@ -4,10 +4,10 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Ядро мессенджера: криптография, хранилище, протокол. Не содержит FFI."
-# На crates.io не публикуется: это часть приложения, а не библиотека общего
-# пользования. Заодно закрывает случайный `cargo publish` криптографического
-# кода, который ещё в работе.
+description = "Messenger core: cryptography, storage, protocol. Contains no FFI."
+# Not published to crates.io: this is part of the application, not a general-purpose
+# library. It also guards against an accidental `cargo publish` of cryptographic
+# code that is still in progress.
 publish = false
 
 [dependencies]
@@ -28,14 +28,14 @@ serde_json.workspace = true
 unsafe_code = "forbid"
 
 [lints.clippy]
-# Паника в криптографическом коде — это отказ в обслуживании, а иногда и утечка.
+# A panic in cryptographic code is a denial of service, and sometimes a leak.
 unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"
 indexing_slicing = "warn"
 
-# Только для тестов: официальные векторы RFC прогоняются напрямую против тех
-# крейтов, которыми мы пользуемся, — см. core/tests/rfc_vectors.rs.
+# Tests only: the official RFC vectors are run directly against the crates
+# we use; see core/tests/rfc_vectors.rs.
 [dev-dependencies]
 x25519-dalek.workspace = true
 hkdf.workspace = true

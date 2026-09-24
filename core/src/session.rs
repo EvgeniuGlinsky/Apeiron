@@ -1,30 +1,30 @@
-//! Парная переписка: двойной храповик поверх проверенного пакета пред-ключей.
+//! Pairwise conversation: the double ratchet over a verified prekey bundle.
 //!
-//! Храповик не свой — [`vodozemac`], реализация Olm от Matrix.org, прошедшая
-//! независимый аудит. Своих криптографических примитивов в проекте нет и не
-//! будет (§18 исследования). Здесь — только то, что этой реализации не хватает
-//! для нашей архитектуры.
+//! The ratchet is not our own: it is [`vodozemac`], the Olm implementation from
+//! Matrix.org that has passed an independent audit. The project has no cryptographic
+//! primitives of its own and never will (§18 of the research). Here there is only what
+//! this implementation lacks for our architecture.
 //!
-//! # Чего не хватает: приём пачкой
+//! # What is missing: batch receive
 //!
-//! Olm хранит не больше 40 ключей пропущенных сообщений на цепочку приёма
-//! (`MAX_MESSAGE_KEYS`) и отказывается от разрыва больше 2000
-//! (`MAX_MESSAGE_GAP`). Для Matrix этого достаточно: там сервер отдаёт
-//! сообщения примерно в порядке отправки.
+//! Olm keeps no more than 40 skipped-message keys per receiving chain
+//! (`MAX_MESSAGE_KEYS`) and rejects a gap larger than 2000
+//! (`MAX_MESSAGE_GAP`). For Matrix this is enough: there the server delivers
+//! messages roughly in the order they were sent.
 //!
-//! У нас не так. Архитектура прямо предполагает доставку через слепой
-//! ретранслятор с окном ожидания до суток: устройство было offline, потом
-//! включилось и забрало всё разом — в том порядке, в каком очередь отдала.
-//! Сто сообщений, пришедших задом наперёд, при наивной расшифровке означают
-//! шестьдесят **навсегда потерянных**: расшифровав сотое, храповик прокрутится
-//! вперёд и выбросит ключи, которые не поместились в сорок.
+//! Not so for us. The architecture explicitly assumes delivery through a blind
+//! relay with a holding window of up to a day: the device was offline, then came
+//! online and picked everything up at once, in whatever order the queue gave it.
+//! A hundred messages arriving back to front, with naive decryption, mean
+//! sixty **lost forever**: after decrypting the hundredth, the ratchet advances
+//! and throws away the keys that did not fit into forty.
 //!
-//! Спасает то, что **порядок читается до расшифровки**: в заголовке каждого
-//! сообщения Olm открыто лежат ключ храповика и номер в цепочке. Значит пачку
-//! можно разложить по порядку и расшифровать по возрастанию номера — тогда
-//! пропусков не возникает вовсе. Это делает [`Chat::decrypt_batch`], и
-//! разница на двухстах сообщениях — между «всё прочитано» и «половина
-//! потеряна» (тест `batch_survives_reverse_order`).
+//! What saves us is that **the order is readable before decryption**: the header of
+//! every Olm message carries the ratchet key and the chain index in the clear. So a
+//! batch can be sorted and decrypted in ascending index order, and then no gaps
+//! arise at all. This is what [`Chat::decrypt_batch`] does, and on two hundred
+//! messages the difference is between "everything read" and "half
+//! lost" (test `batch_survives_reverse_order`).
 
 use vodozemac::olm::{
     Account, DecryptionError, EncryptionError, OlmMessage, PreKeyMessage, Session, SessionConfig,
@@ -34,7 +34,7 @@ use vodozemac::olm::{
 use crate::identity::{PublicIdentity, PUBLIC_IDENTITY_BYTES};
 use crate::prekey::PrekeyBundle;
 
-/// Что может пойти не так в переписке.
+/// What can go wrong in a conversation.
 #[derive(Debug, thiserror::Error)]
 pub enum ChatError {
     #[error("не удалось создать сессию: {0}")]
@@ -62,12 +62,12 @@ pub enum ChatError {
 }
 
 impl ChatError {
-    /// Потеряно ли сообщение безвозвратно.
+    /// Whether the message is lost irrecoverably.
     ///
-    /// Различие важно для интерфейса: «повреждено, попробуйте ещё раз» и
-    /// «прочитать уже нельзя никогда» — разные сообщения пользователю, и
-    /// второе нельзя показывать как первое. Молчать нельзя тем более: потеря
-    /// сообщения — это то, о чём человек обязан узнать.
+    /// The distinction matters for the interface: "corrupted, try again" and
+    /// "can never be read now" are different messages to the user, and the
+    /// second must not be shown as the first. Staying silent is even less acceptable:
+    /// losing a message is something a person must be told about.
     pub fn is_lost_forever(&self) -> bool {
         matches!(
             self,
@@ -78,52 +78,52 @@ impl ChatError {
     }
 }
 
-/// Одна парная переписка.
+/// One pairwise conversation.
 pub struct Chat {
     session: Session,
     peer: PublicIdentity,
 }
 
-/// Сохраняет состояние аккаунта устройства.
+/// Saves the device account state.
 ///
-/// Без этого каждый запуск приложения порождал бы **новое устройство**: у
-/// аккаунта Olm свои долговременные ключи и запас одноразовых, и потеря их
-/// рвёт все существующие переписки разом.
+/// Without this every launch of the application would spawn **a new device**: an
+/// Olm account has its own long-term keys and a supply of one-time keys, and losing
+/// them breaks all existing conversations at once.
 ///
-/// Формат — `serde_json` поверх `AccountPickle`. Собственное шифрование
-/// vodozemac (`AccountPickle::encrypt`, AES-CBC с HMAC поверх base64) не
-/// используется намеренно: криптостек проекта держится одного поколения, и
-/// второй формат шифрования рядом с ключами — это второй набор обязанностей по
-/// сопровождению. Запечатывает эти байты `crate::aead`.
+/// The format is `serde_json` over `AccountPickle`. vodozemac's own encryption
+/// (`AccountPickle::encrypt`, AES-CBC with HMAC over base64) is deliberately not
+/// used: the project's crypto stack sticks to one generation, and a second
+/// encryption format next to the keys is a second set of maintenance
+/// obligations. These bytes are sealed by `crate::aead`.
 ///
-/// Канонический вид здесь не требуется: результат не подписывается, а
-/// запечатывается, и от представления это не зависит. Там, где вид обязан быть
-/// однозначным, — в пакете пред-ключей и в журнале личности — `serde` не
-/// применяется вовсе.
+/// A canonical form is not required here: the result is not signed but
+/// sealed, and that does not depend on the representation. Where the form must be
+/// unambiguous (in the prekey bundle and in the sigchain) `serde` is not
+/// used at all.
 pub fn pickle_account(account: &Account) -> Result<Vec<u8>, ChatError> {
     serde_json::to_vec(&account.pickle()).map_err(|e| ChatError::Pickle(e.to_string()))
 }
 
-/// Восстанавливает аккаунт устройства из того, что вернул [`pickle_account`].
+/// Restores the device account from what [`pickle_account`] returned.
 pub fn unpickle_account(bytes: &[u8]) -> Result<Account, ChatError> {
     let pickle = serde_json::from_slice(bytes).map_err(|e| ChatError::Unpickle(e.to_string()))?;
     Ok(Account::from_pickle(pickle))
 }
 
 impl Chat {
-    /// Версия протокола Olm.
+    /// The Olm protocol version.
     ///
-    /// Явно первая. Вторая в vodozemac убрана за флаг экспериментальной фичи и
-    /// не стандартизована; к ней же относилось замечание февраля 2026 года о
-    /// понижении версии и усечённых MAC. Пока V2 не стандартизована, брать её
-    /// незачем. Решение R-009 в `docs/threat-log.md`.
+    /// Explicitly the first. The second is hidden in vodozemac behind an experimental
+    /// feature flag and is not standardized; the February 2026 finding about version
+    /// downgrade and truncated MACs also concerned it. Until V2 is standardized there
+    /// is no reason to take it. Decision R-009 in `docs/threat-log.md`.
     fn config() -> SessionConfig {
         SessionConfig::version_1()
     }
 
-    /// Начинает переписку по **проверенному** пакету пред-ключей.
+    /// Starts a conversation from a **verified** prekey bundle.
     ///
-    /// Непроверенный сюда не передать: тип не тот. См. [`crate::prekey`].
+    /// An unverified one cannot be passed here: wrong type. See [`crate::prekey`].
     pub fn initiate(account: &Account, bundle: &PrekeyBundle) -> Result<Self, ChatError> {
         let session = account.create_outbound_session(
             Self::config(),
@@ -136,12 +136,12 @@ impl Chat {
         })
     }
 
-    /// Принимает первое сообщение от того, чей пакет уже проверен.
+    /// Accepts the first message from someone whose bundle is already verified.
     ///
-    /// Пакет отправителя нужен не для украшения: `vodozemac` сверит ключ
-    /// устройства из пакета с тем, что заявлен в сообщении, и откажется
-    /// создавать сессию при расхождении. Так первое сообщение оказывается
-    /// привязано к личности, а не просто «от кого-то».
+    /// The sender's bundle is not there for decoration: `vodozemac` will compare the
+    /// device key from the bundle with the one claimed in the message, and will refuse
+    /// to create a session if they differ. This way the first message ends up
+    /// bound to an identity, not just "from someone".
     pub fn accept(
         account: &mut Account,
         sender: &PrekeyBundle,
@@ -159,15 +159,15 @@ impl Chat {
         ))
     }
 
-    /// Личность собеседника — та, чей отпечаток показывается на экране сверки.
-    /// Сохраняет состояние переписки.
+    /// The peer's identity: the one whose fingerprint is shown on the verification screen.
+    /// Saves the conversation state.
     ///
-    /// Раскладка: `публичная личность собеседника (64) ‖ serde_json(SessionPickle)`.
+    /// Layout: `peer's public identity (64) ‖ serde_json(SessionPickle)`.
     ///
-    /// Собеседник хранится рядом не для удобства: в `SessionPickle` его нет, а
-    /// без него `Chat` не восстановить — и, что важнее, некому было бы
-    /// предъявить число сверки. Переписка без известного собеседника это
-    /// переписка неизвестно с кем.
+    /// The peer is stored alongside not for convenience: `SessionPickle` does not have
+    /// it, and without it `Chat` cannot be restored, and, more importantly, there would
+    /// be no one to present the safety number for. A conversation without a known peer
+    /// is a conversation with who knows whom.
     pub fn pickle(&self) -> Result<Vec<u8>, ChatError> {
         let mut out = Vec::with_capacity(PUBLIC_IDENTITY_BYTES + 512);
         out.extend_from_slice(&self.peer.to_bytes());
@@ -177,12 +177,12 @@ impl Chat {
         Ok(out)
     }
 
-    /// Восстанавливает переписку из того, что вернул [`Chat::pickle`].
+    /// Restores a conversation from what [`Chat::pickle`] returned.
     ///
-    /// Байты обязаны приходить из проверенного источника: успешное
-    /// распечатывание AEAD говорит «это писали мы», и только это. Подменить их
-    /// снаружи нельзя, а повреждение внутри границы дальше границы не идёт —
-    /// отсюда отдельная ошибка вместо тихого возврата пустого состояния.
+    /// The bytes must come from a verified source: a successful AEAD
+    /// open says "we wrote this", and only that. They cannot be substituted
+    /// from outside, and corruption inside the boundary goes no further than the
+    /// boundary; hence a separate error instead of silently returning an empty state.
     pub fn from_pickle(bytes: &[u8]) -> Result<Self, ChatError> {
         let head = bytes
             .get(..PUBLIC_IDENTITY_BYTES)
@@ -204,7 +204,7 @@ impl Chat {
         &self.peer
     }
 
-    /// Идентификатор сессии. Совпадает у обеих сторон.
+    /// The session identifier. Identical on both sides.
     pub fn session_id(&self) -> String {
         self.session.session_id()
     }
@@ -218,14 +218,14 @@ impl Chat {
         String::from_utf8(bytes).map_err(|_| ChatError::NotText)
     }
 
-    /// Расшифровывает пачку, разложив её по порядку цепочки.
+    /// Decrypts a batch after sorting it in chain order.
     ///
-    /// Результаты возвращаются **в порядке входа**: i-й результат относится к
-    /// i-му сообщению, как бы оно ни переставлялось внутри. Ошибка на одном
-    /// сообщении не прекращает работу — остальные будут прочитаны.
+    /// Results are returned **in input order**: the i-th result belongs to the
+    /// i-th message, however it was reordered inside. An error on one
+    /// message does not stop the work: the rest will be read.
     ///
-    /// Именно этот метод следует звать на всём, что пришло из сети.
-    /// [`Chat::decrypt`] годится только там, где сообщение заведомо одно.
+    /// This is the method to call on everything that came from the network.
+    /// [`Chat::decrypt`] is fit only where there is known to be a single message.
     pub fn decrypt_batch(&mut self, messages: &[OlmMessage]) -> Vec<Result<String, ChatError>> {
         let mut slots: Vec<Option<Result<String, ChatError>>> =
             messages.iter().map(|_| None).collect();
@@ -247,30 +247,30 @@ impl Chat {
     }
 }
 
-/// Порядок, в котором пачку следует расшифровывать.
+/// The order in which a batch should be decrypted.
 ///
-/// Правила:
+/// Rules:
 ///
-/// 1. **Внутри одной цепочки — по возрастанию номера.** Ради этого всё и
-///    затевалось: иначе первый же расшифрованный «из будущего» выбросит ключи
-///    всех, кто до него, сверх сорока.
-/// 2. **Цепочки — в порядке первого появления.** Их взаимный порядок из самих
-///    сообщений не выводится: ключ храповика непрозрачен, а «какая цепочка
-///    новее» знает только тот, кто её создал. Порядок прихода — лучшее
-///    доступное приближение, и он верен всегда, кроме случая, когда сама сеть
-///    переставила границу разворота переписки. Тогда часть сообщений старой
-///    цепочки может не прочитаться — и об этом честно сообщается ошибкой,
-///    а не проглатывается.
+/// 1. **Within one chain, in ascending index order.** This is what it was all
+///    for: otherwise the very first message decrypted "from the future" throws away
+///    the keys of everyone before it beyond forty.
+/// 2. **Chains in order of first appearance.** Their relative order cannot be
+///    derived from the messages themselves: the ratchet key is opaque, and "which
+///    chain is newer" is known only to whoever created it. Arrival order is the best
+///    available approximation, and it is always right, except when the network itself
+///    reordered the boundary where the conversation turned around. Then some messages
+///    of the old chain may fail to be read, and this is honestly reported as an error,
+///    not swallowed.
 ///
-/// Сообщения установления сессии **не выделяются в особый случай**, и это
-/// существенно: в Olm инициатор шлёт их до тех пор, пока не получит ответ.
-/// Односторонняя пачка в двести сообщений целиком состоит из них, и если
-/// раскладывать по порядку только «обычные», не поменяется ничего. Номер
-/// цепочки у них лежит во вложенном сообщении и читается так же открыто.
+/// Session-establishment messages are **not singled out as a special case**, and this
+/// matters: in Olm the initiator keeps sending them until it receives a reply.
+/// A one-sided batch of two hundred messages consists of them entirely, and if
+/// only the "ordinary" ones were sorted, nothing would change. Their chain
+/// index lies in the nested message and is readable in the clear just the same.
 fn batch_order(messages: &[OlmMessage]) -> Vec<usize> {
-    /// Номер сообщения в цепочке и его позиция во входной пачке.
+    /// The message's index in the chain and its position in the input batch.
     type Member = (u64, usize);
-    /// Ключ храповика и все сообщения его цепочки.
+    /// The ratchet key and all messages of its chain.
     type Chain = ([u8; 32], Vec<Member>);
 
     let mut order: Vec<usize> = Vec::with_capacity(messages.len());

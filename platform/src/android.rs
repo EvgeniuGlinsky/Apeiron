@@ -1,19 +1,19 @@
-//! Обращение к `io.apeiron.apeiron.Vault` — единственное место с JNI.
+//! Calls into `io.apeiron.apeiron.Vault`: the only place with JNI.
 //!
-//! # Правила, которые здесь соблюдаются буквально
+//! # Rules that are followed literally here
 //!
-//! * хранится только [`JavaVM`] и глобальная ссылка на объект. Никогда `Env` и
-//!   никогда локальная ссылка: `Env` привязан к потоку, а вызовы приходят из
-//!   пула потоков flutter_rust_bridge;
-//! * присоединение потока — с областью видимости, крейт `jni` отсоединяет сам.
-//!   Не «навсегда»: пул заменяет поток, в котором случилась паника, а поток,
-//!   завершившийся присоединённым, роняет виртуальную машину;
-//! * `FindClass` не вызывается нигде. Системный загрузчик классов не видит
-//!   классов приложения, и с рабочего потока поиск вернул бы null. Ссылка на
-//!   объект приходит из Kotlin при регистрации, а метод разыскивается по
-//!   классу самого объекта;
-//! * паники нет ни одной. В релизе `panic = "abort"`, и паника здесь — это
-//!   мгновенная смерть процесса без единой строчки в журнале.
+//! * only the [`JavaVM`] and a global reference to the object are stored. Never an `Env` and
+//!   never a local reference: an `Env` is bound to a thread, and the calls come from the
+//!   flutter_rust_bridge thread pool;
+//! * thread attachment is scoped; the `jni` crate detaches by itself.
+//!   Not "permanently": the pool replaces a thread in which a panic happened, and a thread
+//!   that exits while attached brings down the virtual machine;
+//! * `FindClass` is not called anywhere. The system class loader does not see the
+//!   application's classes, and from a worker thread the lookup would return null. The
+//!   reference to the object comes from Kotlin at registration, and the method is looked up
+//!   via the class of the object itself;
+//! * there is not a single panic. In release `panic = "abort"`, and a panic here is
+//!   instant death of the process without a single line in the log.
 
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -25,7 +25,7 @@ use zeroize::{Zeroize, Zeroizing};
 
 use crate::{KeyStatus, KeyWrapper, PlatformError, SecurityLevel};
 
-/// Состояния, которыми отвечает Kotlin. Первый байт каждого ответа.
+/// The statuses Kotlin replies with. The first byte of every reply.
 const STATUS_OK: u8 = 0;
 const STATUS_TRANSIENT: u8 = 1;
 const STATUS_GONE: u8 = 2;
@@ -35,25 +35,25 @@ static VM: OnceLock<JavaVM> = OnceLock::new();
 static VAULT: OnceLock<Global<JObject<'static>>> = OnceLock::new();
 static FILES_DIR: OnceLock<PathBuf> = OnceLock::new();
 
-/// Единственное место во всём проекте, где снят запрет на `unsafe`.
+/// The only place in the whole project where the ban on `unsafe` is lifted.
 ///
-/// Снят он не ради тела функции — там его нет, — а ради `#[export_name]`,
-/// который порождает макрос `native_method!`: линт `unsafe_code` считает
-/// экспорт символа небезопасной конструкцией наравне с блоком `unsafe`, и это
-/// справедливо: имя символа связывает нас с виртуальной машиной Java по
-/// соглашению, которое компилятор проверить не может.
+/// It is lifted not for the function body (there is none there) but for the
+/// `#[export_name]` that the `native_method!` macro generates: the `unsafe_code` lint treats
+/// exporting a symbol as an unsafe construct on a par with an `unsafe` block, and this is
+/// fair: the symbol name binds us to the Java virtual machine by a
+/// convention the compiler cannot check.
 #[allow(unsafe_code)]
 mod jni_entry {
     use super::{register_impl, Env, Global, JObject, JString, JavaVM, FILES_DIR, VAULT, VM};
 
-    /// Экспортируемый символ для `Vault.nativeRegister`.
+    /// The exported symbol for `Vault.nativeRegister`.
     ///
-    /// Имя задано явно, а не оставлено на автоматическое искажение: под этим же
-    /// именем его ищет предохранитель, проверяющий готовый APK. Перегрузок у
-    /// метода нет, поэтому короткой формы достаточно.
+    /// The name is given explicitly rather than left to automatic mangling: under this same
+    /// name the build guard that checks the finished APK looks for it. The method has no
+    /// overloads, so the short form is enough.
     ///
-    /// Константа никем не используется — она нужна ради побочного действия
-    /// макроса, который и создаёт экспорт.
+    /// The constant is not used by anyone: it is needed for the side effect of the
+    /// macro, which is what creates the export.
     #[allow(dead_code)]
     pub(super) const NATIVE_REGISTER: jni::NativeMethod = jni::native_method! {
         java_type = "io.apeiron.apeiron.Vault",
@@ -61,13 +61,13 @@ mod jni_entry {
         fn native_register(self_obj: JObject, files_dir: JString) -> void,
     };
 
-    /// Принимает от Kotlin ссылку на объект `Vault` и путь к каталогу данных.
+    /// Receives from Kotlin a reference to the `Vault` object and the data directory path.
     ///
-    /// Ошибку наружу не отдаёт: бросить исключение здесь значило бы уронить
-    /// приложение в конструкторе Activity, до появления Flutter-движка, то есть
-    /// без единой строчки диагностики на экране. При неудаче глобальные ссылки
-    /// просто остаются незаполненными, и первое же обращение к хранилищу
-    /// скажет об этом внятно.
+    /// It does not return an error: throwing an exception here would mean crashing the app
+    /// in the Activity constructor, before the Flutter engine appears, i.e. without
+    /// a single line of diagnostics on the screen. On failure the global references
+    /// simply stay unfilled, and the very first access to the storage
+    /// will say so clearly.
     fn native_register<'local>(
         env: &mut Env<'local>,
         _this: JObject<'local>,
@@ -78,8 +78,8 @@ mod jni_entry {
         Ok(())
     }
 
-    /// Заполняет глобальные ссылки. Вынесено из `native_register`, чтобы тело
-    /// экспортируемой функции оставалось в три строки.
+    /// Fills the global references. Moved out of `native_register` so that the body
+    /// of the exported function stays at three lines.
     pub(super) fn fill(vm: JavaVM, vault: Global<JObject<'static>>, dir: std::path::PathBuf) {
         let _ = VM.set(vm);
         let _ = VAULT.set(vault);
@@ -105,12 +105,12 @@ fn register_impl<'local>(
     jni_entry::fill(vm, global, dir);
 }
 
-/// Каталог, в котором приложению разрешено хранить свои файлы.
+/// The directory where the application is allowed to keep its files.
 ///
-/// Путь приходит из Kotlin (`context.filesDir`), а не добывается из Rust через
-/// `ActivityThread.currentApplication()`: с Android 11 доступ к скрытым API
-/// ограничен, в том числе из JNI. Путь — не секрет, R-004 про ключи и открытый
-/// текст.
+/// The path comes from Kotlin (`context.filesDir`) rather than being obtained from Rust via
+/// `ActivityThread.currentApplication()`: since Android 11 access to hidden APIs is
+/// restricted, including from JNI. The path is not a secret; R-004 is about keys and
+/// plaintext.
 pub fn storage_dir() -> Result<&'static Path, PlatformError> {
     FILES_DIR
         .get()
@@ -125,22 +125,22 @@ fn not_registered() -> PlatformError {
 }
 
 impl From<jni::errors::Error> for PlatformError {
-    /// Исключение Java сюда попасть не должно: Kotlin ловит всё сам и отвечает
-    /// состоянием. Если оно всё-таки здесь — значит разошлись имя или подпись
-    /// метода, и это наша ошибка, а не отказ железа.
+    /// A Java exception must not get here: Kotlin catches everything itself and replies
+    /// with a status. If one is here after all, the method name or signature have
+    /// diverged, and that is our bug, not a hardware failure.
     fn from(e: jni::errors::Error) -> Self {
         PlatformError::Internal(e.to_string())
     }
 }
 
-/// Аппаратный ключ Android.
+/// The Android hardware key.
 ///
-/// Состояния не имеет: всё, что нужно, лежит в глобальных ссылках, заполненных
-/// при регистрации.
+/// Has no state: everything needed lives in the global references filled
+/// at registration.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct AndroidVault;
 
-/// Разбирает ответ Kotlin: первый байт — состояние, дальше данные или текст.
+/// Parses a Kotlin reply: the first byte is the status, then data or text.
 fn decode(reply: &[u8]) -> Result<&[u8], PlatformError> {
     let (status, rest) = reply
         .split_first()
@@ -157,7 +157,7 @@ fn decode(reply: &[u8]) -> Result<&[u8], PlatformError> {
     }
 }
 
-/// Довод единственного вызываемого метода.
+/// The argument of the only method called.
 enum Arg<'a> {
     None,
     Bool(bool),
@@ -175,8 +175,8 @@ impl KeyWrapper for AndroidVault {
         let raw = body
             .first()
             .ok_or_else(|| PlatformError::Internal("ответ ensureKey без уровня".to_string()))?;
-        // Уровень приходит знаковым байтом: значений у getSecurityLevel() пять,
-        // и два из них отрицательные.
+        // The level comes as a signed byte: getSecurityLevel() has five values,
+        // and two of them are negative.
         let level = SecurityLevel::from_raw(i32::from(*raw as i8));
         let note = String::from_utf8_lossy(body.get(1..).unwrap_or_default()).into_owned();
         Ok(KeyStatus { level, note })
@@ -198,8 +198,8 @@ impl KeyWrapper for AndroidVault {
             Arg::Bytes(iv_and_ct),
         )?;
         let out = decode(&reply).map(|body| Zeroizing::new(body.to_vec()));
-        // Затирает копию, сделанную на стороне Rust. Копию на куче Java
-        // затирает Kotlin — и там, и там это сужает окно, а не закрывает его.
+        // Wipes the copy made on the Rust side. The copy on the Java heap is
+        // wiped by Kotlin; in both places this narrows the window rather than closing it.
         reply.zeroize();
         out
     }
@@ -228,11 +228,11 @@ impl KeyWrapper for AndroidVault {
     }
 }
 
-/// Общий вызов метода `Vault`, возвращающего `byte[]`.
+/// A common call of a `Vault` method that returns `byte[]`.
 ///
-/// Довод строится внутри кадра локальных ссылок: массив, созданный снаружи,
-/// пережил бы кадр и утёк. Кадр открывается явно, хотя присоединение потока
-/// даёт свой: так число ссылок задано здесь и видно рядом с вызовом.
+/// The argument is built inside a local reference frame: an array created outside
+/// would outlive the frame and leak. The frame is opened explicitly, although attaching the
+/// thread gives one of its own: so the reference count is set here, visible next to the call.
 fn call(
     name: &jni::strings::JNIStr,
     sig: &jni::signature::MethodSignature,

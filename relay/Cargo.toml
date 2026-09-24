@@ -4,10 +4,10 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Слепой ретранслятор: держит односторонние очереди шифротекста, не зная ни отправителя, ни получателя."
-# На crates.io не публикуется: это часть приложения, а не библиотека общего
-# пользования. Заодно закрывает случайный `cargo publish` криптографического
-# кода, который ещё в работе.
+description = "Blind relay: holds one-way ciphertext queues without knowing either the sender or the recipient."
+# Not published to crates.io: this is part of the application, not a general-purpose
+# library. It also guards against an accidental `cargo publish` of cryptographic
+# code that is still in progress.
 publish = false
 
 [dependencies]

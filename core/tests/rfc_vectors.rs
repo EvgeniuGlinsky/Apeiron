@@ -1,20 +1,20 @@
-//! Официальные тест-векторы стандартов.
+//! Official test vectors of the standards.
 //!
-//! Критерий готовности этапа 2 требует прогнать против нашей реализации те же
-//! векторы, что проходит эталон `radio-mesh-demo/s07_ratchet.py` (раздел A).
-//! Векторы здесь те же самые — сверены с этим файлом, а он, в свою очередь,
-//! с текстами RFC.
+//! The readiness criterion of stage 2 requires running against our implementation the same
+//! vectors that the reference `radio-mesh-demo/s07_ratchet.py` passes (section A).
+//! The vectors here are exactly the same: checked against that file, and it, in turn,
+//! against the RFC texts.
 //!
-//! # Зачем это, если примитивы чужие
+//! # Why this, if the primitives are someone else's
 //!
-//! Именно потому, что чужие. Мы не пишем криптографию сами, но отвечаем за
-//! выбор реализаций, и «крейт популярный» — не проверка. Проверка вот эта:
-//! стандарт говорит, что при таком входе выход должен быть таким, и он такой.
+//! Precisely because they are someone else's. We do not write cryptography ourselves, but we
+//! are responsible for choosing implementations, and "the crate is popular" is not a check.
+//! This is the check: the standard says that for this input the output must be this, and it is.
 //!
-//! Тест ловит не ошибку в самих крейтах (её нашли бы раньше нас), а нашу
-//! собственную: неверный порядок аргументов, перепутанные соль и метку,
-//! подмену версии при обновлении зависимости. То есть ровно тот класс ошибок,
-//! который не виден на глаз и не проявляется до самого взлома.
+//! The test catches not a bug in the crates themselves (it would have been found before us),
+//! but our own: the wrong argument order, salt and label mixed up,
+//! a version swap when updating a dependency. That is exactly the class of bugs
+//! that is invisible to the eye and does not show itself until the break-in.
 
 #![allow(
     clippy::unwrap_used,
@@ -29,16 +29,16 @@ use hkdf::Hkdf;
 use sha2::Sha256;
 
 fn unhex(s: &str) -> Vec<u8> {
-    hex::decode(s).expect("вектор записан шестнадцатерично")
+    hex::decode(s).expect("the vector is written in hex")
 }
 
 fn array32(s: &str) -> [u8; 32] {
-    unhex(s).try_into().expect("32 байта")
+    unhex(s).try_into().expect("32 bytes")
 }
 
 // ─── RFC 7748. X25519 ────────────────────────────────────────────────────────
 
-/// Скалярное умножение, RFC 7748 п. 5.2.
+/// Scalar multiplication, RFC 7748 section 5.2.
 #[test]
 fn rfc7748_scalar_multiplication() {
     let k = array32("a546e36bf0527c9d3b16154b82465edd62144c0ac1fc5a18506a2244ba449ac4");
@@ -48,7 +48,7 @@ fn rfc7748_scalar_multiplication() {
     assert_eq!(x25519_dalek::x25519(k, u), expected);
 }
 
-/// Обмен ключами, RFC 7748 п. 6.1: открытые ключи и общий секрет.
+/// Key exchange, RFC 7748 section 6.1: public keys and the shared secret.
 #[test]
 fn rfc7748_key_exchange() {
     let alice_secret = array32("77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a");
@@ -61,14 +61,14 @@ fn rfc7748_key_exchange() {
     assert_eq!(x25519_dalek::x25519(alice_secret, base), alice_public);
     assert_eq!(x25519_dalek::x25519(bob_secret, base), bob_public);
 
-    // Обе стороны приходят к одному секрету — тому самому, что в стандарте.
+    // Both sides arrive at one secret: the very one in the standard.
     assert_eq!(x25519_dalek::x25519(alice_secret, bob_public), shared);
     assert_eq!(x25519_dalek::x25519(bob_secret, alice_public), shared);
 }
 
 // ─── RFC 5869. HKDF-SHA256 ───────────────────────────────────────────────────
 
-/// Test Case 1 из приложения A: и промежуточный PRK, и итоговый материал.
+/// Test Case 1 from Appendix A: both the intermediate PRK and the final material.
 #[test]
 fn rfc5869_test_case_1() {
     let ikm = vec![0x0b; 22];
@@ -83,13 +83,13 @@ fn rfc5869_test_case_1() {
     assert_eq!(prk.as_slice(), expected_prk.as_slice(), "PRK");
 
     let mut okm = vec![0u8; expected_okm.len()];
-    hk.expand(&info, &mut okm).expect("42 байта выводятся");
+    hk.expand(&info, &mut okm).expect("42 bytes are derived");
     assert_eq!(okm, expected_okm, "OKM");
 }
 
 // ─── RFC 8439. ChaCha20-Poly1305 ─────────────────────────────────────────────
 
-/// AEAD, RFC 8439 п. 2.8.2 — шифртекст, метка и отказ при подделке.
+/// AEAD, RFC 8439 section 2.8.2: ciphertext, tag, and rejection of a forgery.
 #[test]
 fn rfc8439_aead() {
     let key: Vec<u8> = (0x80u8..0xA0).collect();
@@ -107,8 +107,8 @@ fn rfc8439_aead() {
     );
     let expected_tag = unhex("1ae10b594f09e26a7e902ecbd0600691");
 
-    let cipher = ChaCha20Poly1305::new_from_slice(&key).expect("ключ 32 байта");
-    let nonce = Nonce::try_from(nonce_bytes.as_slice()).expect("12 байт");
+    let cipher = ChaCha20Poly1305::new_from_slice(&key).expect("the key is 32 bytes");
+    let nonce = Nonce::try_from(nonce_bytes.as_slice()).expect("12 bytes");
 
     let sealed = cipher
         .encrypt(
@@ -118,13 +118,13 @@ fn rfc8439_aead() {
                 aad: &aad,
             },
         )
-        .expect("шифруется");
+        .expect("encrypted");
 
-    // Крейт отдаёт шифртекст и метку одним куском, стандарт приводит их
-    // по отдельности.
+    // The crate returns the ciphertext and tag as one piece; the standard gives them
+    // separately.
     let (ciphertext, tag) = sealed.split_at(sealed.len() - 16);
-    assert_eq!(ciphertext, expected_ciphertext.as_slice(), "шифртекст");
-    assert_eq!(tag, expected_tag.as_slice(), "метка аутентичности");
+    assert_eq!(ciphertext, expected_ciphertext.as_slice(), "ciphertext");
+    assert_eq!(tag, expected_tag.as_slice(), "authentication tag");
 
     let opened = cipher
         .decrypt(
@@ -134,11 +134,11 @@ fn rfc8439_aead() {
                 aad: &aad,
             },
         )
-        .expect("расшифровывается обратно");
+        .expect("decrypts back");
     assert_eq!(opened, plaintext);
 
-    // Подделка обязана отвергаться — в этом весь смысл аутентифицированного
-    // шифрования. Шифрование без проверки подлинности запрещено прямо (§18).
+    // A forgery must be rejected: that is the whole point of authenticated
+    // encryption. Encryption without authenticity checking is explicitly forbidden (§18).
     let mut forged = sealed.clone();
     forged[5] ^= 1;
     assert!(
@@ -151,10 +151,10 @@ fn rfc8439_aead() {
                 }
             )
             .is_err(),
-        "подделка шифртекста обязана отвергаться"
+        "a ciphertext forgery must be rejected"
     );
 
-    // Подмена незашифрованной, но защищённой части — тоже.
+    // Substitution of the unencrypted but protected part, too.
     let mut other_aad = aad.clone();
     other_aad[0] ^= 1;
     assert!(
@@ -167,6 +167,6 @@ fn rfc8439_aead() {
                 }
             )
             .is_err(),
-        "подмена связанных данных обязана отвергаться"
+        "substitution of associated data must be rejected"
     );
 }

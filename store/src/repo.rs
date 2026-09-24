@@ -1,11 +1,11 @@
-//! Что именно хранится и как оно кладётся на место.
+//! What exactly is stored and how it is put in its place.
 //!
-//! Общее правило на все методы: наружу отдаются готовые типы ядра, а не байты,
-//! и **проверка при чтении повторяется**. Успешное распечатывание AEAD говорит
-//! «эти байты писали мы» — и только это. Оно не говорит, что байты верны.
-//! Поэтому журнал личности после загрузки проходит `verify()` заново, а
-//! состояние переписки — свой разбор: повреждение внутри доверенной границы
-//! дальше границы не идёт.
+//! A common rule for all methods: ready-made core types are handed out, not bytes,
+//! and **the check is repeated on read**. A successful AEAD open says
+//! "we wrote these bytes", and only that. It does not say the bytes are correct.
+//! That is why the sigchain goes through `verify()` again after loading, and the
+//! conversation state through its own parsing: corruption inside the trusted boundary
+//! goes no further than the boundary.
 
 use apeiron_core::{pickle_account, unpickle_account, Chat, Identity, PublicIdentity, Sigchain};
 use rusqlite::OptionalExtension;
@@ -14,24 +14,24 @@ use zeroize::Zeroizing;
 use crate::record::{open_record, seal_record, Table};
 use crate::{Storage, StorageError};
 
-/// Идентификатор строки в таблицах, где строка всегда одна.
+/// Row identifier in tables where there is always exactly one row.
 const SINGLETON: i64 = 1;
 
-/// Контакт: собеседник и то, что мы о нём записали.
+/// A contact: a peer and what we have recorded about them.
 pub struct Contact {
-    /// Номер строки. Нужен, чтобы привязывать к нему сессии.
+    /// Row number. Needed to bind sessions to it.
     pub id: i64,
-    /// Публичная личность собеседника.
+    /// The peer's public identity.
     pub peer: PublicIdentity,
-    /// Имя, которое дал ему владелец. Не приходит снаружи и ничего не
-    /// подтверждает — см. `docs/crypto.md`, раздел 6.
+    /// The name the owner gave them. Does not come from outside and confirms
+    /// nothing; see `docs/crypto.md`, section 6.
     pub name: String,
 }
 
 impl Storage {
-    // ── Личность ────────────────────────────────────────────────────────────
+    // ── Identity ────────────────────────────────────────────────────────────
 
-    /// Сохраняет личность. Заменяет прежнюю, если она была.
+    /// Saves the identity. Replaces the previous one, if there was one.
     pub fn save_identity(&self, identity: &Identity) -> Result<(), StorageError> {
         let secret = identity.export_secret();
         let sealed = seal_record(
@@ -48,7 +48,7 @@ impl Storage {
         Ok(())
     }
 
-    /// Читает личность, если она есть.
+    /// Reads the identity, if there is one.
     pub fn load_identity(&self) -> Result<Option<Identity>, StorageError> {
         let Some(sealed) = self.sealed_singleton("identity")? else {
             return Ok(None);
@@ -62,13 +62,13 @@ impl Storage {
         Ok(Some(Identity::from_secret_bytes(&plain)?))
     }
 
-    // ── Аккаунт устройства ──────────────────────────────────────────────────
+    // ── Device account ──────────────────────────────────────────────────────
 
-    /// Сохраняет аккаунт Olm.
+    /// Saves the Olm account.
     ///
-    /// Без этого каждый запуск порождал бы новое устройство и рвал все
-    /// переписки разом: у аккаунта свои долговременные ключи и запас
-    /// одноразовых.
+    /// Without this every launch would spawn a new device and break all
+    /// conversations at once: the account has its own long-term keys and a supply
+    /// of one-time keys.
     pub fn save_account(
         &self,
         account: &apeiron_core::vodozemac::olm::Account,
@@ -90,7 +90,7 @@ impl Storage {
         Ok(())
     }
 
-    /// Читает аккаунт Olm, если он есть.
+    /// Reads the Olm account, if there is one.
     pub fn load_account(
         &self,
     ) -> Result<Option<apeiron_core::vodozemac::olm::Account>, StorageError> {
@@ -106,9 +106,9 @@ impl Storage {
         Ok(Some(unpickle_account(&plain)?))
     }
 
-    // ── Журнал личности ─────────────────────────────────────────────────────
+    // ── Sigchain ────────────────────────────────────────────────────────────
 
-    /// Сохраняет журнал личности.
+    /// Saves the sigchain.
     pub fn save_sigchain(&self, chain: &Sigchain) -> Result<(), StorageError> {
         let sealed = seal_record(
             self.keys().sigchain(),
@@ -124,12 +124,12 @@ impl Storage {
         Ok(())
     }
 
-    /// Читает журнал личности и **проверяет его заново**.
+    /// Reads the sigchain and **verifies it again**.
     ///
-    /// Проверка здесь не перестраховка. Список устройств из непроверенного
-    /// журнала хуже отсутствия списка: по нему решают, чья подпись считается
-    /// действующей. Ядро и не даёт достать состояние иначе как через
-    /// `verify()`, и хранилище это правило не обходит.
+    /// The check here is not over-caution. A device list from an unverified
+    /// log is worse than no list: it decides whose signature counts as
+    /// valid. The core does not allow getting the state other than through
+    /// `verify()`, and the storage does not bypass this rule.
     pub fn load_sigchain(&self) -> Result<Option<Sigchain>, StorageError> {
         let Some(sealed) = self.sealed_singleton("sigchain")? else {
             return Ok(None);
@@ -140,12 +140,12 @@ impl Storage {
         Ok(Some(chain))
     }
 
-    // ── Контакты ────────────────────────────────────────────────────────────
+    // ── Contacts ────────────────────────────────────────────────────────────
 
-    /// Добавляет контакт или обновляет имя существующего.
+    /// Adds a contact or updates the name of an existing one.
     ///
-    /// Ищется он по непрозрачной метке, а не по публичному ключу: открытый
-    /// список собеседников читался бы из файла базы без всякого ключа.
+    /// It is looked up by an opaque tag, not by the public key: a list of peers in the
+    /// clear could be read from the database file without any key.
     pub fn save_contact(&self, peer: &PublicIdentity, name: &str) -> Result<i64, StorageError> {
         let tag = self.keys().tag().tag(&peer.to_bytes());
         let tx = self.conn().unchecked_transaction()?;
@@ -159,9 +159,9 @@ impl Storage {
         let id = match existing {
             Some(id) => id,
             None => {
-                // Идентификатор строки входит в проверку подлинности записи,
-                // поэтому он нужен до запечатывания. Отсюда два шага в одной
-                // транзакции: сначала место, потом содержимое.
+                // The row identifier is part of the record's authenticity check,
+                // so it is needed before sealing. Hence two steps in one
+                // transaction: first the location, then the content.
                 tx.execute(
                     "INSERT INTO contacts (tag, sealed) VALUES (?1, ?2)",
                     rusqlite::params![&tag[..], Vec::<u8>::new()],
@@ -184,7 +184,7 @@ impl Storage {
         Ok(id)
     }
 
-    /// Находит контакт по публичной личности.
+    /// Finds a contact by public identity.
     pub fn find_contact(&self, peer: &PublicIdentity) -> Result<Option<Contact>, StorageError> {
         let tag = self.keys().tag().tag(&peer.to_bytes());
         let row: Option<(i64, Vec<u8>)> = self
@@ -201,7 +201,7 @@ impl Storage {
         }
     }
 
-    /// Все контакты.
+    /// All contacts.
     pub fn contacts(&self) -> Result<Vec<Contact>, StorageError> {
         let conn = self.conn();
         let mut stmt = conn.prepare("SELECT id, sealed FROM contacts ORDER BY id")?;
@@ -221,13 +221,13 @@ impl Storage {
         Ok(Contact { id, peer, name })
     }
 
-    // ── Переписки ───────────────────────────────────────────────────────────
+    // ── Conversations ───────────────────────────────────────────────────────
 
-    /// Сохраняет состояние переписки.
+    /// Saves the conversation state.
     ///
-    /// Контакт должен быть заведён заранее: переписка без известного
-    /// собеседника — это переписка неизвестно с кем, и предъявить число сверки
-    /// было бы некому.
+    /// The contact must be created beforehand: a conversation without a known
+    /// peer is a conversation with who knows whom, and there would be no one to
+    /// present the safety number to.
     pub fn save_chat(&self, contact_id: i64, chat: &Chat) -> Result<(), StorageError> {
         let tx = self.conn().unchecked_transaction()?;
         self.write_chat(contact_id, chat)?;
@@ -235,8 +235,8 @@ impl Storage {
         Ok(())
     }
 
-    /// Та же запись, но без собственной транзакции — чтобы её можно было
-    /// объединить с другими в одну.
+    /// The same write, but without its own transaction, so that it can be
+    /// combined with others into one.
     fn write_chat(&self, contact_id: i64, chat: &Chat) -> Result<(), StorageError> {
         let conn = self.conn();
         let tag = self.keys().tag().tag(chat.session_id().as_bytes());
@@ -267,7 +267,7 @@ impl Storage {
         Ok(())
     }
 
-    /// Читает переписки с указанным контактом.
+    /// Reads the conversations with the given contact.
     pub fn load_chats(&self, contact_id: i64) -> Result<Vec<Chat>, StorageError> {
         let conn = self.conn();
         let mut stmt =
@@ -290,13 +290,13 @@ impl Storage {
         Ok(out)
     }
 
-    /// Сохраняет состояние переписки и аккаунта **одной транзакцией**.
+    /// Saves the conversation state and the account **in one transaction**.
     ///
-    /// Раздельная запись здесь недопустима. Расшифровка сдвигает храповик и
-    /// расходует одноразовый ключ аккаунта; если на диск попадёт только одна из
-    /// двух половин, состояния разойдутся — и часть сообщений станет
-    /// непрочитываемой навсегда. Именно ради этого в хранилище SQLite, а не
-    /// набор файлов.
+    /// Separate writes are unacceptable here. Decryption advances the ratchet and
+    /// consumes a one-time key of the account; if only one of the two halves reaches
+    /// the disk, the states will diverge, and some messages will become
+    /// unreadable forever. This is exactly why the storage is SQLite and not
+    /// a set of files.
     pub fn save_chat_and_account(
         &self,
         contact_id: i64,
@@ -310,9 +310,9 @@ impl Storage {
         Ok(())
     }
 
-    // ── Служебное ───────────────────────────────────────────────────────────
+    // ── Internal ────────────────────────────────────────────────────────────
 
-    /// Записывает служебное значение.
+    /// Writes an internal value.
     pub fn meta_set(&self, key: &str, value: &[u8]) -> Result<(), StorageError> {
         let tag = self.keys().tag().tag(key.as_bytes());
         let tx = self.conn().unchecked_transaction()?;
@@ -343,7 +343,7 @@ impl Storage {
         Ok(())
     }
 
-    /// Читает служебное значение.
+    /// Reads an internal value.
     pub fn meta_get(&self, key: &str) -> Result<Option<Vec<u8>>, StorageError> {
         let tag = self.keys().tag().tag(key.as_bytes());
         let row: Option<(i64, Vec<u8>)> = self
@@ -365,11 +365,11 @@ impl Storage {
         }
     }
 
-    /// Строка-одиночка из таблицы, где она всегда одна.
+    /// The single row from a table where there is always exactly one.
     fn sealed_singleton(&self, table: &str) -> Result<Option<Vec<u8>>, StorageError> {
-        // Имя таблицы подставляется в запрос, и это единственное место, где так
-        // делается. Снаружи оно прийти не может: все вызовы — с литералами из
-        // этого же файла.
+        // The table name is substituted into the query, and this is the only place where
+        // that is done. It cannot come from outside: all calls use literals from
+        // this same file.
         let sql = format!("SELECT sealed FROM {table} WHERE id = ?1");
         let sealed: Option<Vec<u8>> = self
             .conn()
@@ -379,7 +379,7 @@ impl Storage {
     }
 }
 
-/// Раскладка записи о контакте: `публичная личность (64) ‖ имя в UTF-8`.
+/// Layout of a contact record: `public identity (64) ‖ name in UTF-8`.
 fn encode_contact(peer: &PublicIdentity, name: &str) -> Vec<u8> {
     let mut out = Vec::with_capacity(64 + name.len());
     out.extend_from_slice(&peer.to_bytes());

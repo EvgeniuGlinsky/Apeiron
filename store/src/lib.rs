@@ -1,34 +1,34 @@
-//! Локальное хранилище: иерархия ключей, схема базы, запечатывание записей.
+//! Local storage: key hierarchy, database schema, sealing of records.
 //!
-//! # Что здесь защищено и чем
+//! # What is protected here and by what
 //!
-//! Аппаратный ключ устройства оборачивает ключ базы (`wrapper`), из ключа базы
-//! выводятся подключи по назначениям (`keys`), каждая запись шифруется отдельно
-//! и привязывается к своему месту (`record`). Схема SQLite держит только
-//! непрозрачные байты.
+//! The device's hardware key wraps the database key (`wrapper`), subkeys per purpose are
+//! derived from the database key (`keys`), every record is encrypted separately
+//! and bound to its location (`record`). The SQLite schema holds only
+//! opaque bytes.
 //!
-//! # Почему SQLite, а не файлы
+//! # Why SQLite and not files
 //!
-//! Состояние храповика и запись о сообщении обязаны попадать на диск **одной
-//! транзакцией**. Расхождение между ними — это не неудобство, а навсегда
-//! непрочитанные сообщения: храповик ушёл вперёд, а прочитать то, что он уже
-//! пропустил, нечем. Своего движка хранения не пишем по той же причине, по
-//! которой не пишем своих примитивов шифрования.
+//! The ratchet state and the message record must reach the disk **in one
+//! transaction**. A divergence between them is not an inconvenience but messages unread
+//! forever: the ratchet has moved ahead, and there is nothing to read what it has already
+//! skipped. We do not write our own storage engine for the same reason we
+//! do not write our own encryption primitives.
 //!
-//! # Почему не SQLCipher
+//! # Why not SQLCipher
 //!
-//! Шифруем сами, своим AEAD — тем же XChaCha20-Poly1305, который прошёл
-//! официальные векторы RFC 8439. Так криптостек остаётся одного поколения (за
-//! этим следит `cargo deny`), а у записи появляется **место**: переложить её на
-//! чужой идентификатор или подсунуть из другой таблицы нельзя. Шифрование файла
-//! целиком этого не даёт.
+//! We encrypt ourselves, with our own AEAD: the same XChaCha20-Poly1305 that passed
+//! the official RFC 8439 vectors. This way the crypto stack stays one generation (this
+//! is watched by `cargo deny`), and a record gets a **location**: it cannot be moved to
+//! someone else's identifier or slipped in from another table. Encrypting the whole
+//! file does not give that.
 //!
-//! # Что отсюда утекает
+//! # What leaks from here
 //!
-//! Число записей, их размеры и время изменения файла. Содержимое, имена
-//! собеседников и их ключи — нет. Открытым в базе не лежит ничего: даже поиск
-//! по контакту идёт по непрозрачной метке (`apeiron_core::SecretKey::tag`), а
-//! не по публичному ключу.
+//! The number of records, their sizes and the file modification time. The content, peers'
+//! names and their keys do not. Nothing lies in the clear in the database: even lookup
+//! by contact goes by an opaque tag (`apeiron_core::SecretKey::tag`), not
+//! by the public key.
 
 pub mod keys;
 pub mod record;
@@ -47,20 +47,20 @@ use rusqlite::Connection;
 pub use keys::Keys;
 pub use record::{Table, SCHEMA_VERSION};
 
-/// Имя файла базы.
+/// The database file name.
 pub const DATABASE_FILE: &str = "apeiron.db";
 
-/// Служебная запись: как появился аппаратный ключ.
+/// Internal record: how the hardware key came about.
 pub const META_KEY_ORIGIN: &str = "ключ/как появился";
 
-/// Что может пойти не так в хранилище.
+/// What can go wrong in the storage.
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
-    /// Ключ исчез из защищённого модуля устройства.
+    /// The key vanished from the device's secure module.
     ///
-    /// Вынесен из [`StorageError::Platform`] отдельно намеренно: это
-    /// единственное состояние, из которого разрешено предлагать «начать
-    /// заново». Всё остальное — «повторите», и данные целы.
+    /// Split out of [`StorageError::Platform`] deliberately: this is the
+    /// only state from which it is allowed to offer "start
+    /// over". Everything else is "retry", and the data is intact.
     #[error(
         "КЛЮЧ ХРАНИЛИЩА ИСЧЕЗ ИЗ ЗАЩИЩЁННОГО МОДУЛЯ ЭТОГО ТЕЛЕФОНА. \
          Переписку расшифровать нельзя ничем. Единственный выход — начать заново."
@@ -105,22 +105,22 @@ pub enum StorageError {
 }
 
 impl StorageError {
-    /// Можно ли повторить, не потеряв данные.
+    /// Whether it can be retried without losing data.
     ///
-    /// Ровно одно состояние отвечает «нет», и попасть в него можно только из
-    /// трёх явных условий на стороне платформы. Всё прочее — повод повторить, а
-    /// не стирать переписку.
+    /// Exactly one state answers "no", and it can be reached only through
+    /// three explicit conditions on the platform side. Everything else is a reason to retry,
+    /// not to erase the conversations.
     pub fn is_retryable(&self) -> bool {
         !matches!(self, Self::KeyGone)
     }
 }
 
-/// Версия SQLite, с которой собрано. Для отчёта о платформе.
+/// The SQLite version it was built with. For the platform report.
 pub fn sqlite_version() -> String {
     rusqlite::version().to_string()
 }
 
-/// Открытое хранилище.
+/// An opened storage.
 pub struct Storage {
     conn: Connection,
     keys: Keys,
@@ -131,17 +131,17 @@ pub struct Storage {
 }
 
 impl std::fmt::Debug for Storage {
-    /// Ключей не печатает: строки журнала переживают процесс.
+    /// Does not print keys: log lines outlive the process.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Storage")
-            .field("уровень", &self.level.name())
-            .field("первый запуск", &self.created_now)
+            .field("level", &self.level.name())
+            .field("first launch", &self.created_now)
             .finish_non_exhaustive()
     }
 }
 
 impl Storage {
-    /// Открывает хранилище, создавая его при первом запуске.
+    /// Opens the storage, creating it on first launch.
     pub fn open<W: KeyWrapper>(dir: &Path, vault: &W) -> Result<Self, StorageError> {
         std::fs::create_dir_all(dir)?;
         let opened = wrapper::load_or_create(dir, vault)?;
@@ -160,9 +160,9 @@ impl Storage {
             dir: dir.to_path_buf(),
         };
 
-        // Заметку о том, как появился ключ, кладём в базу сразу: на стороне
-        // платформы она живёт только до конца процесса, а прочитать её захотят
-        // позже — когда будут разбираться, почему уровень именно такой.
+        // The note on how the key came about goes into the database right away: on the
+        // platform side it lives only until the end of the process, and it will be wanted
+        // later, when someone is figuring out why the level is what it is.
         if opened.created_now && !opened.creation_note.is_empty() {
             storage.meta_set(META_KEY_ORIGIN, opened.creation_note.as_bytes())?;
         }
@@ -170,17 +170,17 @@ impl Storage {
         Ok(storage)
     }
 
-    /// Что система сообщает об уровне защиты ключа **сейчас**.
+    /// What the system reports about the key's protection level **now**.
     pub fn security_level(&self) -> SecurityLevel {
         self.level
     }
 
-    /// Уровень, записанный при создании обёртки.
+    /// The level recorded when the wrapper was created.
     pub fn level_at_creation(&self) -> SecurityLevel {
         self.level_at_creation
     }
 
-    /// Создана ли обёртка прямо сейчас, то есть первый ли это запуск.
+    /// Whether the wrapper was created just now, i.e. whether this is the first launch.
     pub fn created_now(&self) -> bool {
         self.created_now
     }
@@ -193,36 +193,36 @@ impl Storage {
         &self.keys
     }
 
-    /// Ключ для пробных записей самопроверки.
+    /// The key for self-check probe records.
     ///
-    /// Отдаётся тот же, которым запечатано служебное: проверять надо настоящим
-    /// ключом, иначе проверка доказывает только то, что работает подстава.
-    /// Наружу из крейта не выходит — `SecretKey` не отдаёт своих байтов.
+    /// The same one that seals the internal records is handed out: the check must use the
+    /// real key, otherwise it proves only that the fake works.
+    /// It does not leave the crate: `SecretKey` does not give out its bytes.
     pub(crate) fn probe_key(&self) -> &apeiron_core::SecretKey {
         self.keys.meta()
     }
 
-    /// Каталог, в котором лежит хранилище.
+    /// The directory where the storage lives.
     pub fn dir(&self) -> &Path {
         &self.dir
     }
 
-    /// Стирает всё — криптографически (R-005).
+    /// Erases everything, cryptographically (R-005).
     ///
-    /// Порядок неотменяем: сначала уничтожается ключ, потом файлы. Наоборот
-    /// нельзя: прерывание между шагами оставило бы живой ключ при отсутствии
-    /// обёртки, а это состояние читается как «ключ есть, данных нет» и
-    /// разбирается сложнее, чем обратное.
+    /// The order is non-negotiable: first the key is destroyed, then the files. The other
+    /// way round is not allowed: an interruption between the steps would leave a live key with
+    /// no wrapper, and that state reads as "key present, no data" and
+    /// is harder to sort out than the reverse.
     ///
-    /// Уничтожается ключ, а не данные. Это сильнее прятания: требовать нечего,
-    /// потому что расшифровать нечем — даже если копию базы успели снять.
+    /// The key is destroyed, not the data. This is stronger than hiding: there is nothing to
+    /// demand, because there is nothing to decrypt with, even if a copy of the database exists.
     pub fn wipe<W: KeyWrapper>(dir: &Path, vault: &W) -> Result<(), StorageError> {
         vault.destroy().map_err(StorageError::from)?;
         wrapper::remove(dir)?;
 
         let db = dir.join(DATABASE_FILE);
-        // Журнал опережающей записи и разделяемый индекс — такие же файлы базы,
-        // и оставлять их значит оставлять шифротекст там, где его не ждут.
+        // The write-ahead log and the shared-memory index are database files just the same,
+        // and leaving them means leaving ciphertext where nobody expects it.
         for suffix in ["", "-wal", "-shm", "-journal"] {
             let path = PathBuf::from(format!("{}{suffix}", db.display()));
             if path.exists() {
@@ -233,28 +233,28 @@ impl Storage {
     }
 }
 
-/// Настройки соединения.
+/// Connection settings.
 fn configure(conn: &Connection) -> Result<(), StorageError> {
-    // Телефон выключают в произвольный момент, и на этот случай долговечность
-    // важнее скорости: расхождение состояния храповика с записями — это
-    // навсегда непрочитанные сообщения, а не подтормаживание.
+    // A phone gets switched off at an arbitrary moment, and for that case durability
+    // matters more than speed: a divergence of the ratchet state from the records means
+    // messages unread forever, not a slowdown.
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "synchronous", "FULL")?;
-    // Каскадное удаление сессий вместе с контактом работает только так.
+    // Cascading deletion of sessions together with a contact works only this way.
     conn.pragma_update(None, "foreign_keys", "ON")?;
-    // Временные таблицы — в память. На диск не должно попадать ничего, чего мы
-    // не запечатали сами.
+    // Temporary tables go to memory. Nothing we have not sealed ourselves
+    // must reach the disk.
     conn.pragma_update(None, "temp_store", "MEMORY")?;
     Ok(())
 }
 
-/// Раскладка таблиц.
+/// Table layout.
 ///
-/// Открытым здесь не лежит ничего, кроме служебных чисел: `sealed` — это
-/// запечатанные байты, `tag` — непрозрачная метка для поиска. Публичный ключ
-/// собеседника в открытом виде хранить нельзя: список собеседников читался бы
-/// из файла базы без всякого ключа, то есть ровно то, что база и должна была
-/// закрыть.
+/// Nothing lies in the clear here except internal numbers: `sealed` is
+/// sealed bytes, `tag` is an opaque lookup tag. The peer's public key
+/// must not be stored in the clear: the list of peers could then be read
+/// from the database file without any key, which is exactly what the database was meant
+/// to close off.
 const SCHEMA_SQL: &str = "
 CREATE TABLE IF NOT EXISTS schema_version (
     id      INTEGER PRIMARY KEY CHECK (id = 1),
@@ -298,7 +298,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE INDEX IF NOT EXISTS sessions_by_contact ON sessions(contact_id);
 ";
 
-/// Создаёт схему или доводит её до текущей версии.
+/// Creates the schema or brings it up to the current version.
 fn prepare_schema(conn: &Connection) -> Result<(), StorageError> {
     conn.execute_batch(SCHEMA_SQL)?;
 
@@ -317,10 +317,10 @@ fn prepare_schema(conn: &Connection) -> Result<(), StorageError> {
             Ok(())
         }
         Some(v) if v == SCHEMA_VERSION => Ok(()),
-        // Откат приложения на базу, записанную новее, запрещён: старый код
-        // понял бы новые записи неправильно и молча. Версия схемы к тому же
-        // входит в проверку подлинности каждой записи, так что «неправильно»
-        // здесь означает «никак».
+        // Rolling the application back onto a database written by a newer version is
+        // forbidden: old code would understand new records wrongly, and silently. The schema
+        // version is moreover part of every record's authenticity check, so "wrongly"
+        // here means "not at all".
         Some(v) if v > SCHEMA_VERSION => Err(StorageError::SchemaTooNew {
             found: v,
             known: SCHEMA_VERSION,
@@ -329,18 +329,18 @@ fn prepare_schema(conn: &Connection) -> Result<(), StorageError> {
     }
 }
 
-/// Переводит схему со старой версии на текущую.
+/// Moves the schema from an old version to the current one.
 ///
-/// Версий пока одна, и потому здесь пусто. Существует эта функция не «на
-/// будущее»: первую настоящую миграцию придётся выполнять на живых данных
-/// владельца, и место для неё должно быть готово заранее — вместе с правилом,
-/// что **каждая миграция приносит свой тест, доказывающий, что данные пережили
-/// переход**. Ставить такой тест задним числом уже не на чем.
+/// So far there is only one version, and so this is empty. This function exists not "for
+/// the future": the first real migration will have to run on the owner's live
+/// data, and a place for it must be ready in advance, together with the rule
+/// that **every migration brings its own test proving that the data survived
+/// the transition**. There is nothing to add such a test to after the fact.
 ///
-/// Шаги пойдут по одному, `from -> from+1 -> ... -> to`, каждый в своей
-/// транзакции, и версия будет обновляться в той же транзакции, что и данные.
+/// The steps will go one at a time, `from -> from+1 -> ... -> to`, each in its own
+/// transaction, and the version will be updated in the same transaction as the data.
 fn migrate(conn: &Connection, from: u16, to: u16) -> Result<(), StorageError> {
-    debug_assert!(from < to, "миграция вызвана не для повышения версии");
+    debug_assert!(from < to, "migration called not to raise the version");
     let _ = (conn, from, to);
     Ok(())
 }

@@ -1,8 +1,8 @@
-//! Проверка журнала личности.
+//! Checks of the sigchain (identity log).
 //!
-//! Ценность журнала не в том, что он принимает правильные записи, а в том, что
-//! отвергает неправильные. Поэтому здесь на один тест «работает» приходится
-//! десяток «не даёт себя обмануть».
+//! The value of the log is not that it accepts correct entries but that it
+//! rejects incorrect ones. That is why here, for every "it works" test, there are
+//! a dozen "it cannot be fooled" ones.
 
 #![allow(
     clippy::unwrap_used,
@@ -15,10 +15,10 @@ use apeiron_core::vodozemac::olm::Account;
 use apeiron_core::{EntryBody, Identity, Sigchain, SigchainError};
 
 fn identity() -> Identity {
-    Identity::generate().expect("ОС отдаёт случайность")
+    Identity::generate().expect("the OS provides randomness")
 }
 
-/// Устройство: пара ключей Olm, как у настоящего телефона.
+/// A device: a pair of Olm keys, as on a real phone.
 fn device() -> (Account, [u8; 32], [u8; 32]) {
     let account = Account::new();
     let ed = *account.ed25519_key().as_bytes();
@@ -30,7 +30,7 @@ fn add(ed: [u8; 32], curve: [u8; 32]) -> EntryBody {
     EntryBody::AddDevice { ed, curve }
 }
 
-// ─── Как должно быть ─────────────────────────────────────────────────────────
+// ─── How it should be ────────────────────────────────────────────────────────
 
 #[test]
 fn fresh_chain_verifies() {
@@ -61,15 +61,15 @@ fn devices_are_added_and_revoked() {
 
     let state = chain.verify().unwrap();
     assert_eq!(state.active_devices().count(), 1);
-    assert!(!state.is_active(&ed1), "отозванное устройство не действует");
-    assert!(state.is_known(&ed1), "но из журнала оно не исчезает");
+    assert!(!state.is_active(&ed1), "a revoked device is not active");
+    assert!(state.is_known(&ed1), "but it does not vanish from the log");
     assert!(state.is_active(&ed2));
 }
 
-/// Устройство добавляет другое устройство.
+/// A device adds another device.
 ///
-/// Без этого второй телефон можно было бы завести только с первого, а потеряв
-/// его — уже никак.
+/// Without this a second phone could be set up only from the first one, and after
+/// losing it, not at all.
 #[test]
 fn an_active_device_may_sign() {
     let root = identity();
@@ -99,7 +99,7 @@ fn serialisation_roundtrip() {
     assert!(parsed.verify().unwrap().is_active(&ed));
 }
 
-// ─── Чего быть не должно ─────────────────────────────────────────────────────
+// ─── What must not happen ────────────────────────────────────────────────────
 
 #[test]
 fn foreign_identity_cannot_append() {
@@ -111,7 +111,7 @@ fn foreign_identity_cannot_append() {
     let err = chain.append(&stranger, add(ed, curve)).unwrap_err();
 
     assert!(matches!(err, SigchainError::UnknownSigner(_)), "{err}");
-    assert_eq!(chain.len(), 1, "отвергнутая запись не должна оставаться");
+    assert_eq!(chain.len(), 1, "a rejected entry must not remain");
 }
 
 #[test]
@@ -142,10 +142,10 @@ fn device_cannot_be_added_twice() {
     assert!(matches!(err, SigchainError::DuplicateDevice(_)), "{err}");
 }
 
-/// Отзыв необратим.
+/// Revocation is irreversible.
 ///
-/// Иначе противник, получивший корневой ключ на минуту, мог бы вернуть
-/// отозванное устройство, и отзыв перестал бы что-либо значить.
+/// Otherwise an adversary who got the root key for a minute could bring back
+/// a revoked device, and revocation would stop meaning anything.
 #[test]
 fn revoked_device_cannot_be_added_again() {
     let root = identity();
@@ -186,13 +186,13 @@ fn device_cannot_be_revoked_twice() {
     assert!(matches!(err, SigchainError::AlreadyRevoked(_)), "{err}");
 }
 
-/// Любая правка байта ломает журнал.
+/// Any altered byte breaks the log.
 #[test]
 fn any_altered_byte_breaks_the_chain() {
     let bytes = sample_chain().to_bytes();
 
-    // Проходим по всей длине с шагом, чтобы задеть все поля: номер, ссылку,
-    // ключ подписавшего, тело, подпись.
+    // Walk the whole length with a stride so as to hit every field: the index, the
+    // link, the signer's key, the body, the signature.
     let mut checked = 0;
     for position in (0..bytes.len()).step_by(7) {
         let mut broken = bytes.clone();
@@ -205,17 +205,17 @@ fn any_altered_byte_breaks_the_chain() {
         let verdict = Sigchain::parse(&broken).and_then(|c| c.verify().map(|_| ()));
         assert!(
             verdict.is_err(),
-            "правка байта {position} осталась незамеченной"
+            "an alteration of byte {position} went unnoticed"
         );
     }
-    assert!(checked > 20, "проверено слишком мало позиций: {checked}");
+    assert!(checked > 20, "too few positions checked: {checked}");
 }
 
-/// Изъятие записи обязано быть видно.
+/// Withholding an entry must be visible.
 ///
-/// Это и есть причина, по которой каждая запись ссылается на хеш предыдущей:
-/// подпись защищает запись по отдельности, а от утаивания записи — например,
-/// отзыва устройства — защищает только ссылка.
+/// This is exactly the reason every entry refers to the hash of the previous one:
+/// a signature protects an entry individually, while against hiding an entry (for
+/// example, a device revocation) only the link protects.
 #[test]
 fn a_removed_entry_is_noticed() {
     let root = identity();
@@ -231,7 +231,7 @@ fn a_removed_entry_is_noticed() {
     chain.append(&root, add(ed2, curve2)).unwrap();
     let bytes = chain.to_bytes();
 
-    // Выкидываем среднюю запись — «я не добавлял это устройство».
+    // Throw out the middle entry: "I never added this device".
     let mut without_middle = Vec::new();
     without_middle.extend_from_slice(&bytes[..after_genesis]);
     without_middle.extend_from_slice(&bytes[after_first..]);
@@ -260,14 +260,14 @@ fn reordered_entries_are_noticed() {
     chain.append(&root, add(ed2, curve2)).unwrap();
     let bytes = chain.to_bytes();
 
-    // Меняем местами вторую и третью записи.
+    // Swap the second and third entries.
     let mut swapped = Vec::new();
     swapped.extend_from_slice(&bytes[..a]);
     swapped.extend_from_slice(&bytes[b..]);
     swapped.extend_from_slice(&bytes[a..b]);
 
     let verdict = Sigchain::parse(&swapped).and_then(|c| c.verify().map(|_| ()));
-    assert!(verdict.is_err(), "перестановка записей обязана ловиться");
+    assert!(verdict.is_err(), "reordering of entries must be caught");
 }
 
 #[test]
@@ -280,7 +280,7 @@ fn truncated_bytes_are_rejected() {
         let verdict = Sigchain::parse(&bytes[..bytes.len() - cut]);
         assert!(
             verdict.is_err(),
-            "обрезанный на {cut} байт журнал обязан отвергаться"
+            "a log truncated by {cut} bytes must be rejected"
         );
     }
     assert!(matches!(Sigchain::parse(&[]), Err(SigchainError::Empty)));
@@ -301,7 +301,7 @@ fn a_second_genesis_is_rejected() {
     assert!(matches!(err, SigchainError::RepeatedGenesis(_)), "{err}");
 }
 
-/// Чужой журнал, приклеенный к нашему началу, не должен проходить.
+/// Someone else's log glued onto our beginning must not pass.
 #[test]
 fn entries_from_another_chain_do_not_graft() {
     let mine = sample_chain().to_bytes();
@@ -311,7 +311,7 @@ fn entries_from_another_chain_do_not_graft() {
     grafted.extend_from_slice(&theirs);
 
     let verdict = Sigchain::parse(&grafted).and_then(|c| c.verify().map(|_| ()));
-    assert!(verdict.is_err(), "склейка двух журналов обязана ловиться");
+    assert!(verdict.is_err(), "gluing two logs together must be caught");
 }
 
 fn sample_chain() -> Sigchain {

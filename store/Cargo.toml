@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Локальное хранилище под AEAD: иерархия ключей, схема, запечатывание записей."
+description = "Local storage under AEAD: key hierarchy, schema, sealing of records."
 publish = false
 
 [dependencies]
@@ -18,8 +18,8 @@ thiserror.workspace = true
 hex.workspace = true
 
 [features]
-# Подставной источник мастер-ключа для тестов на хосте. В сборку для устройства
-# попасть не должен — см. compile_error! в src/testing.rs.
+# A test source of the master key for tests on the host. It must not get into a device
+# build; see compile_error! in src/testing.rs.
 testing = []
 
 [dev-dependencies]
@@ -28,8 +28,8 @@ tempfile = "3"
 rusqlite.workspace = true
 
 [lints.rust]
-# Здесь нет и не будет ни одного unsafe: всё, что требует JNI, живёт в
-# apeiron-platform, а сюда приходит уже готовыми байтами.
+# There is not and will not be a single unsafe here: everything that requires JNI lives in
+# apeiron-platform, and arrives here as ready-made bytes.
 unsafe_code = "forbid"
 
 [lints.clippy]

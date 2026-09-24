@@ -1,24 +1,24 @@
-//! Пакет пред-ключей: то, чем начинается переписка.
+//! The prekey bundle: what a conversation starts with.
 //!
-//! Чтобы написать первым тому, кого сейчас нет в сети, нужен его ключ. Пакет
-//! пред-ключей — это набор публичных ключей устройства, который лежит там, где
-//! его можно взять: у слепого ретранслятора, в QR-коде, на бумаге.
+//! To write first to someone who is not online right now, you need their key. A prekey
+//! bundle is a set of a device's public keys that lies where it can be picked up: at a
+//! blind relay, in a QR code, on paper.
 //!
-//! # Что именно здесь защищается
+//! # What exactly is protected here
 //!
-//! Двойной храповик Olm даёт стойкость шифрования, но **ничего не говорит о
-//! том, чей ключ вы взяли**. Подмена пакета посередине полностью побеждает
-//! стойкую криптографию: обе стороны видят «шифрование работает», а читает
-//! третий (см. `s07_ratchet.py`, раздел F, и тест `mitm_*` ниже).
+//! The Olm double ratchet gives encryption strength but **says nothing about whose key
+//! you took**. Substituting the bundle in the middle fully defeats strong cryptography:
+//! both sides see "encryption works", while a third party reads
+//! (see `s07_ratchet.py`, section F, and the `mitm_*` test below).
 //!
-//! Поэтому пакет **подписан долговременной личностью** ([`Identity`]), и
-//! проверка подписи не может быть забыта по невнимательности: разобранный из
-//! байтов пакет имеет тип [`UnverifiedPrekeyBundle`], а построить сессию можно
-//! только из [`PrekeyBundle`], который иначе как через [`UnverifiedPrekeyBundle::verify`]
-//! не получить. Забыть проверку нельзя — код без неё не скомпилируется.
+//! That is why the bundle is **signed by the long-term identity** ([`Identity`]), and signature
+//! verification cannot be forgotten through carelessness: a bundle parsed from bytes has the
+//! type [`UnverifiedPrekeyBundle`], and a session can be built only from a [`PrekeyBundle`],
+//! which cannot be obtained other than through [`UnverifiedPrekeyBundle::verify`].
+//! Forgetting the check is impossible: code without it will not compile.
 //!
-//! Подпись при этом **не отвечает на вопрос, чья это личность**. На него
-//! отвечает только сверка отпечатка голосом или лично — см.
+//! The signature, however, **does not answer the question of whose identity this is**.
+//! Only fingerprint verification by voice or in person answers that; see
 //! [`PublicIdentity::safety_number`].
 
 use ed25519_dalek::{Signature, SignatureError};
@@ -26,23 +26,23 @@ use vodozemac::{olm::Account, Curve25519PublicKey, Ed25519PublicKey, KeyError};
 
 use crate::identity::{Identity, IdentityError, PublicIdentity, PUBLIC_IDENTITY_BYTES};
 
-/// Разделитель области подписи пакета.
+/// Domain separator for the bundle signature.
 ///
-/// Меняя его, вы делаете старые пакеты непроверяемыми — это осознанно ломающее
-/// изменение. Разделитель нужен, чтобы подпись пакета нельзя было предъявить
-/// как подпись чего-то другого: одна и та же личность подписывает и пакеты,
-/// и записи журнала, и области у них обязаны не пересекаться.
+/// Changing it makes old bundles unverifiable: a deliberately breaking change. The
+/// separator is needed so that a bundle signature cannot be presented as the signature
+/// of something else: the same identity signs both bundles and log entries, and their
+/// domains must not overlap.
 const PREKEY_DOMAIN: &[u8] = b"apeiron/prekey-bundle/v1";
 
-/// Длина ключа Curve25519 и Ed25519 в байтах.
+/// Length of a Curve25519 and Ed25519 key in bytes.
 const KEY_BYTES: usize = 32;
-/// Длина подписи Ed25519 в байтах.
+/// Length of an Ed25519 signature in bytes.
 const SIGNATURE_BYTES: usize = 64;
 
-/// Длина сериализованного пакета.
+/// Length of a serialized bundle.
 pub const PREKEY_BUNDLE_BYTES: usize = PUBLIC_IDENTITY_BYTES + KEY_BYTES * 3 + SIGNATURE_BYTES;
 
-/// Что может пойти не так с пакетом пред-ключей.
+/// What can go wrong with a prekey bundle.
 #[derive(Debug, thiserror::Error)]
 pub enum PrekeyError {
     #[error("пакет пред-ключей: ожидалось {expected} байт, получено {got}")]
@@ -67,21 +67,21 @@ pub enum PrekeyError {
     NoOneTimeKeys,
 }
 
-/// Пакет пред-ключей, **подпись которого ещё не проверена**.
+/// A prekey bundle **whose signature has not been verified yet**.
 ///
-/// Единственное, что с ним можно сделать полезного, — вызвать
-/// [`UnverifiedPrekeyBundle::verify`]. Это не вежливое пожелание, а устройство
-/// типов: [`PrekeyBundle`] нельзя собрать иначе.
+/// The only useful thing that can be done with it is to call
+/// [`UnverifiedPrekeyBundle::verify`]. This is not a polite wish but the way the types
+/// are built: a [`PrekeyBundle`] cannot be assembled any other way.
 #[derive(Debug, Clone)]
 pub struct UnverifiedPrekeyBundle {
     inner: PrekeyBundle,
 }
 
-/// Проверенный пакет пред-ключей.
+/// A verified prekey bundle.
 ///
-/// «Проверенный» здесь значит ровно одно: ключи в нём подписаны той личностью,
-/// которая в нём же и указана. Что эта личность принадлежит тому человеку,
-/// которого вы имеете в виду, проверяется **только** сверкой отпечатка.
+/// "Verified" here means exactly one thing: the keys in it are signed by the identity
+/// that is stated in it. That this identity belongs to the person you have in mind is
+/// checked **only** by fingerprint verification.
 #[derive(Debug, Clone)]
 pub struct PrekeyBundle {
     identity: PublicIdentity,
@@ -92,16 +92,16 @@ pub struct PrekeyBundle {
 }
 
 impl PrekeyBundle {
-    /// Собирает пакет для своего устройства, забирая один одноразовый ключ.
+    /// Assembles a bundle for one's own device, taking one one-time key.
     ///
-    /// Одноразовые ключи для того и одноразовые: каждый выданный пакет должен
-    /// нести свой. Повторное использование ключа ослабляет начальное
-    /// согласование до отсутствия прямой секретности на первом сообщении.
+    /// One-time keys are one-time for a reason: every bundle handed out must carry its
+    /// own. Reusing a key weakens the initial agreement to having no forward secrecy
+    /// on the first message.
     pub fn create(identity: &Identity, account: &mut Account) -> Result<Self, PrekeyError> {
-        // Спрашивать надо именно про **невыданные** ключи: `one_time_keys()`
-        // отдаёт только их, а `stored_one_time_key_count()` считает и уже
-        // выданные. Перепутать легко, и тогда второй пакет собрать не выйдет
-        // вовсе — ровно на этом и споткнулись в первой версии.
+        // The question must be about **not yet handed out** keys: `one_time_keys()`
+        // returns only those, while `stored_one_time_key_count()` also counts the
+        // ones already handed out. They are easy to mix up, and then a second bundle
+        // cannot be assembled at all; that is exactly what tripped up the first version.
         if account.one_time_keys().is_empty() {
             account.generate_one_time_keys(1);
         }
@@ -112,8 +112,8 @@ impl PrekeyBundle {
             .next()
             .ok_or(PrekeyError::NoOneTimeKeys)?;
 
-        // Ключ считается выданным сразу: иначе при следующем вызове мы отдадим
-        // тот же самый, а одноразовый ключ на то и одноразовый.
+        // The key counts as handed out immediately: otherwise on the next call we would
+        // hand out the same one, and a one-time key is one-time for a reason.
         account.mark_keys_as_published();
 
         let device_curve = account.curve25519_key();
@@ -136,27 +136,27 @@ impl PrekeyBundle {
         })
     }
 
-    /// Долговременная личность, которой подписан пакет.
+    /// The long-term identity that signed the bundle.
     pub fn identity(&self) -> &PublicIdentity {
         &self.identity
     }
 
-    /// Ключ устройства для согласования (Curve25519).
+    /// The device key for agreement (Curve25519).
     pub fn device_curve_key(&self) -> Curve25519PublicKey {
         self.device_curve
     }
 
-    /// Подписной ключ устройства (Ed25519).
+    /// The device signing key (Ed25519).
     pub fn device_ed_key(&self) -> Ed25519PublicKey {
         self.device_ed
     }
 
-    /// Одноразовый ключ.
+    /// The one-time key.
     pub fn one_time_key(&self) -> Curve25519PublicKey {
         self.one_time
     }
 
-    /// Сериализация в канонический вид — он же то, что подписывается.
+    /// Serialization into canonical form, which is also what gets signed.
     pub fn to_bytes(&self) -> [u8; PREKEY_BUNDLE_BYTES] {
         let mut out = [0u8; PREKEY_BUNDLE_BYTES];
         let mut at = 0;
@@ -175,8 +175,8 @@ impl PrekeyBundle {
         out
     }
 
-    /// Разбор пакета. Подпись **не проверяется** — для этого есть
-    /// [`UnverifiedPrekeyBundle::verify`], и обойти её нельзя.
+    /// Parses a bundle. The signature is **not verified**: that is what
+    /// [`UnverifiedPrekeyBundle::verify`] is for, and it cannot be bypassed.
     pub fn parse(bytes: &[u8]) -> Result<UnverifiedPrekeyBundle, PrekeyError> {
         if bytes.len() != PREKEY_BUNDLE_BYTES {
             return Err(PrekeyError::Length {
@@ -212,13 +212,13 @@ impl PrekeyBundle {
 }
 
 impl UnverifiedPrekeyBundle {
-    /// Личность, **которая заявлена** в пакете. Смотреть на неё до проверки
-    /// подписи можно только чтобы решить, стоит ли вообще возиться.
+    /// The identity **claimed** in the bundle. Looking at it before the signature is
+    /// verified is fine only to decide whether to bother at all.
     pub fn claimed_identity(&self) -> &PublicIdentity {
         &self.inner.identity
     }
 
-    /// Проверяет подпись и отдаёт пакет, пригодный к работе.
+    /// Verifies the signature and returns a bundle fit for use.
     pub fn verify(self) -> Result<PrekeyBundle, PrekeyError> {
         let payload = signed_payload(
             &self.inner.identity,
@@ -234,10 +234,10 @@ impl UnverifiedPrekeyBundle {
     }
 }
 
-/// То, что подписывается: разделитель области и все ключи пакета подряд.
+/// What gets signed: the domain separator and all the bundle's keys in a row.
 ///
-/// Включать в подпись саму личность обязательно: иначе подпись, снятую с одного
-/// пакета, можно было бы предъявить в пакете с другой личностью.
+/// Including the identity itself in the signature is mandatory: otherwise a signature
+/// lifted from one bundle could be presented in a bundle with a different identity.
 fn signed_payload(
     identity: &PublicIdentity,
     device_curve: &Curve25519PublicKey,

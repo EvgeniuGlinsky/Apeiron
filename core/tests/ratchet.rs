@@ -1,12 +1,12 @@
-//! Проверка парной переписки — по разделам эталона `radio-mesh-demo/s07_ratchet.py`.
+//! Checks of pairwise conversation, by section of the reference `radio-mesh-demo/s07_ratchet.py`.
 //!
-//! Эталон написан на чистом Python и служит описанием требуемого поведения:
-//! обмен со сменой направления (раздел C), канал с потерями и перестановками
-//! (D), прямая секретность (E), атака посредника (F). Здесь то же самое
-//! требуется от нашей реализации на Rust.
+//! The reference is written in pure Python and describes the required behavior:
+//! an exchange with direction changes (section C), a channel with losses and reordering
+//! (D), forward secrecy (E), the intermediary attack (F). Here the same is
+//! required of our Rust implementation.
 //!
-//! Тесты интеграционные намеренно: им доступен только публичный API ядра. Если
-//! что-то нельзя сделать снаружи — этого нельзя сделать и в приложении.
+//! The tests are integration tests on purpose: they see only the core's public API. If
+//! something cannot be done from outside, it cannot be done in the application either.
 
 #![allow(
     clippy::unwrap_used,
@@ -19,7 +19,7 @@ use apeiron_core::vodozemac::olm::{Account, OlmMessage, SessionConfig, SessionCr
 use apeiron_core::vodozemac::Curve25519PublicKey;
 use apeiron_core::{pickle_account, unpickle_account, Chat, Identity, PrekeyBundle};
 
-/// Участник: долговременная личность плюс устройство с ключами Olm.
+/// A participant: a long-term identity plus a device with Olm keys.
 struct Party {
     identity: Identity,
     account: Account,
@@ -28,36 +28,36 @@ struct Party {
 impl Party {
     fn new() -> Self {
         Self {
-            identity: Identity::generate().expect("ОС отдаёт случайность"),
+            identity: Identity::generate().expect("the OS provides randomness"),
             account: Account::new(),
         }
     }
 
-    /// Пакет пред-ключей для передачи другой стороне.
+    /// A prekey bundle to hand to the other side.
     fn bundle(&mut self) -> Vec<u8> {
         PrekeyBundle::create(&self.identity, &mut self.account)
-            .expect("пакет собирается")
+            .expect("the bundle is assembled")
             .to_bytes()
             .to_vec()
     }
 }
 
-/// Разбирает и проверяет пакет — как это обязано делать приложение.
+/// Parses and verifies a bundle, as the application is obliged to do.
 fn accept_bundle(bytes: &[u8]) -> PrekeyBundle {
     PrekeyBundle::parse(bytes)
-        .expect("пакет разбирается")
+        .expect("the bundle parses")
         .verify()
-        .expect("подпись верна")
+        .expect("the signature is valid")
 }
 
 fn prekey_of(message: &OlmMessage) -> &apeiron_core::vodozemac::olm::PreKeyMessage {
     match message {
         OlmMessage::PreKey(m) => m,
-        OlmMessage::Normal(_) => panic!("ожидалось сообщение установления сессии"),
+        OlmMessage::Normal(_) => panic!("a session-establishment message was expected"),
     }
 }
 
-// ─── Раздел C. Обмен со сменой направления ───────────────────────────────────
+// ─── Section C. Exchange with direction changes ──────────────────────────────
 
 #[test]
 fn exchange_with_direction_changes() {
@@ -67,35 +67,35 @@ fn exchange_with_direction_changes() {
     let bob_bundle = accept_bundle(&bob.bundle());
     let alice_bundle = accept_bundle(&alice.bundle());
 
-    let mut a_chat = Chat::initiate(&alice.account, &bob_bundle).expect("сессия создаётся");
-    let first = a_chat.encrypt("здравствуй").expect("шифруется");
+    let mut a_chat = Chat::initiate(&alice.account, &bob_bundle).expect("session is created");
+    let first = a_chat.encrypt("greetings").expect("encrypted");
 
     let (mut b_chat, text) =
-        Chat::accept(&mut bob.account, &alice_bundle, prekey_of(&first)).expect("сессия принята");
-    assert_eq!(text, "здравствуй");
+        Chat::accept(&mut bob.account, &alice_bundle, prekey_of(&first)).expect("session accepted");
+    assert_eq!(text, "greetings");
 
-    // Идентификатор сессии совпадает у обеих сторон — они в одной переписке.
+    // The session identifier is identical on both sides: they are in one conversation.
     assert_eq!(a_chat.session_id(), b_chat.session_id());
 
-    // Пять разворотов подряд: каждый разворот двигает DH-храповик.
+    // Five turnarounds in a row: each turnaround advances the DH ratchet.
     for round in 0..5 {
         let from_bob = b_chat
-            .encrypt(&format!("ответ {round}"))
-            .expect("шифруется");
+            .encrypt(&format!("reply {round}"))
+            .expect("encrypted");
         assert_eq!(
-            a_chat.decrypt(&from_bob).expect("расшифровывается"),
-            format!("ответ {round}")
+            a_chat.decrypt(&from_bob).expect("decrypted"),
+            format!("reply {round}")
         );
 
         let from_alice = b_chat_reply(&mut a_chat, round);
         assert_eq!(
-            b_chat.decrypt(&from_alice).expect("расшифровывается"),
-            format!("вопрос {round}")
+            b_chat.decrypt(&from_alice).expect("decrypted"),
+            format!("query {round}")
         );
     }
 
-    // Каждая сторона видит личность собеседника — ту, что показывается на
-    // экране сверки.
+    // Each side sees the peer's identity: the one shown on the
+    // verification screen.
     assert_eq!(
         a_chat.peer().fingerprint(),
         bob.identity.public().fingerprint()
@@ -107,15 +107,15 @@ fn exchange_with_direction_changes() {
 }
 
 fn b_chat_reply(chat: &mut Chat, round: usize) -> OlmMessage {
-    chat.encrypt(&format!("вопрос {round}")).expect("шифруется")
+    chat.encrypt(&format!("query {round}")).expect("encrypted")
 }
 
-// ─── Раздел D. Приём вне порядка ─────────────────────────────────────────────
+// ─── Section D. Out-of-order receive ─────────────────────────────────────────
 
-/// Двести сообщений задом наперёд.
+/// Two hundred messages back to front.
 ///
-/// Это и есть случай, ради которого написан `decrypt_batch`: после суток
-/// offline очередь ретранслятора отдаёт всё разом и в произвольном порядке.
+/// This is exactly the case `decrypt_batch` was written for: after a day
+/// offline the relay queue hands over everything at once and in arbitrary order.
 #[test]
 fn batch_survives_reverse_order() {
     const COUNT: usize = 200;
@@ -124,12 +124,12 @@ fn batch_survives_reverse_order() {
     let mut sent = Vec::with_capacity(COUNT);
     let mut texts = Vec::with_capacity(COUNT);
     for i in 0..COUNT {
-        let text = format!("сообщение {i}");
-        sent.push(a_chat.encrypt(&text).expect("шифруется"));
+        let text = format!("message no. {i}");
+        sent.push(a_chat.encrypt(&text).expect("encrypted"));
         texts.push(text);
     }
 
-    // Пачка приходит задом наперёд.
+    // The batch arrives back to front.
     let mut reversed = sent.clone();
     reversed.reverse();
 
@@ -139,19 +139,19 @@ fn batch_survives_reverse_order() {
     let lost = results.iter().filter(|r| r.is_err()).count();
     assert_eq!(
         lost, 0,
-        "при разложении по порядку не должно теряться ничего"
+        "when sorted into chain order, not a single message may be lost"
     );
 
     for (position, result) in results.iter().enumerate() {
         let expected = &texts[COUNT - 1 - position];
-        assert_eq!(result.as_ref().expect("прочитано"), expected);
+        assert_eq!(result.as_ref().expect("read"), expected);
     }
 }
 
-/// Контрольный опыт: то же самое без разложения по порядку.
+/// The control experiment: the same thing without sorting into order.
 ///
-/// Нужен, чтобы `decrypt_batch` не выглядел лишней предосторожностью. Если
-/// однажды кто-то решит, что сортировка не нужна, этот тест покажет цену.
+/// Needed so that `decrypt_batch` does not look like an excessive precaution. If
+/// someone one day decides sorting is unnecessary, this test will show the price.
 #[test]
 fn naive_reverse_order_loses_messages() {
     const COUNT: usize = 200;
@@ -161,8 +161,8 @@ fn naive_reverse_order_loses_messages() {
     for i in 0..COUNT {
         sent.push(
             a_chat
-                .encrypt(&format!("сообщение {i}"))
-                .expect("шифруется"),
+                .encrypt(&format!("message no. {i}"))
+                .expect("encrypted"),
         );
     }
     sent.reverse();
@@ -175,11 +175,11 @@ fn naive_reverse_order_loses_messages() {
 
     assert!(
         lost > 100,
-        "наивная расшифровка задом наперёд обязана терять сообщения, потеряно {lost}"
+        "naive back-to-front decryption must lose messages; lost {lost}"
     );
 }
 
-/// Канал с потерями и перестановками — модель раздела D эталона.
+/// A channel with losses and reordering: the model of section D of the reference.
 #[test]
 fn lossy_and_shuffled_channel() {
     const COUNT: usize = 40;
@@ -190,14 +190,14 @@ fn lossy_and_shuffled_channel() {
         sent.push((
             i,
             a_chat
-                .encrypt(&format!("сообщение {i}"))
-                .expect("шифруется"),
+                .encrypt(&format!("message no. {i}"))
+                .expect("encrypted"),
         ));
     }
 
-    // Детерминированная «сеть»: теряем каждое третье, остальное переставляем
-    // простым обратимым правилом. Случайность здесь не нужна — нужна
-    // воспроизводимость: упавший тест должен падать снова.
+    // A deterministic "network": drop every third, reorder the rest by a
+    // simple reversible rule. Randomness is not needed here; what is needed is
+    // reproducibility: a failed test must fail again.
     let delivered: Vec<(usize, OlmMessage)> =
         sent.into_iter().filter(|(i, _)| i % 3 != 0).collect();
     let mut shuffled = delivered.clone();
@@ -209,94 +209,94 @@ fn lossy_and_shuffled_channel() {
 
     for ((original, _), result) in shuffled.iter().zip(results.iter()) {
         assert_eq!(
-            result.as_ref().expect("доставленное читается"),
-            &format!("сообщение {original}")
+            result.as_ref().expect("what was delivered is readable"),
+            &format!("message no. {original}")
         );
     }
 
-    // Потерянное в сети остаётся потерянным — и это нормально: восстанавливать
-    // его должен слой доставки, а не храповик.
+    // What was lost in the network stays lost, and that is fine: recovering
+    // it is the job of the delivery layer, not of the ratchet.
     assert_eq!(results.iter().filter(|r| r.is_err()).count(), 0);
 }
 
-// ─── Раздел E. Прямая секретность ────────────────────────────────────────────
+// ─── Section E. Forward secrecy ──────────────────────────────────────────────
 
-/// Ключ использованного сообщения уничтожается.
+/// The key of a used message is destroyed.
 ///
-/// Прямая секретность в операционном виде: состояние, захваченное **сейчас**,
-/// не читает то, что прочитано раньше. Заодно это защита от повтора — то же
-/// сообщение второй раз не пройдёт.
+/// Forward secrecy in operational form: state captured **now**
+/// does not read what was read earlier. It is also protection against replay: the same
+/// message will not pass a second time.
 #[test]
 fn used_message_key_is_gone() {
     let (mut a_chat, mut b_chat) = established_pair();
 
-    let first = a_chat.encrypt("первое").expect("шифруется");
-    assert_eq!(b_chat.decrypt(&first).expect("читается"), "первое");
+    let first = a_chat.encrypt("first").expect("encrypted");
+    assert_eq!(b_chat.decrypt(&first).expect("is read"), "first");
 
     for i in 0..10 {
-        let m = a_chat.encrypt(&format!("ещё {i}")).expect("шифруется");
-        b_chat.decrypt(&m).expect("читается");
+        let m = a_chat.encrypt(&format!("more {i}")).expect("encrypted");
+        b_chat.decrypt(&m).expect("is read");
     }
 
     let again = b_chat.decrypt(&first);
-    let err = again.expect_err("повторное чтение того же сообщения невозможно");
+    let err = again.expect_err("reading the same message again is impossible");
     assert!(
         err.is_lost_forever(),
-        "ошибка должна говорить о безвозвратной потере ключа, а не о поломке: {err}"
+        "the error must speak of irrecoverable key loss, not of breakage: {err}"
     );
 }
 
-// ─── Раздел F. Посредник ─────────────────────────────────────────────────────
+// ─── Section F. The intermediary ─────────────────────────────────────────────
 
-/// Без сверки отпечатков посредник побеждает полностью.
+/// Without fingerprint verification the intermediary wins completely.
 ///
-/// Это не предупреждение в документации, а исполняемый факт: обе стороны видят
-/// исправно работающее шифрование, подписи верны, и обе переписываются
-/// с Мэллори. Единственное, что его выдаёт, — расхождение числа сверки.
+/// This is not a warning in the documentation but an executable fact: both sides see
+/// properly working encryption, the signatures are valid, and both are corresponding
+/// with Mallory. The only thing that gives him away is the mismatch of the safety number.
 #[test]
 fn mitm_succeeds_without_fingerprint_check_and_fails_with_it() {
     let mut alice = Party::new();
     let mut bob = Party::new();
     let mut mallory = Party::new();
 
-    // Мэллори перехватывает обмен пакетами и подсовывает каждой стороне свой.
-    // Настоящие пакеты Алисы и Боба он оставляет себе.
-    let alice_gets = accept_bundle(&mallory.bundle()); // Алиса думает, что это Боб
-    let bob_gets = accept_bundle(&mallory.bundle()); // Боб думает, что это Алиса
+    // Mallory intercepts the bundle exchange and slips each side his own.
+    // He keeps Alice's and Bob's real bundles for himself.
+    let alice_gets = accept_bundle(&mallory.bundle()); // Alice thinks this is Bob
+    let bob_gets = accept_bundle(&mallory.bundle()); // Bob thinks this is Alice
     let alice_real = accept_bundle(&alice.bundle());
     let bob_real = accept_bundle(&bob.bundle());
 
-    // Подписи **верны**: Мэллори подписал свои ключи своей личностью.
-    // Криптография не нарушена ни в одном месте — нарушена модель доверия.
-    let mut alice_chat = Chat::initiate(&alice.account, &alice_gets).expect("сессия создаётся");
-    let first = alice_chat.encrypt("секрет").expect("шифруется");
+    // The signatures **are valid**: Mallory signed his keys with his own identity.
+    // Cryptography is not broken anywhere; the trust model is.
+    let mut alice_chat = Chat::initiate(&alice.account, &alice_gets).expect("session is created");
+    let first = alice_chat.encrypt("secret").expect("encrypted");
 
     let (_, intercepted) =
-        Chat::accept(&mut mallory.account, &alice_real, prekey_of(&first)).expect("Мэллори читает");
-    assert_eq!(intercepted, "секрет", "посредник читает открытый текст");
+        Chat::accept(&mut mallory.account, &alice_real, prekey_of(&first)).expect("Mallory reads");
+    assert_eq!(intercepted, "secret", "the intermediary reads plaintext");
 
-    // И пересылает дальше Бобу — уже своей сессией, настоящим пакетом Боба.
+    // And forwards it on to Bob, now over his own session, with Bob's real bundle.
     let mut mallory_with_bob =
-        Chat::initiate(&mallory.account, &bob_real).expect("сессия создаётся");
-    let forwarded = mallory_with_bob.encrypt(&intercepted).expect("шифруется");
+        Chat::initiate(&mallory.account, &bob_real).expect("session is created");
+    let forwarded = mallory_with_bob.encrypt(&intercepted).expect("encrypted");
 
     let (bob_chat, seen_by_bob) =
-        Chat::accept(&mut bob.account, &bob_gets, prekey_of(&forwarded)).expect("Боб принимает");
+        Chat::accept(&mut bob.account, &bob_gets, prekey_of(&forwarded)).expect("Bob accepts");
     assert_eq!(
-        seen_by_bob, "секрет",
-        "Боб видит текст и ничего не подозревает"
+        seen_by_bob, "secret",
+        "Bob sees the text and suspects nothing"
     );
 
-    // А теперь сверка. Алиса и Боб читают друг другу числа сверки вслух.
+    // And now verification. Alice and Bob read their safety numbers to each other aloud.
     let alice_sees = alice.identity.public().safety_number(alice_chat.peer());
     let bob_sees = bob.identity.public().safety_number(bob_chat.peer());
 
     assert_ne!(
         alice_sees, bob_sees,
-        "числа сверки обязаны разойтись — иначе посредник неотличим"
+        "the safety numbers must differ, otherwise the intermediary is indistinguishable"
     );
 
-    // Для сравнения: честный случай, где числа совпадают.
+    // For comparison: the honest case, where the numbers match.
     let honest_alice = alice
         .identity
         .public()
@@ -308,23 +308,23 @@ fn mitm_succeeds_without_fingerprint_check_and_fails_with_it() {
     assert_eq!(honest_alice, honest_bob);
 }
 
-// ─── Проверки пакета пред-ключей ─────────────────────────────────────────────
+// ─── Prekey bundle checks ────────────────────────────────────────────────────
 
 #[test]
 fn tampered_bundle_is_rejected() {
     let mut bob = Party::new();
     let bytes = bob.bundle();
 
-    // Меняем один бит в ключе устройства — подпись перестаёт сходиться.
+    // Flip one bit in the device key: the signature stops matching.
     for position in [64usize, 80, 100, 130] {
         let mut broken = bytes.clone();
         broken[position] ^= 0b0000_0001;
-        // Часть байтов — сами ключи; такие пакеты могут не разобраться вовсе,
-        // и это тоже отказ.
+        // Some of the bytes are the keys themselves; such bundles may not parse at all,
+        // and that is a rejection too.
         if let Ok(unverified) = PrekeyBundle::parse(&broken) {
             assert!(
                 unverified.verify().is_err(),
-                "подменённый байт {position} обязан ломать проверку"
+                "a substituted byte {position} must break verification"
             );
         }
     }
@@ -346,16 +346,16 @@ fn each_bundle_carries_a_fresh_one_time_key() {
     assert_ne!(
         first.one_time_key().to_bytes(),
         second.one_time_key().to_bytes(),
-        "одноразовый ключ на то и одноразовый"
+        "a one-time key is one-time for a reason"
     );
 }
 
-/// Нулевой публичный ключ обязан отвергаться.
+/// A zero public key must be rejected.
 ///
-/// Замечание февраля 2026 года к vodozemac: принимались полностью нулевые
-/// ключи, дающие предсказуемый нулевой общий секрет. Исправлено в 0.10.0.
-/// Проверяем это **своим** тестом, а не на слово: если однажды зависимость
-/// поедет назад, здесь станет видно.
+/// The February 2026 finding against vodozemac: all-zero keys were accepted,
+/// giving a predictable zero shared secret. Fixed in 0.10.0.
+/// We check this with **our own** test rather than taking it on trust: if the dependency
+/// ever slides back, it will become visible here.
 #[test]
 fn zero_public_key_is_rejected() {
     let mut bob = Party::new();
@@ -371,7 +371,7 @@ fn zero_public_key_is_rejected() {
     );
     assert!(
         matches!(by_one_time, Err(SessionCreationError::NonContributoryKey)),
-        "нулевой одноразовый ключ обязан отвергаться"
+        "a zero one-time key must be rejected"
     );
 
     let by_identity = alice.account.create_outbound_session(
@@ -381,13 +381,13 @@ fn zero_public_key_is_rejected() {
     );
     assert!(
         matches!(by_identity, Err(SessionCreationError::NonContributoryKey)),
-        "нулевой ключ устройства обязан отвергаться"
+        "a zero device key must be rejected"
     );
 }
 
-// ─── Общее ───────────────────────────────────────────────────────────────────
+// ─── Common ──────────────────────────────────────────────────────────────────
 
-/// Пара с уже установленной сессией: Алиса написала, Боб принял.
+/// A pair with an already established session: Alice wrote, Bob accepted.
 fn established_pair() -> (Chat, Chat) {
     let mut alice = Party::new();
     let mut bob = Party::new();
@@ -395,61 +395,61 @@ fn established_pair() -> (Chat, Chat) {
     let bob_bundle = accept_bundle(&bob.bundle());
     let alice_bundle = accept_bundle(&alice.bundle());
 
-    let mut a_chat = Chat::initiate(&alice.account, &bob_bundle).expect("сессия создаётся");
-    let hello = a_chat.encrypt("начало").expect("шифруется");
+    let mut a_chat = Chat::initiate(&alice.account, &bob_bundle).expect("session is created");
+    let hello = a_chat.encrypt("start").expect("encrypted");
     let (b_chat, text) =
-        Chat::accept(&mut bob.account, &alice_bundle, prekey_of(&hello)).expect("сессия принята");
-    assert_eq!(text, "начало");
+        Chat::accept(&mut bob.account, &alice_bundle, prekey_of(&hello)).expect("session accepted");
+    assert_eq!(text, "start");
 
     (a_chat, b_chat)
 }
 
-// ─── Хранение: состояние обязано пережить перезапуск ─────────────────────────
+// ─── Storage: state must survive a restart ───────────────────────────────────
 
-/// Личность переживает выгрузку и загрузку.
+/// The identity survives export and import.
 ///
-/// Без этого перезапуск приложения означал бы новый отпечаток, а значит и
-/// заново прочитанное вслух число сверки у каждого собеседника.
+/// Without this an application restart would mean a new fingerprint, and hence
+/// a safety number read aloud anew with every peer.
 #[test]
 fn identity_survives_export_and_import() {
-    let original = Identity::generate().expect("ОС отдаёт случайность");
+    let original = Identity::generate().expect("the OS provides randomness");
     let exported = original.export_secret();
     let restored =
-        Identity::from_secret_bytes(exported.as_bytes()).expect("свой же секрет читается");
+        Identity::from_secret_bytes(exported.as_bytes()).expect("our own secret is readable");
 
     assert_eq!(
         original.public().to_bytes(),
         restored.public().to_bytes(),
-        "после загрузки получилась другая личность"
+        "after import a different identity came out"
     );
     assert_eq!(
         original.public().fingerprint(),
         restored.public().fingerprint()
     );
 
-    // Ключ тот же, а не «похожий»: подпись восстановленной личности обязана
-    // проверяться исходной.
+    // The key is the same, not "similar": a signature of the restored identity must
+    // verify against the original one.
     let message = b"apeiron";
     let signature = restored.sign(message);
     original
         .public()
         .verify(message, &signature)
-        .expect("подпись не сошлась");
+        .expect("the signature did not match");
 }
 
 #[test]
 fn secret_of_wrong_length_is_rejected() {
-    let identity = Identity::generate().expect("ОС отдаёт случайность");
+    let identity = Identity::generate().expect("the OS provides randomness");
     let exported = identity.export_secret();
     assert!(Identity::from_secret_bytes(&exported.as_bytes()[..63]).is_err());
     assert!(Identity::from_secret_bytes(&[]).is_err());
 }
 
-/// Переписка переживает перезапуск: сообщение, зашифрованное до сохранения,
-/// читается после загрузки.
+/// A conversation survives a restart: a message encrypted before saving
+/// is read after loading.
 ///
-/// Это и есть то, ради чего затевалось хранилище. Если состояние храповика
-/// теряется, собеседники расходятся навсегда, и починить это нечем.
+/// This is exactly what the storage was undertaken for. If the ratchet state
+/// is lost, the peers diverge forever, and there is nothing to fix it with.
 #[test]
 fn chat_survives_pickle_and_unpickle() {
     let mut alice = Party::new();
@@ -458,32 +458,32 @@ fn chat_survives_pickle_and_unpickle() {
     let bob_bundle = accept_bundle(&bob.bundle());
     let alice_bundle = accept_bundle(&alice.bundle());
 
-    let mut a_chat = Chat::initiate(&alice.account, &bob_bundle).expect("сессия создаётся");
-    let first = a_chat.encrypt("до перезапуска").expect("шифруется");
+    let mut a_chat = Chat::initiate(&alice.account, &bob_bundle).expect("session is created");
+    let first = a_chat.encrypt("before restart").expect("encrypted");
 
-    // Обе стороны уезжают на диск и возвращаются оттуда.
-    let saved_chat = a_chat.pickle().expect("состояние сохраняется");
-    let saved_account = pickle_account(&bob.account).expect("аккаунт сохраняется");
+    // Both sides go to disk and come back from there.
+    let saved_chat = a_chat.pickle().expect("the state is saved");
+    let saved_account = pickle_account(&bob.account).expect("the account is saved");
     drop(a_chat);
 
-    let restored_chat = Chat::from_pickle(&saved_chat).expect("состояние читается");
-    let mut restored_account = unpickle_account(&saved_account).expect("аккаунт читается");
+    let restored_chat = Chat::from_pickle(&saved_chat).expect("the state is read");
+    let mut restored_account = unpickle_account(&saved_account).expect("the account is read");
 
     assert_eq!(
         restored_chat.peer().to_bytes(),
         bob.identity.public().to_bytes(),
-        "после загрузки собеседник стал другим"
+        "after loading the peer became someone else"
     );
 
     let (_, text) = Chat::accept(&mut restored_account, &alice_bundle, prekey_of(&first))
-        .expect("сообщение, зашифрованное до сохранения, не прочиталось после загрузки");
-    assert_eq!(text, "до перезапуска");
+        .expect("a message encrypted before saving could not be read after loading");
+    assert_eq!(text, "before restart");
 }
 
-/// Переписка продолжается после сохранения и загрузки обеих сторон.
+/// The conversation continues after both sides are saved and loaded.
 ///
-/// Отдельно от предыдущего теста: там проверялось начало сессии, здесь — что
-/// храповик не сбился, то есть что сохранено именно состояние, а не его часть.
+/// Separate from the previous test: there the start of the session was checked, here that
+/// the ratchet did not get out of step, i.e. that the state itself was saved, not a part of it.
 #[test]
 fn conversation_continues_after_reload() {
     let mut alice = Party::new();
@@ -492,33 +492,33 @@ fn conversation_continues_after_reload() {
     let bob_bundle = accept_bundle(&bob.bundle());
     let alice_bundle = accept_bundle(&alice.bundle());
 
-    let mut a_chat = Chat::initiate(&alice.account, &bob_bundle).expect("сессия создаётся");
-    let first = a_chat.encrypt("раз").expect("шифруется");
+    let mut a_chat = Chat::initiate(&alice.account, &bob_bundle).expect("session is created");
+    let first = a_chat.encrypt("one").expect("encrypted");
     let (mut b_chat, text) =
-        Chat::accept(&mut bob.account, &alice_bundle, prekey_of(&first)).expect("сессия принята");
-    assert_eq!(text, "раз");
+        Chat::accept(&mut bob.account, &alice_bundle, prekey_of(&first)).expect("session accepted");
+    assert_eq!(text, "one");
 
-    let reply = b_chat.encrypt("два").expect("шифруется");
-    assert_eq!(a_chat.decrypt(&reply).expect("читается"), "два");
+    let reply = b_chat.encrypt("two").expect("encrypted");
+    assert_eq!(a_chat.decrypt(&reply).expect("is read"), "two");
 
-    // Оба состояния уезжают на диск.
-    let saved_a = a_chat.pickle().expect("сохраняется");
-    let saved_b = b_chat.pickle().expect("сохраняется");
+    // Both states go to disk.
+    let saved_a = a_chat.pickle().expect("is saved");
+    let saved_b = b_chat.pickle().expect("is saved");
     drop(a_chat);
     drop(b_chat);
 
-    let mut a_chat = Chat::from_pickle(&saved_a).expect("читается");
-    let mut b_chat = Chat::from_pickle(&saved_b).expect("читается");
+    let mut a_chat = Chat::from_pickle(&saved_a).expect("is read");
+    let mut b_chat = Chat::from_pickle(&saved_b).expect("is read");
 
-    let third = a_chat.encrypt("три").expect("шифруется");
+    let third = a_chat.encrypt("three").expect("encrypted");
     assert_eq!(
-        b_chat.decrypt(&third).expect("читается после перезапуска"),
-        "три"
+        b_chat.decrypt(&third).expect("is read after restart"),
+        "three"
     );
-    let fourth = b_chat.encrypt("четыре").expect("шифруется");
+    let fourth = b_chat.encrypt("four").expect("encrypted");
     assert_eq!(
-        a_chat.decrypt(&fourth).expect("читается после перезапуска"),
-        "четыре"
+        a_chat.decrypt(&fourth).expect("is read after restart"),
+        "four"
     );
 }
 
@@ -527,26 +527,26 @@ fn damaged_chat_state_is_not_swallowed() {
     let alice = Party::new();
     let mut bob = Party::new();
     let bob_bundle = accept_bundle(&bob.bundle());
-    let chat = Chat::initiate(&alice.account, &bob_bundle).expect("сессия создаётся");
+    let chat = Chat::initiate(&alice.account, &bob_bundle).expect("session is created");
 
-    let mut saved = chat.pickle().expect("состояние сохраняется");
+    let mut saved = chat.pickle().expect("the state is saved");
     let last = saved.len() - 1;
     saved[last] ^= 0xff;
 
     assert!(
         Chat::from_pickle(&saved).is_err(),
-        "повреждённое состояние прошло как исправное"
+        "a damaged state passed as intact"
     );
     assert!(
         Chat::from_pickle(&saved[..10]).is_err(),
-        "обрезанное состояние прошло как исправное"
+        "a truncated state passed as intact"
     );
 }
 
 #[test]
 fn damaged_account_state_is_not_swallowed() {
     let account = Account::new();
-    let mut saved = pickle_account(&account).expect("аккаунт сохраняется");
+    let mut saved = pickle_account(&account).expect("the account is saved");
     saved[5] ^= 0xff;
     assert!(unpickle_account(&saved).is_err());
     assert!(unpickle_account(&[]).is_err());

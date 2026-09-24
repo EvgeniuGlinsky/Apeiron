@@ -1,11 +1,11 @@
-//! Хранилище целиком, против подставного аппаратного ключа.
+//! The whole storage, against a test hardware key.
 //!
-//! Проверка на устройстве одна, и всё, что можно выяснить здесь, обязано быть
-//! выяснено здесь. На телефон остаётся ровно то, чего на рабочей машине нет:
-//! настоящий Keystore.
+//! There is only one on-device check, and everything that can be found out here must be
+//! found out here. What is left for the phone is exactly what the development machine
+//! lacks: the real Keystore.
 //!
-//! Соглашение проекта сохраняется: на один тест «работает» приходится несколько
-//! «не даёт себя обмануть».
+//! The project convention holds: for every "it works" test there are several
+//! "it cannot be fooled" ones.
 
 #![allow(
     clippy::unwrap_used,
@@ -23,47 +23,47 @@ use apeiron_store::testing::{Behaviour, TestVault};
 use apeiron_store::{wrapper::WRAPPER_FILE, Storage, StorageError, DATABASE_FILE};
 
 fn temp() -> tempfile::TempDir {
-    tempfile::tempdir().expect("каталог создаётся")
+    tempfile::tempdir().expect("the directory is created")
 }
 
 fn open(dir: &Path, vault: &TestVault) -> Storage {
-    Storage::open(dir, vault).expect("хранилище открывается")
+    Storage::open(dir, vault).expect("the storage opens")
 }
 
-/// Готовый проверенный пакет пред-ключей.
+/// A ready, verified prekey bundle.
 fn bundle(identity: &Identity, account: &mut Account) -> PrekeyBundle {
     let bytes = PrekeyBundle::create(identity, account)
-        .expect("пакет собирается")
+        .expect("the bundle is assembled")
         .to_bytes();
     PrekeyBundle::parse(&bytes)
-        .expect("пакет разбирается")
+        .expect("the bundle parses")
         .verify()
-        .expect("подпись верна")
+        .expect("the signature is valid")
 }
 
-// ─── То, ради чего всё затевалось ────────────────────────────────────────────
+// ─── What it was all for ─────────────────────────────────────────────────────
 
 #[test]
 fn identity_survives_reopening() {
     let dir = temp();
     let vault = TestVault::empty();
 
-    let original = Identity::generate().expect("ОС отдаёт случайность");
+    let original = Identity::generate().expect("the OS provides randomness");
     let fingerprint = original.public().fingerprint();
     {
         let store = open(dir.path(), &vault);
-        assert!(store.created_now(), "первый запуск обязан быть первым");
+        assert!(store.created_now(), "the first launch must be the first");
         assert!(store.load_identity().unwrap().is_none());
         store.save_identity(&original).unwrap();
     }
 
     let store = open(dir.path(), &vault);
-    assert!(!store.created_now(), "второй запуск выдал себя за первый");
-    let restored = store.load_identity().unwrap().expect("личность на месте");
+    assert!(!store.created_now(), "the second launch posed as the first");
+    let restored = store.load_identity().unwrap().expect("identity present");
     assert_eq!(
         restored.public().fingerprint(),
         fingerprint,
-        "после перезапуска отпечаток изменился — значит, личность другая"
+        "after the restart the fingerprint changed, so the identity is a different one"
     );
 }
 
@@ -80,16 +80,16 @@ fn device_account_survives_reopening() {
     }
 
     let store = open(dir.path(), &vault);
-    let restored = store.load_account().unwrap().expect("аккаунт на месте");
+    let restored = store.load_account().unwrap().expect("account present");
     assert_eq!(
         restored.identity_keys().curve25519,
         device_key,
-        "после перезапуска сменился ключ устройства — все переписки порваны"
+        "after the restart the device key changed: all conversations are broken"
     );
 }
 
-/// Главное свойство: сообщение, зашифрованное до закрытия базы, читается после
-/// её открытия заново.
+/// The main property: a message encrypted before the database was closed is read after
+/// it is opened again.
 #[test]
 fn a_conversation_survives_reopening() {
     let dir = temp();
@@ -104,11 +104,11 @@ fn a_conversation_survives_reopening() {
     let alice_bundle = bundle(&alice, &mut alice_account);
 
     let mut chat = Chat::initiate(&alice_account, &bob_bundle).unwrap();
-    let first = chat.encrypt("до перезапуска").unwrap();
+    let first = chat.encrypt("before restart").unwrap();
 
     {
         let store = open(dir.path(), &vault);
-        let contact = store.save_contact(&bob.public(), "Боб").unwrap();
+        let contact = store.save_contact(&bob.public(), "Bob").unwrap();
         store
             .save_chat_and_account(contact, &chat, &alice_account)
             .unwrap();
@@ -119,23 +119,23 @@ fn a_conversation_survives_reopening() {
     let contact = store
         .find_contact(&bob.public())
         .unwrap()
-        .expect("контакт на месте");
-    assert_eq!(contact.name, "Боб");
+        .expect("contact present");
+    assert_eq!(contact.name, "Bob");
     let chats = store.load_chats(contact.id).unwrap();
-    assert_eq!(chats.len(), 1, "переписка потерялась");
+    assert_eq!(chats.len(), 1, "the conversation was lost");
     assert_eq!(
         chats[0].peer().to_bytes(),
         bob.public().to_bytes(),
-        "после загрузки собеседник стал другим"
+        "after loading the peer became someone else"
     );
 
-    // Боб читает то, что Алиса зашифровала до перезапуска.
+    // Bob reads what Alice encrypted before the restart.
     let pre_key = match &first {
         OlmMessage::PreKey(m) => m.clone(),
-        OlmMessage::Normal(_) => panic!("первое сообщение обязано быть pre-key"),
+        OlmMessage::Normal(_) => panic!("the first message must be a pre-key one"),
     };
     let (_, text) = Chat::accept(&mut bob_account, &alice_bundle, &pre_key).unwrap();
-    assert_eq!(text, "до перезапуска");
+    assert_eq!(text, "before restart");
 }
 
 #[test]
@@ -152,9 +152,9 @@ fn sigchain_survives_reopening_and_is_reverified() {
     }
 
     let store = open(dir.path(), &vault);
-    let restored = store.load_sigchain().unwrap().expect("журнал на месте");
+    let restored = store.load_sigchain().unwrap().expect("sigchain present");
     assert_eq!(restored.len(), length);
-    restored.verify().expect("журнал проверяется");
+    restored.verify().expect("the sigchain verifies");
 }
 
 #[test]
@@ -163,25 +163,25 @@ fn meta_survives_reopening() {
     let vault = TestVault::empty();
     {
         let store = open(dir.path(), &vault);
-        assert!(store.meta_get("первый запуск").unwrap().is_none());
-        store.meta_set("первый запуск", b"1730000000").unwrap();
+        assert!(store.meta_get("first launch").unwrap().is_none());
+        store.meta_set("first launch", b"1730000000").unwrap();
     }
     let store = open(dir.path(), &vault);
     assert_eq!(
-        store.meta_get("первый запуск").unwrap().as_deref(),
+        store.meta_get("first launch").unwrap().as_deref(),
         Some(&b"1730000000"[..])
     );
 }
 
-// ─── Не даёт себя обмануть ───────────────────────────────────────────────────
+// ─── It cannot be fooled ─────────────────────────────────────────────────────
 
-/// Самое дорогое свойство во всём хранилище.
+/// The most valuable property in the whole storage.
 ///
-/// Обёртка на диске есть, а ключа в защищённом модуле нет. Так выглядит то, что
-/// в поле случается регулярно: обновление прошивки, снятие блокировки экрана,
-/// восстановление данных из бэкапа без ключей. Создать новый ключ здесь значило
-/// бы уничтожить переписку владельца безвозвратно, поэтому вместо «первого
-/// запуска» обязано прийти «ключ исчез».
+/// The wrapper is on disk, but the key is not in the secure module. This is what
+/// regularly happens in the field: a firmware update, removal of the screen lock,
+/// restoring data from a backup without the keys. Creating a new key here would mean
+/// destroying the owner's conversations irrecoverably, so instead of "first
+/// launch" what must come is "key gone".
 #[test]
 fn a_missing_key_with_the_wrapper_present_is_never_a_fresh_start() {
     let dir = temp();
@@ -194,23 +194,23 @@ fn a_missing_key_with_the_wrapper_present_is_never_a_fresh_start() {
 
     vault.forget_key();
 
-    let err = Storage::open(dir.path(), &vault).expect_err("открылось, хотя ключа нет");
+    let err = Storage::open(dir.path(), &vault).expect_err("it opened, though there is no key");
     assert!(
         matches!(err, StorageError::KeyGone),
-        "вместо «ключ исчез» пришло: {err}"
+        "instead of \"key gone\" got: {err}"
     );
     assert!(!err.is_retryable());
     assert!(
         !vault.has_key(),
-        "при отсутствующем ключе был создан новый — переписка уничтожена"
+        "with the key missing a new one was created: the conversations are destroyed"
     );
 }
 
-/// Преходящий отказ не имеет права превратиться в «ключ исчез».
+/// A transient failure has no right to turn into "key gone".
 ///
-/// Между этим тестом и уничтожением переписки владельца нет ничего другого.
-/// `setUnlockedDeviceRequired` отказывает на разблокированном устройстве, если
-/// его разблокировали слабой биометрией, — подтверждённый дефект прошивок.
+/// There is nothing else between this test and destruction of the owner's conversations.
+/// `setUnlockedDeviceRequired` fails on an unlocked device if
+/// it was unlocked with weak biometrics: a confirmed firmware defect.
 #[test]
 fn transient_failure_never_maps_to_gone() {
     let dir = temp();
@@ -222,18 +222,18 @@ fn transient_failure_never_maps_to_gone() {
 
     for behaviour in [Behaviour::Transient, Behaviour::Internal] {
         vault.set_behaviour(behaviour);
-        let err = Storage::open(dir.path(), &vault).expect_err("открылось при отказе");
+        let err = Storage::open(dir.path(), &vault).expect_err("it opened despite a failure");
         assert!(
             !matches!(err, StorageError::KeyGone),
-            "{behaviour:?} выдан за потерю ключа: {err}"
+            "{behaviour:?} passed off as key loss: {err}"
         );
         assert!(
             err.is_retryable(),
-            "{behaviour:?} объявлен невосстановимым: {err}"
+            "{behaviour:?} declared unrecoverable: {err}"
         );
     }
 
-    // И данные после этого целы.
+    // And the data is intact after that.
     vault.set_behaviour(Behaviour::Normal);
     let store = open(dir.path(), &vault);
     assert!(store.load_identity().unwrap().is_some());
@@ -253,10 +253,10 @@ fn a_flipped_byte_in_the_wrapper_is_rejected() {
     raw[last] ^= 0xff;
     std::fs::write(&path, &raw).unwrap();
 
-    let err = Storage::open(dir.path(), &vault).expect_err("подменённая обёртка прошла");
+    let err = Storage::open(dir.path(), &vault).expect_err("a substituted wrapper passed");
     assert!(
         !matches!(err, StorageError::KeyGone),
-        "повреждение файла выдано за потерю ключа: данные-то целы"
+        "file corruption passed off as key loss, while the data is intact"
     );
 }
 
@@ -268,20 +268,20 @@ fn a_tampered_wrapper_header_is_rejected() {
         let _ = open(dir.path(), &vault);
     }
 
-    // Байт уровня защиты лежит открытым — восьмой. Подправив его, противник
-    // поменял бы надпись на экране, не трогая больше ничего. Заголовок повторён
-    // внутри запечатанного, и здесь это ловится.
+    // The protection level byte lies in the clear: the eighth one. By tweaking it an adversary
+    // would change the label on the screen without touching anything else. The header is repeated
+    // inside the sealed part, and here this is caught.
     let path = dir.path().join(WRAPPER_FILE);
     let mut raw = std::fs::read(&path).unwrap();
-    // Было 2 (StrongBox) — ставим 0 (программный): именно такую подмену и
-    // хотел бы сделать противник, чтобы экран соврал в успокоительную сторону.
-    assert_eq!(raw[7], 2, "подстава объявляет StrongBox");
+    // It was 2 (StrongBox); set 0 (software): exactly the substitution an
+    // adversary would want to make, so the screen lies in the reassuring direction.
+    assert_eq!(raw[7], 2, "the fake declares StrongBox");
     raw[7] = 0;
     std::fs::write(&path, &raw).unwrap();
 
     assert!(
         Storage::open(dir.path(), &vault).is_err(),
-        "подправленный уровень защиты прошёл как настоящий"
+        "a tweaked protection level passed as the real one"
     );
 }
 
@@ -293,11 +293,11 @@ fn a_foreign_file_is_not_taken_for_a_wrapper() {
     assert!(Storage::open(dir.path(), &vault).is_err());
 }
 
-/// Список собеседников не должен читаться из файла базы без ключа.
+/// The list of peers must not be readable from the database file without the key.
 ///
-/// Если хранить публичный ключ открытым — ради удобного поиска, — то файл сам
-/// расскажет, с кем человек переписывается. Это ровно то, что база и должна
-/// была закрыть, поэтому поиск идёт по непрозрачной метке.
+/// If the public key were stored in the clear (for convenient lookup), the file itself
+/// would tell whom the person corresponds with. That is exactly what the database was meant
+/// to close off, so lookup goes by an opaque tag.
 #[test]
 fn nothing_secret_is_readable_from_the_database_file() {
     let dir = temp();
@@ -311,8 +311,8 @@ fn nothing_secret_is_readable_from_the_database_file() {
     {
         let store = open(dir.path(), &vault);
         store.save_identity(&me).unwrap();
-        store.save_contact(&peer.public(), "Приметное имя").unwrap();
-        store.meta_set("заметка", "тайна".as_bytes()).unwrap();
+        store.save_contact(&peer.public(), "Notable name").unwrap();
+        store.meta_set("note", "secret".as_bytes()).unwrap();
     }
 
     let mut blob = std::fs::read(dir.path().join(DATABASE_FILE)).unwrap();
@@ -325,27 +325,27 @@ fn nothing_secret_is_readable_from_the_database_file() {
 
     assert!(
         !contains(&blob, secret.as_bytes()),
-        "секрет личности лежит в файле базы открытым"
+        "the identity secret lies in the database file in the clear"
     );
     assert!(
         !contains(&blob, &peer_public),
-        "публичный ключ собеседника лежит в файле базы открытым"
+        "the peer's public key lies in the database file in the clear"
     );
     assert!(
-        !contains(&blob, "Приметное имя".as_bytes()),
-        "имя собеседника лежит в файле базы открытым"
+        !contains(&blob, "Notable name".as_bytes()),
+        "the peer's name lies in the database file in the clear"
     );
     assert!(
-        !contains(&blob, "тайна".as_bytes()),
-        "служебное значение лежит в файле базы открытым"
+        !contains(&blob, "secret".as_bytes()),
+        "an internal value lies in the database file in the clear"
     );
-    // Контроль: сам поиск работает, и «ничего не нашлось» не оттого, что искать
-    // не умеет.
+    // Control: the search itself works, and "nothing found" is not because it cannot
+    // search.
     assert!(contains(&blob, b"SQLite format 3"));
 }
 
-/// После стирания старый шифротекст не читается ничем — даже если копию успели
-/// снять. Это R-005: уничтожается ключ, а не данные.
+/// After erasure the old ciphertext cannot be read by anything, even if a copy was
+/// taken. This is R-005: the key is destroyed, not the data.
 #[test]
 fn wipe_makes_the_old_ciphertext_unreadable() {
     let dir = temp();
@@ -355,23 +355,23 @@ fn wipe_makes_the_old_ciphertext_unreadable() {
         store.save_identity(&Identity::generate().unwrap()).unwrap();
     }
 
-    // Копия снята до стирания — как её снял бы противник.
+    // The copy is taken before erasure, as an adversary would take it.
     let copy = std::fs::read(dir.path().join(DATABASE_FILE)).unwrap();
     let wrapper_copy = std::fs::read(dir.path().join(WRAPPER_FILE)).unwrap();
 
     Storage::wipe(dir.path(), &vault).unwrap();
-    assert!(!vault.has_key(), "ключ пережил стирание");
+    assert!(!vault.has_key(), "the key survived erasure");
     assert!(!dir.path().join(WRAPPER_FILE).exists());
     assert!(!dir.path().join(DATABASE_FILE).exists());
 
-    // Возвращаем копию на место: без ключа она бесполезна.
+    // Put the copy back in place: without the key it is useless.
     std::fs::write(dir.path().join(DATABASE_FILE), &copy).unwrap();
     std::fs::write(dir.path().join(WRAPPER_FILE), &wrapper_copy).unwrap();
-    let err = Storage::open(dir.path(), &vault).expect_err("копия открылась после стирания");
+    let err = Storage::open(dir.path(), &vault).expect_err("the copy opened after erasure");
     assert!(matches!(err, StorageError::KeyGone));
 }
 
-/// После стирания можно начать заново, и это уже другая личность.
+/// After erasure one can start over, and it is a different identity.
 #[test]
 fn a_fresh_start_after_wipe_is_a_different_identity() {
     let dir = temp();
@@ -389,7 +389,7 @@ fn a_fresh_start_after_wipe_is_a_different_identity() {
     assert!(store.created_now());
     assert!(
         store.load_identity().unwrap().is_none(),
-        "после стирания нашлась прежняя личность"
+        "after erasure the previous identity was found"
     );
 }
 
@@ -406,7 +406,7 @@ fn a_database_from_a_newer_schema_is_refused() {
         .unwrap();
     drop(conn);
 
-    let err = Storage::open(dir.path(), &vault).expect_err("база новее прочиталась");
+    let err = Storage::open(dir.path(), &vault).expect_err("a newer database was read");
     assert!(
         matches!(
             err,
@@ -415,7 +415,7 @@ fn a_database_from_a_newer_schema_is_refused() {
                 known: _
             }
         ),
-        "вместо отказа по версии схемы пришло: {err}"
+        "instead of a schema version refusal got: {err}"
     );
 }
 
@@ -428,11 +428,11 @@ fn a_record_moved_to_another_row_is_rejected() {
     let second = Identity::generate().unwrap();
     {
         let store = open(dir.path(), &vault);
-        store.save_contact(&first.public(), "первый").unwrap();
-        store.save_contact(&second.public(), "второй").unwrap();
+        store.save_contact(&first.public(), "first").unwrap();
+        store.save_contact(&second.public(), "second").unwrap();
     }
 
-    // Переставляем запечатанное содержимое двух строк местами, не трогая метки.
+    // Swap the sealed content of two rows without touching the tags.
     let conn = rusqlite::Connection::open(dir.path().join(DATABASE_FILE)).unwrap();
     let a: Vec<u8> = conn
         .query_row("SELECT sealed FROM contacts WHERE id = 1", [], |r| r.get(0))
@@ -455,14 +455,14 @@ fn a_record_moved_to_another_row_is_rejected() {
     let store = open(dir.path(), &vault);
     assert!(
         store.contacts().is_err(),
-        "переставленные записи прочитались как свои"
+        "swapped records were read as their own"
     );
 }
 
 #[test]
 fn the_vault_refuses_oversized_payloads() {
-    // Предел на входе KEK — не придирка: StrongBox медленнее TEE в десятки раз,
-    // и мегабайт через него шифруется порядка пятнадцати секунд.
+    // The limit on the KEK input is not nitpicking: StrongBox is tens of times slower than TEE,
+    // and a megabyte takes on the order of fifteen seconds to encrypt through it.
     let vault = TestVault::empty();
     vault.ensure_key(true).unwrap();
     assert!(vault.wrap(&[0u8; 65]).is_err());
@@ -470,13 +470,13 @@ fn the_vault_refuses_oversized_payloads() {
     assert!(vault.wrap(&[0u8; 34]).is_ok());
 }
 
-// ─── Самопроверка ────────────────────────────────────────────────────────────
+// ─── Self-check ──────────────────────────────────────────────────────────────
 
-/// На первом запуске самопроверка обязана говорить «проверить нечего», а не
-/// рапортовать успехом.
+/// On the first launch the self-check must say "nothing to check", not
+/// report success.
 ///
-/// Зелёная строка там, где ничего не проверялось, — ровно та ложная
-/// уверенность, против которой самопроверка и затевалась.
+/// A green line where nothing was checked is exactly the false
+/// confidence the self-check was undertaken against.
 #[test]
 fn the_self_check_does_not_claim_success_on_the_first_run() {
     let dir = temp();
@@ -485,21 +485,21 @@ fn the_self_check_does_not_claim_success_on_the_first_run() {
     store.save_identity(&Identity::generate().unwrap()).unwrap();
     store.save_account(&Account::new()).unwrap();
 
-    let checks = apeiron_store::selfcheck::run_with_mark(&store, "процесс-А");
+    let checks = apeiron_store::selfcheck::run_with_mark(&store, "process-A");
     let survived = find(&checks, "переписка читается после перезапуска");
     assert!(
         !survived.passed,
-        "на первом запуске объявлено, что состояние пережило перезапуск"
+        "on the first launch the state was declared to have survived a restart"
     );
     assert!(survived.detail.contains("Убейте приложение"));
 }
 
-/// Самое важное свойство самопроверки: она не зеленеет без настоящего
-/// перезапуска.
+/// The most important property of the self-check: it does not turn green without a real
+/// restart.
 ///
-/// Открыть экран проверки второй раз в том же сеансе — не перезапуск. Без этой
-/// защиты всё стало бы зелёным, не доказав ничего, а зелёная отметка там, где
-/// ничего не проверялось, вреднее отсутствия проверки: на неё полагаются.
+/// Opening the check screen a second time in the same session is not a restart. Without this
+/// protection everything would turn green without proving anything, and a green mark where
+/// nothing was checked is more harmful than no check at all: people rely on it.
 #[test]
 fn the_self_check_stays_red_within_the_same_process() {
     let dir = temp();
@@ -508,9 +508,9 @@ fn the_self_check_stays_red_within_the_same_process() {
     store.save_identity(&Identity::generate().unwrap()).unwrap();
     store.save_account(&Account::new()).unwrap();
 
-    let _ = apeiron_store::selfcheck::run_with_mark(&store, "процесс-А");
-    // Тот же процесс, второй прогон: состояние сойдётся, но зачесть нельзя.
-    let checks = apeiron_store::selfcheck::run_with_mark(&store, "процесс-А");
+    let _ = apeiron_store::selfcheck::run_with_mark(&store, "process-A");
+    // The same process, a second run: the state will match, but it cannot be counted.
+    let checks = apeiron_store::selfcheck::run_with_mark(&store, "process-A");
 
     assert!(!find(&checks, "закладку делал другой процесс").passed);
     for name in [
@@ -521,14 +521,14 @@ fn the_self_check_stays_red_within_the_same_process() {
         let check = find(&checks, name);
         assert!(
             !check.passed,
-            "«{name}» зачтено без перезапуска: {}",
+            "\"{name}\" counted without a restart: {}",
             check.detail
         );
         assert!(check.detail.contains("этот же процесс"));
     }
 }
 
-/// А на втором — обязана пройти целиком.
+/// And on the second one it must pass in full.
 #[test]
 fn the_self_check_passes_after_a_real_reopen() {
     let dir = temp();
@@ -537,12 +537,12 @@ fn the_self_check_passes_after_a_real_reopen() {
         let store = open(dir.path(), &vault);
         store.save_identity(&Identity::generate().unwrap()).unwrap();
         store.save_account(&Account::new()).unwrap();
-        let _ = apeiron_store::selfcheck::run_with_mark(&store, "процесс-А");
+        let _ = apeiron_store::selfcheck::run_with_mark(&store, "process-A");
     }
 
-    // Другая метка = другой процесс, то есть настоящий перезапуск.
+    // A different mark = a different process, i.e. a real restart.
     let store = open(dir.path(), &vault);
-    let checks = apeiron_store::selfcheck::run_with_mark(&store, "процесс-Б");
+    let checks = apeiron_store::selfcheck::run_with_mark(&store, "process-B");
     let failed: Vec<_> = checks
         .iter()
         .filter(|c| !c.passed)
@@ -550,16 +550,16 @@ fn the_self_check_passes_after_a_real_reopen() {
         .collect();
     assert!(
         failed.is_empty(),
-        "после настоящего перезапуска не прошло: {failed:#?}"
+        "after a real restart these did not pass: {failed:#?}"
     );
     assert_eq!(
         find(&checks, "прогонов проверки").detail,
         "2",
-        "прогоны не считаются"
+        "runs are not counted"
     );
 }
 
-/// Самопроверка не имеет права трогать боевые данные.
+/// The self-check has no right to touch production data.
 #[test]
 fn the_self_check_touches_nothing_it_checks() {
     let dir = temp();
@@ -570,10 +570,10 @@ fn the_self_check_touches_nothing_it_checks() {
     let store = open(dir.path(), &vault);
     store.save_identity(&me).unwrap();
     store.save_account(&Account::new()).unwrap();
-    let contact = store.save_contact(&peer.public(), "Собеседник").unwrap();
+    let contact = store.save_contact(&peer.public(), "Peer").unwrap();
 
-    let _ = apeiron_store::selfcheck::run_with_mark(&store, "процесс-А");
-    let _ = apeiron_store::selfcheck::run_with_mark(&store, "процесс-Б");
+    let _ = apeiron_store::selfcheck::run_with_mark(&store, "process-A");
+    let _ = apeiron_store::selfcheck::run_with_mark(&store, "process-B");
 
     assert_eq!(
         store
@@ -586,8 +586,8 @@ fn the_self_check_touches_nothing_it_checks() {
     );
     let found = store.find_contact(&peer.public()).unwrap().unwrap();
     assert_eq!(found.id, contact);
-    assert_eq!(found.name, "Собеседник");
-    assert!(vault.has_key(), "самопроверка уничтожила ключ");
+    assert_eq!(found.name, "Peer");
+    assert!(vault.has_key(), "the self-check destroyed the key");
 }
 
 fn find<'a>(
@@ -597,7 +597,7 @@ fn find<'a>(
     checks
         .iter()
         .find(|c| c.name == name)
-        .unwrap_or_else(|| panic!("в отчёте нет строки «{name}»"))
+        .unwrap_or_else(|| panic!("the report has no line \"{name}\""))
 }
 
 fn contains(haystack: &[u8], needle: &[u8]) -> bool {

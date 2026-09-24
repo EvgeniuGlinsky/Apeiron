@@ -1,31 +1,31 @@
-//! Симметричное шифрование и вывод ключей для локального хранения.
+//! Symmetric encryption and key derivation for local storage.
 //!
-//! Здесь нет ни одного самодельного примитива — только сборка готовых
-//! (§18 исследования, «не писать свой примитив шифрования или режим»).
+//! There is not a single home-grown primitive here, only an assembly of ready-made
+//! ones (§18 of the research, "do not write your own encryption primitive or mode").
 //!
-//! # Что выбрано и почему
+//! # What was chosen and why
 //!
-//! **XChaCha20-Poly1305, а не ChaCha20-Poly1305.** Разница в длине одноразового
-//! числа: 192 бита против 96. При 96 битах случайные одноразовые числа
-//! становятся опасны — вероятность совпадения по парадоксу дней рождения
-//! перестаёт быть пренебрежимой уже на миллиардах записей, поэтому их принято
-//! считать счётчиком. Счётчик же требует надёжно сохранять состояние между
-//! запусками, а телефон выключают в произвольный момент. При 192 битах
-//! случайное число безопасно без всякого состояния: это и есть причина выбора.
-//! Сама конструкция стандартная и опирается на ту же ChaCha20-Poly1305,
-//! правильность которой проверяется официальными векторами RFC 8439
+//! **XChaCha20-Poly1305, not ChaCha20-Poly1305.** The difference is the length of the
+//! nonce: 192 bits versus 96. With 96 bits random nonces
+//! become dangerous: the probability of a collision by the birthday paradox
+//! stops being negligible already at billions of records, so they are conventionally
+//! treated as a counter. A counter, in turn, requires reliably persisting state between
+//! launches, and a phone gets switched off at an arbitrary moment. With 192 bits
+//! a random nonce is safe without any state: that is the reason for the choice.
+//! The construction itself is standard and rests on the same ChaCha20-Poly1305,
+//! whose correctness is checked by the official RFC 8439 vectors
 //! (`core/tests/rfc_vectors.rs`).
 //!
-//! **HKDF-SHA256 для вывода подключей.** Каждое назначение получает свой ключ
-//! из одного мастер-ключа, и метка назначения обязательна: без неё один и тот же
-//! ключ окажется у разных подсистем, и ошибка в одной станет ошибкой во всех.
+//! **HKDF-SHA256 for deriving subkeys.** Each purpose gets its own key from one master
+//! key, and the purpose label is mandatory: without it the same key would end up in
+//! different subsystems, and a bug in one would become a bug in all of them.
 //!
-//! # Чего здесь ещё нет
+//! # What is not here yet
 //!
-//! Мастер-ключ пока **создаётся в памяти и нигде не хранится**. По решению
-//! R-002 он обязан жить в аппаратном хранилище (StrongBox/TEE), а это требует
-//! JNI и проверки на устройстве. До тех пор ядро ничего секретного на диск не
-//! пишет: отсутствие схемы лучше слабой схемы, выдаваемой за сильную.
+//! For now the master key is **created in memory and stored nowhere**. Per decision
+//! R-002 it must live in hardware storage (StrongBox/TEE), and that requires JNI and
+//! an on-device check. Until then the core writes nothing secret to disk: no scheme
+//! is better than a weak scheme passed off as a strong one.
 
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{XChaCha20Poly1305, XNonce};
@@ -35,56 +35,56 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::random::{random_bytes, RandomError};
 
-/// Длина ключа.
+/// Key length.
 pub const KEY_BYTES: usize = 32;
-/// Длина одноразового числа XChaCha20.
+/// XChaCha20 nonce length.
 pub const NONCE_BYTES: usize = 24;
-/// Длина метки аутентичности Poly1305.
+/// Poly1305 authentication tag length.
 pub const TAG_BYTES: usize = 16;
-/// Длина непрозрачной метки поиска.
+/// Opaque lookup tag length.
 pub const LOOKUP_TAG_BYTES: usize = 16;
 
-/// Разделитель области вывода ключей.
+/// Domain separator for key derivation.
 const KDF_DOMAIN: &[u8] = b"apeiron/kdf/v1";
 
-/// Разделитель области меток поиска.
+/// Domain separator for lookup tags.
 const LOOKUP_DOMAIN: &[u8] = b"apeiron/lookup/v1";
 
-/// Метки назначения для [`SecretKey::derive`].
+/// Purpose labels for [`SecretKey::derive`].
 ///
-/// Реестр, а не строки по месту вызова. Причина простая и неприятная: опечатка
-/// в метке даёт **другой ключ**, всё продолжает работать, и обнаруживается это
-/// ровно тогда, когда данные уже записаны чужим ключом. Компилятор ловит
-/// опечатку в имени константы; в строковом литерале он не ловит ничего.
+/// A registry, not strings at the call site. The reason is simple and unpleasant: a
+/// typo in a label gives **a different key**, everything keeps working, and this is
+/// discovered exactly when the data has already been written under the wrong key. The
+/// compiler catches a typo in a constant name; in a string literal it catches nothing.
 ///
-/// Имена следуют соглашению проекта `apeiron/<область>/v1`. Версия в конце —
-/// не украшение: меняя метку, вы делаете нечитаемым всё, что было записано
-/// прежней.
+/// Names follow the project convention `apeiron/<area>/v1`. The version at the end is
+/// not decoration: by changing a label you make everything written under the previous
+/// one unreadable.
 pub mod purpose {
-    /// Секрет личности.
+    /// The identity secret.
     pub const IDENTITY: &str = "apeiron/storage/identity/v1";
-    /// Состояние аккаунта Olm — ключи этого устройства.
+    /// Olm account state: this device's keys.
     pub const ACCOUNT: &str = "apeiron/storage/account/v1";
-    /// Состояние храповика по каждой переписке.
+    /// Ratchet state for each conversation.
     pub const SESSION: &str = "apeiron/storage/session/v1";
-    /// Журнал личности.
+    /// The sigchain (identity log).
     pub const SIGCHAIN: &str = "apeiron/storage/sigchain/v1";
-    /// Записи о контактах.
+    /// Contact records.
     pub const CONTACT: &str = "apeiron/storage/contact/v1";
-    /// Служебные записи хранилища.
+    /// Internal storage records.
     pub const META: &str = "apeiron/storage/meta/v1";
-    /// Метки поиска.
+    /// Lookup tags.
     ///
-    /// Отдельная ветвь, не связанная с ключами расшифровки: знание метки не
-    /// приближает к содержимому. Тот же приём, что `K_addr` в исследовании
-    /// (§16.2), применённый к локальной базе.
+    /// A separate branch, unrelated to the decryption keys: knowing a tag brings one no
+    /// closer to the content. The same technique as `K_addr` in the research
+    /// (§16.2), applied to the local database.
     pub const TAG: &str = "apeiron/storage/tag/v1";
 
-    /// Все метки разом — для проверки, что среди них нет повторов.
+    /// All labels at once, to check that there are no duplicates among them.
     pub const ALL: &[&str] = &[IDENTITY, ACCOUNT, SESSION, SIGCHAIN, CONTACT, META, TAG];
 }
 
-/// Что может пойти не так.
+/// What can go wrong.
 #[derive(Debug, thiserror::Error)]
 pub enum AeadError {
     #[error("не удалось запечатать: {0}")]
@@ -103,57 +103,57 @@ pub enum AeadError {
     Random(#[from] RandomError),
 }
 
-/// Ключ, который затирает себя при уничтожении.
+/// A key that wipes itself when destroyed.
 ///
-/// Обёртка нужна не для красоты: голый `[u8; 32]` остаётся в памяти после
-/// выхода из области видимости, и найти его в дампе процесса — дело техники.
+/// The wrapper is not for looks: a bare `[u8; 32]` stays in memory after it goes out
+/// of scope, and finding it in a process dump is a matter of technique.
 #[derive(Clone, Zeroize, ZeroizeOnDrop)]
 pub struct SecretKey([u8; KEY_BYTES]);
 
 impl SecretKey {
-    /// Новый случайный ключ.
+    /// A new random key.
     pub fn generate() -> Result<Self, RandomError> {
         Ok(Self(random_bytes::<KEY_BYTES>()?))
     }
 
-    /// Ключ из готовых байтов — например, полученных из аппаратного хранилища.
+    /// A key from ready-made bytes, for example obtained from hardware storage.
     pub fn from_bytes(bytes: [u8; KEY_BYTES]) -> Self {
         Self(bytes)
     }
 
-    /// Подключ для конкретного назначения.
+    /// A subkey for a specific purpose.
     ///
-    /// Метка назначения ([`purpose`](Self::derive)) обязательна и должна быть
-    /// уникальной: два назначения с одной меткой получат один ключ, и это
-    /// ровно тот случай, когда ошибка не проявляется до самого взлома.
+    /// The purpose label ([`purpose`](Self::derive)) is mandatory and must be
+    /// unique: two purposes with one label get one key, and this is exactly the
+    /// case where the bug does not show itself until the break-in.
     pub fn derive(&self, purpose: &str) -> Self {
         let hk = Hkdf::<Sha256>::new(Some(KDF_DOMAIN), &self.0);
         let mut out = [0u8; KEY_BYTES];
-        // Ошибка здесь возможна только при запросе длины больше 255×32 байт;
-        // у нас длина фиксирована, поэтому ветка недостижима — но паниковать
-        // всё равно нельзя, и вместо этого возвращается пустой ключ, который
-        // тут же сломает любую проверку подлинности. Молчаливой слабости нет.
+        // An error here is possible only when requesting a length above 255×32 bytes;
+        // our length is fixed, so the branch is unreachable. But panicking is still
+        // not allowed, and instead an empty key is returned, which will immediately
+        // break any authenticity check. There is no silent weakness.
         if hk.expand(purpose.as_bytes(), &mut out).is_err() {
             out.zeroize();
         }
         Self(out)
     }
 
-    /// Непрозрачная метка для поиска по значению, которое нельзя хранить
-    /// открытым.
+    /// An opaque tag for looking up by a value that must not be stored in the
+    /// clear.
     ///
-    /// Нужна затем, что искать надо, а раскрывать нельзя. Если хранить
-    /// публичный ключ собеседника как есть, список собеседников читается из
-    /// файла базы без всякого ключа — то есть ровно то, что базу и должно было
-    /// защитить. Метка же детерминирована (годится в уникальный индекс) и без
-    /// мастер-ключа не говорит ни о чём.
+    /// Needed because lookups must happen but disclosure must not. If the peer's
+    /// public key were stored as is, the list of peers could be read from the
+    /// database file without any key, which is exactly what the database was meant
+    /// to protect. The tag, by contrast, is deterministic (fit for a unique index) and
+    /// says nothing without the master key.
     ///
-    /// Это тот же приём, что отдельная ветвь `K_addr` в исследовании (§16.2):
-    /// знание адреса не приближает к содержимому. Ключ для меток выводится
-    /// отдельной меткой назначения и с ключами расшифровки не связан.
+    /// This is the same technique as the separate `K_addr` branch in the research (§16.2):
+    /// knowing an address brings one no closer to the content. The key for tags is derived
+    /// under a separate purpose label and is unrelated to the decryption keys.
     ///
-    /// Шестнадцати байтов достаточно: метка не секрет и не подпись, её работа —
-    /// различать значения, а не сопротивляться подбору.
+    /// Sixteen bytes are enough: the tag is neither a secret nor a signature; its job
+    /// is to distinguish values, not to resist guessing.
     pub fn tag(&self, value: &[u8]) -> [u8; LOOKUP_TAG_BYTES] {
         let hk = Hkdf::<Sha256>::new(Some(KDF_DOMAIN), &self.0);
         let mut info = Vec::with_capacity(LOOKUP_DOMAIN.len() + value.len());
@@ -161,8 +161,8 @@ impl SecretKey {
         info.extend_from_slice(value);
 
         let mut out = [0u8; LOOKUP_TAG_BYTES];
-        // Как и в derive: ветка недостижима при такой длине, но паниковать
-        // нельзя, а нулевая метка сломает уникальный индекс сразу и громко.
+        // As in derive: the branch is unreachable at this length, but panicking is
+        // not allowed, and a zero tag will break the unique index at once and loudly.
         if hk.expand(&info, &mut out).is_err() {
             out.zeroize();
         }
@@ -175,21 +175,21 @@ impl SecretKey {
 }
 
 impl std::fmt::Debug for SecretKey {
-    /// Печатать ключ нельзя: строки логов переживают процесс.
+    /// The key must not be printed: log lines outlive the process.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("SecretKey(<скрыт>)")
+        f.write_str("SecretKey(<hidden>)")
     }
 }
 
-/// Запечатывает данные.
+/// Seals data.
 ///
-/// Формат: `одноразовое число (24) || шифртекст || метка (16)`. Одноразовое
-/// число хранится рядом открыто — это нормально и необходимо: секретным оно
-/// быть не обязано, обязано быть неповторяющимся.
+/// Format: `nonce (24) || ciphertext || tag (16)`. The nonce is stored alongside in
+/// the clear; this is normal and necessary: it does not have to be secret, it has to
+/// be non-repeating.
 ///
-/// `aad` — то, что не шифруется, но защищается от подмены: например,
-/// идентификатор записи. Подменив его, противник получит отказ проверки,
-/// а не другое содержимое.
+/// `aad` is what is not encrypted but is protected against substitution: for example,
+/// a record identifier. By substituting it, an adversary gets a failed check, not
+/// different content.
 pub fn seal(key: &SecretKey, aad: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, AeadError> {
     let nonce_bytes = random_bytes::<NONCE_BYTES>()?;
     let nonce = XNonce::from(nonce_bytes);
@@ -211,11 +211,11 @@ pub fn seal(key: &SecretKey, aad: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, Ae
     Ok(out)
 }
 
-/// Распечатывает данные, проверяя подлинность.
+/// Opens data, checking authenticity.
 ///
-/// Отказ означает ровно одно: запись не та, которую запечатывали этим ключом.
-/// Отличить повреждение от подмены невозможно и не нужно — обращаться с ними
-/// следует одинаково.
+/// A failure means exactly one thing: the record is not the one that was sealed with
+/// this key. Telling corruption from substitution is impossible and unnecessary: they
+/// must be handled the same way.
 pub fn open(key: &SecretKey, aad: &[u8], sealed: &[u8]) -> Result<Vec<u8>, AeadError> {
     let minimum = NONCE_BYTES + TAG_BYTES;
     if sealed.len() < minimum {
@@ -250,25 +250,25 @@ mod tests {
     #[test]
     fn roundtrip() {
         let key = SecretKey::generate().unwrap();
-        let sealed = seal(&key, "запись 7".as_bytes(), "привет".as_bytes()).unwrap();
-        let opened = open(&key, "запись 7".as_bytes(), &sealed).unwrap();
-        assert_eq!(opened, "привет".as_bytes());
+        let sealed = seal(&key, "record 7".as_bytes(), "hello".as_bytes()).unwrap();
+        let opened = open(&key, "record 7".as_bytes(), &sealed).unwrap();
+        assert_eq!(opened, "hello".as_bytes());
     }
 
     #[test]
     fn same_plaintext_seals_differently() {
-        // Одинаковый открытый текст обязан давать разный шифртекст: иначе по
-        // хранилищу видно, какие записи совпадают.
+        // Identical plaintext must give different ciphertext: otherwise the storage
+        // shows which records match.
         let key = SecretKey::generate().unwrap();
-        let a = seal(&key, b"", "одно и то же".as_bytes()).unwrap();
-        let b = seal(&key, b"", "одно и то же".as_bytes()).unwrap();
+        let a = seal(&key, b"", "one and the same".as_bytes()).unwrap();
+        let b = seal(&key, b"", "one and the same".as_bytes()).unwrap();
         assert_ne!(a, b);
     }
 
     #[test]
     fn tampered_ciphertext_is_rejected() {
         let key = SecretKey::generate().unwrap();
-        let mut sealed = seal(&key, b"", "текст".as_bytes()).unwrap();
+        let mut sealed = seal(&key, b"", "text".as_bytes()).unwrap();
         let last = sealed.len() - 1;
         sealed[last] ^= 1;
         assert!(matches!(open(&key, b"", &sealed), Err(AeadError::Open)));
@@ -277,18 +277,18 @@ mod tests {
     #[test]
     fn tampered_nonce_is_rejected() {
         let key = SecretKey::generate().unwrap();
-        let mut sealed = seal(&key, b"", "текст".as_bytes()).unwrap();
+        let mut sealed = seal(&key, b"", "text".as_bytes()).unwrap();
         sealed[0] ^= 1;
         assert!(matches!(open(&key, b"", &sealed), Err(AeadError::Open)));
     }
 
     #[test]
     fn substituted_aad_is_rejected() {
-        // Запись, переставленная на чужое место, читаться не должна.
+        // A record moved to someone else's place must not be readable.
         let key = SecretKey::generate().unwrap();
-        let sealed = seal(&key, "запись 7".as_bytes(), "текст".as_bytes()).unwrap();
+        let sealed = seal(&key, "record 7".as_bytes(), "text".as_bytes()).unwrap();
         assert!(matches!(
-            open(&key, "запись 8".as_bytes(), &sealed),
+            open(&key, "record 8".as_bytes(), &sealed),
             Err(AeadError::Open)
         ));
     }
@@ -297,14 +297,14 @@ mod tests {
     fn another_key_is_rejected() {
         let key = SecretKey::generate().unwrap();
         let other = SecretKey::generate().unwrap();
-        let sealed = seal(&key, b"", "текст".as_bytes()).unwrap();
+        let sealed = seal(&key, b"", "text".as_bytes()).unwrap();
         assert!(matches!(open(&other, b"", &sealed), Err(AeadError::Open)));
     }
 
     #[test]
     fn truncated_record_is_rejected() {
         let key = SecretKey::generate().unwrap();
-        let sealed = seal(&key, b"", "текст".as_bytes()).unwrap();
+        let sealed = seal(&key, b"", "text".as_bytes()).unwrap();
         assert!(matches!(
             open(&key, b"", &sealed[..NONCE_BYTES]),
             Err(AeadError::TooShort(_, _))
@@ -314,64 +314,64 @@ mod tests {
     #[test]
     fn purposes_give_different_keys() {
         let master = SecretKey::generate().unwrap();
-        let a = master.derive("хранилище сообщений");
-        let b = master.derive("хранилище контактов");
-        let sealed = seal(&a, b"", "текст".as_bytes()).unwrap();
+        let a = master.derive("message storage");
+        let b = master.derive("contact storage");
+        let sealed = seal(&a, b"", "text".as_bytes()).unwrap();
         assert!(
             open(&b, b"", &sealed).is_err(),
-            "метки назначения обязаны разделять ключи"
+            "purpose labels must separate keys"
         );
-        assert_eq!(open(&a, b"", &sealed).unwrap(), "текст".as_bytes());
+        assert_eq!(open(&a, b"", &sealed).unwrap(), "text".as_bytes());
     }
 
     #[test]
     fn derivation_is_deterministic() {
         let master = SecretKey::from_bytes([7u8; KEY_BYTES]);
-        let a = master.derive("одно");
-        let b = master.derive("одно");
-        let sealed = seal(&a, b"", "текст".as_bytes()).unwrap();
-        assert_eq!(open(&b, b"", &sealed).unwrap(), "текст".as_bytes());
+        let a = master.derive("one");
+        let b = master.derive("one");
+        let sealed = seal(&a, b"", "text".as_bytes()).unwrap();
+        assert_eq!(open(&b, b"", &sealed).unwrap(), "text".as_bytes());
     }
 
     #[test]
     fn lookup_tags_differ_by_value_and_by_key() {
-        let a = SecretKey::generate().expect("ОС отдаёт случайность");
-        let b = SecretKey::generate().expect("ОС отдаёт случайность");
+        let a = SecretKey::generate().expect("the OS provides randomness");
+        let b = SecretKey::generate().expect("the OS provides randomness");
 
         assert_eq!(
-            a.tag("один".as_bytes()),
-            a.tag("один".as_bytes()),
-            "метка обязана быть устойчивой"
+            a.tag("one".as_bytes()),
+            a.tag("one".as_bytes()),
+            "the tag must be stable"
         );
-        assert_ne!(a.tag("один".as_bytes()), a.tag("два".as_bytes()));
+        assert_ne!(a.tag("one".as_bytes()), a.tag("two".as_bytes()));
         assert_ne!(
-            a.tag("один".as_bytes()),
-            b.tag("один".as_bytes()),
-            "с другим ключом метка обязана быть другой"
+            a.tag("one".as_bytes()),
+            b.tag("one".as_bytes()),
+            "with a different key the tag must be different"
         );
-        assert_ne!(a.tag("один".as_bytes()), [0u8; LOOKUP_TAG_BYTES]);
+        assert_ne!(a.tag("one".as_bytes()), [0u8; LOOKUP_TAG_BYTES]);
     }
 
     #[test]
     fn purpose_labels_are_unique() {
-        // Две подсистемы с одной меткой получат один ключ, и это ровно тот
-        // случай, когда ошибка не проявляется до самого взлома.
+        // Two subsystems with one label get one key, and this is exactly the
+        // case where the bug does not show itself until the break-in.
         let mut seen = std::collections::BTreeSet::new();
         for label in purpose::ALL {
-            assert!(seen.insert(*label), "метка назначения повторяется: {label}");
+            assert!(seen.insert(*label), "purpose label is repeated: {label}");
         }
         assert_eq!(seen.len(), purpose::ALL.len());
     }
 
     #[test]
     fn every_purpose_gives_its_own_key() {
-        let master = SecretKey::generate().expect("ОС отдаёт случайность");
+        let master = SecretKey::generate().expect("the OS provides randomness");
         let mut keys = std::collections::BTreeSet::new();
         for label in purpose::ALL {
             let derived = master.derive(label);
             assert!(
                 keys.insert(derived.0),
-                "две метки назначения дали один ключ: {label}"
+                "two purpose labels gave one key: {label}"
             );
         }
     }
@@ -382,7 +382,7 @@ mod tests {
         let shown = format!("{key:?}");
         assert!(
             !shown.contains("ab"),
-            "ключ не должен попадать в строку: {shown}"
+            "the key must not end up in the string: {shown}"
         );
         assert!(!shown.contains("171"));
     }

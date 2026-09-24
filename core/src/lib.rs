@@ -1,18 +1,18 @@
-//! Ядро мессенджера.
+//! The messenger core.
 //!
-//! Здесь живёт всё, что должно быть верным: криптография, состояние протокола,
-//! хранилище. FFI в этом слое нет намеренно — мост к Flutter лежит отдельным
-//! тонким крейтом, чтобы ядро можно было тестировать и подвергать аудиту
-//! независимо от интерфейса.
+//! Everything that has to be correct lives here: cryptography, protocol state,
+//! storage. There is deliberately no FFI in this layer: the bridge to Flutter is a
+//! separate thin crate, so the core can be tested and audited independently of the
+//! interface.
 //!
-//! # Правила, действующие во всём крейте
+//! # Rules that apply across the crate
 //!
-//! * Открытый текст и ключевой материал не покидают Rust (решение R-004,
-//!   `docs/threat-log.md`). В Dart уходит только то, что прямо сейчас на экране.
-//! * Собственных криптографических примитивов здесь нет и не будет. Всё берётся
-//!   готовым из проверенных реализаций (§18 исследования).
-//! * Паника запрещена линтами: в криптографическом коде она превращается в отказ
-//!   в обслуживании, а иногда и в утечку через сообщение об ошибке.
+//! * Plaintext and key material do not leave Rust (decision R-004,
+//!   `docs/threat-log.md`). Dart only receives what is on screen right now.
+//! * There are no home-grown cryptographic primitives here and there never will be.
+//!   Everything is taken ready-made from vetted implementations (§18 of the research).
+//! * Panics are forbidden by lints: in cryptographic code a panic turns into a denial
+//!   of service, and sometimes into a leak through the error message.
 
 pub mod aead;
 pub mod identity;
@@ -28,12 +28,12 @@ pub use session::{pickle_account, unpickle_account, Chat, ChatError};
 pub use sigchain::{ChainSigner, ChainState, EntryBody, Sigchain, SigchainError};
 
 pub use random::{random_bytes, RandomError};
-/// Реэкспорт `vodozemac`.
+/// Re-export of `vodozemac`.
 ///
-/// Наш публичный API отдаёт наружу его типы (ключи, сообщения), поэтому
-/// пользователь ядра обязан работать ровно с той же версией крейта. Реэкспорт
-/// это гарантирует: взять другую просто неоткуда.
+/// Our public API exposes its types (keys, messages), so a user of the core must
+/// work with exactly the same version of the crate. The re-export guarantees it:
+/// there is simply nowhere else to get a different one.
 pub use vodozemac;
 
-/// Версия формата, которую понимает это ядро.
+/// The format version this core understands.
 pub const PROTOCOL_VERSION: u8 = 1;

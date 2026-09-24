@@ -1,19 +1,19 @@
-//! Обёртка ключа базы: файл `vault.bin` и всё, что с ним связано.
+//! The database key wrapper: the `vault.bin` file and everything connected with it.
 //!
-//! # Зачем два уровня ключей
+//! # Why two levels of keys
 //!
-//! Аппаратный ключ (KEK) не шифрует базу. Он оборачивает тридцать два байта —
-//! ключ базы (DEK), — а уже из них выводятся подключи по назначениям.
+//! The hardware key (KEK) does not encrypt the database. It wraps thirty-two bytes,
+//! the database key (DEK), and the subkeys per purpose are derived from those.
 //!
-//! Причина в том, что **параметры ключа Keystore после создания не меняются**.
-//! Когда появится пин (R-001), `apeiron.kek.v1` придётся выбросить и завести
-//! `v2`. С двумя уровнями это переоборачивание тридцати двух байт; с одним —
-//! перешифрование всей переписки, то есть на практике «этого не сделают
-//! никогда».
+//! The reason is that **the parameters of a Keystore key cannot change after creation**.
+//! When a PIN appears (R-001), `apeiron.kek.v1` will have to be thrown away and a `v2`
+//! created. With two levels that is re-wrapping thirty-two bytes; with one it is
+//! re-encrypting all the conversations, which in practice means "this will never
+//! be done".
 //!
-//! Тот же приём даёт криптографическое стирание (R-005) даром: уничтожить
-//! алиас и этот файл — и база превращается в шум, даже если её успели
-//! скопировать.
+//! The same technique gives cryptographic erasure (R-005) for free: destroy the
+//! alias and this file, and the database turns into noise, even if someone managed to
+//! copy it.
 
 use std::fs;
 use std::io::Write;
@@ -26,67 +26,67 @@ use zeroize::Zeroizing;
 
 use crate::StorageError;
 
-/// Имя файла обёртки.
+/// The wrapper file name.
 pub const WRAPPER_FILE: &str = "vault.bin";
 
-/// Опознавательное слово. Шесть байт, чтобы случайный файл не прошёл.
+/// The magic word. Six bytes, so that a random file does not pass.
 ///
-/// Раскладка файла целиком:
-/// `"APVLT1" (6) ‖ kdf_id (1) ‖ уровень при создании (1) ‖ запечатанное`.
+/// Layout of the whole file:
+/// `"APVLT1" (6) ‖ kdf_id (1) ‖ level at creation (1) ‖ sealed`.
 ///
-/// Запечатанное — непрозрачные байты от аппаратного хранилища, внутри них
-/// `kdf_id ‖ уровень ‖ ключ базы`. Заголовок повторён внутри намеренно: так
-/// подмена открытой части файла ломает распечатывание, а не проходит молча. И
-/// при этом не нужны дополнительные аутентифицируемые данные на стороне
-/// Keystore — поддержку AAD у конкретной реализации StrongBox на рабочей
-/// машине не проверить, а цикл с телефоном тратить на это незачем.
+/// The sealed part is opaque bytes from the hardware storage; inside them is
+/// `kdf_id ‖ level ‖ database key`. The header is repeated inside deliberately: this way
+/// substituting the public part of the file breaks opening instead of passing silently. And
+/// no additional authenticated data is needed on the Keystore side
+/// for this: AAD support in a particular StrongBox implementation cannot be checked on the
+/// development machine, and there is no point spending a phone cycle on it.
 const MAGIC: &[u8; 6] = b"APVLT1";
 
-/// Как из выхода KEK получается ключ базы.
+/// How the database key is obtained from the KEK output.
 ///
-/// `1` — ключ базы есть выход KEK как он есть. `2` появится вместе с пином:
-/// тогда к нему подмешается вывод из пина, и перебор шести цифр потребует
-/// присутствия этого телефона на каждой попытке. Слот заведён сейчас, потому
-/// что добавить поле в уже записанный формат дороже, чем оставить его пустым.
+/// `1`: the database key is the KEK output as is. `2` will appear together with the PIN:
+/// then a derivation from the PIN will be mixed in, and brute-forcing six digits will require
+/// the presence of this phone for every attempt. The slot is created now because
+/// adding a field to an already written format costs more than leaving it empty.
 const KDF_PLAIN: u8 = 1;
 
-/// Длина ключа базы.
+/// Database key length.
 const DEK_BYTES: usize = 32;
 
-/// Запечатанный текст обёртки: `kdf_id ‖ level ‖ DEK`.
+/// The sealed text of the wrapper: `kdf_id ‖ level ‖ DEK`.
 const SEALED_PLAIN_BYTES: usize = 2 + DEK_BYTES;
 
-/// Мьютекс на всю последовательность «проверить / создать / развернуть».
+/// A mutex over the whole "check / create / unwrap" sequence.
 ///
-/// Нужен против одного вполне достижимого исхода: Dart ходит через пул потоков,
-/// два параллельных вызова не находят алиас, оба зовут создание ключа, и второй
-/// молча заменяет первый. Ключ базы, завёрнутый первым KEK, после этого —
-/// мусор навсегда.
+/// Needed against one quite reachable outcome: Dart goes through a thread pool,
+/// two parallel calls do not find the alias, both call key creation, and the second
+/// silently replaces the first. The database key wrapped by the first KEK is then
+/// garbage forever.
 static OPEN_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 fn open_lock() -> &'static Mutex<()> {
     OPEN_LOCK.get_or_init(|| Mutex::new(()))
 }
 
-/// Ключ базы и то, что система сообщает об уровне его защиты.
+/// The database key and what the system reports about its protection level.
 pub struct OpenedVault {
-    /// Ключ базы. Корень иерархии подключей.
+    /// The database key. The root of the subkey hierarchy.
     pub dek: SecretKey,
-    /// Уровень железа **сейчас**, как его сообщает система.
+    /// The hardware level **now**, as the system reports it.
     pub level: SecurityLevel,
-    /// Уровень, записанный при создании обёртки.
+    /// The level recorded when the wrapper was created.
     ///
-    /// Хранится отдельно и защищён от подмены: иначе подправленный байт в файле
-    /// менял бы надпись на экране, не трогая ничего больше. Расхождение с
-    /// текущим — повод сказать об этом в отчёте, а не отказать в работе.
+    /// Stored separately and protected against substitution: otherwise a tweaked byte in the
+    /// file would change the label on the screen without touching anything else. A mismatch
+    /// with the current one is a reason to mention it in the report, not to refuse to work.
     pub level_at_creation: SecurityLevel,
-    /// Была ли обёртка создана прямо сейчас (то есть первый ли это запуск).
+    /// Whether the wrapper was created just now (i.e. whether this is the first launch).
     pub created_now: bool,
-    /// Как появился аппаратный ключ. Пусто, если не в этом запуске.
+    /// How the hardware key came about. Empty if not during this launch.
     pub creation_note: String,
 }
 
-/// Читает обёртку или создаёт её, если это первый запуск.
+/// Reads the wrapper or creates it, if this is the first launch.
 pub fn load_or_create<W: KeyWrapper>(dir: &Path, wrapper: &W) -> Result<OpenedVault, StorageError> {
     let _guard = open_lock().lock().map_err(|_| StorageError::Poisoned)?;
 
@@ -102,10 +102,10 @@ fn read_existing<W: KeyWrapper>(path: &Path, wrapper: &W) -> Result<OpenedVault,
     let raw = fs::read(path)?;
     let parsed = Parsed::from_bytes(&raw)?;
 
-    // `allow_create = false` — здесь и есть всё различие между «первым
-    // запуском» и «ключ исчез». Обёртка на диске означает, что ключ был; если
-    // его нет, создавать новый нельзя ни при каких условиях — это уничтожило бы
-    // переписку безвозвратно.
+    // `allow_create = false`: this is the whole difference between "first
+    // launch" and "key gone". A wrapper on disk means there was a key; if
+    // it is not there, a new one must not be created under any circumstances: that would
+    // destroy the conversations irrecoverably.
     let status = wrapper.ensure_key(false)?;
     let level = status.level;
 
@@ -118,10 +118,10 @@ fn read_existing<W: KeyWrapper>(path: &Path, wrapper: &W) -> Result<OpenedVault,
         )));
     }
 
-    // Заголовок повторён внутри запечатанного текста, и здесь он сверяется.
-    // Подмена байта в открытой части файла после этого не проходит молча.
-    // Через AAD то же самое делать нельзя: поддержка AAD у конкретной
-    // реализации StrongBox — то, что не проверишь на рабочей машине.
+    // The header is repeated inside the sealed text, and here it is compared.
+    // After that, substituting a byte in the public part of the file does not pass silently.
+    // Doing the same via AAD is not an option: AAD support in a particular
+    // StrongBox implementation is something that cannot be checked on the development machine.
     let inner_kdf = plain.first().copied().unwrap_or_default();
     let inner_level = plain.get(1).copied().unwrap_or_default() as i8;
     if inner_kdf != parsed.kdf_id || inner_level != parsed.level {
@@ -194,7 +194,7 @@ fn create_new<W: KeyWrapper>(
     })
 }
 
-/// Уровень укладывается в знаковый байт: значений всего пять, от -2 до 2.
+/// The level fits into a signed byte: there are only five values, from -2 to 2.
 fn clamp_level(raw: i32) -> i8 {
     if (i32::from(i8::MIN)..=i32::from(i8::MAX)).contains(&raw) {
         raw as i8
@@ -203,12 +203,12 @@ fn clamp_level(raw: i32) -> i8 {
     }
 }
 
-/// Разобранный заголовок обёртки.
+/// The parsed wrapper header.
 struct Parsed {
     kdf_id: u8,
     level: i8,
-    /// Запечатанное аппаратным ключом. Для нас — непрозрачные байты: что там
-    /// внутри, знает только та сторона, которая их сделала.
+    /// What was sealed by the hardware key. For us these are opaque bytes: what is
+    /// inside is known only to the side that made them.
     blob: Vec<u8>,
 }
 
@@ -239,12 +239,12 @@ impl Parsed {
     }
 }
 
-/// Записывает файл так, чтобы внезапное выключение телефона не оставило
-/// полузапись.
+/// Writes a file so that a sudden phone shutdown does not leave a
+/// half-written file.
 ///
-/// Порядок неотменяем: временный файл → сброс на диск → переименование →
-/// сброс каталога. Простая запись поверх оставила бы обёртку в промежуточном
-/// состоянии, а это потеря всей переписки.
+/// The order is non-negotiable: temporary file → flush to disk → rename →
+/// flush the directory. A plain overwrite would leave the wrapper in an intermediate
+/// state, and that means losing all the conversations.
 fn write_atomically(dir: &Path, path: &Path, bytes: &[u8]) -> Result<(), StorageError> {
     let tmp: PathBuf = path.with_extension("tmp");
     {
@@ -254,8 +254,8 @@ fn write_atomically(dir: &Path, path: &Path, bytes: &[u8]) -> Result<(), Storage
     }
     fs::rename(&tmp, path)?;
 
-    // Переименование попадает в метаданные каталога, и их тоже надо сбросить.
-    // На Windows каталог как файл не открыть, но там эта сборка и не работает.
+    // The rename goes into the directory metadata, and that must be flushed too.
+    // On Windows a directory cannot be opened as a file, but this build does not run there anyway.
     #[cfg(unix)]
     {
         let dir_handle = fs::File::open(dir)?;
@@ -267,7 +267,7 @@ fn write_atomically(dir: &Path, path: &Path, bytes: &[u8]) -> Result<(), Storage
     Ok(())
 }
 
-/// Стирает обёртку. Аппаратный ключ удаляет вызывающий — порядок важен, см.
+/// Erases the wrapper. The caller deletes the hardware key; the order matters, see
 /// [`crate::Storage::wipe`].
 pub fn remove(dir: &Path) -> Result<(), StorageError> {
     let path = dir.join(WRAPPER_FILE);

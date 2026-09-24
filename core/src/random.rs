@@ -1,32 +1,32 @@
-//! Источник случайности.
+//! The source of randomness.
 //!
-//! Один на всё ядро и предельно короткий: «дай N байт у операционной системы».
-//! Промежуточных генераторов нет намеренно — всякий слой между нами и ядром ОС
-//! это ещё одно место, где случайность может оказаться не случайной, а именно
-//! на ней стоит всё остальное.
+//! One for the whole core and as short as possible: "give me N bytes from the
+//! operating system". There are deliberately no intermediate generators: every layer
+//! between us and the OS kernel is one more place where randomness may turn out not
+//! to be random, and everything else rests on it.
 //!
-//! **Отказ не глушится.** `getrandom` может не отдать байты: в изолированном
-//! окружении, при исчерпании дескрипторов, на очень раннем старте системы.
-//! Библиотеки вокруг в этом месте обычно паникуют (`x25519-dalek` делает
-//! `.expect("getrandom failure")`). Нам паниковать нельзя — в ядре это прямо
-//! запрещено линтом, — и незачем: отказ поднимается наверх как ошибка, и
-//! вызывающий решает сам. Молча вернуть предсказуемые байты было бы худшим
-//! из возможных исходов, поэтому такого пути здесь нет.
+//! **Failure is not suppressed.** `getrandom` may fail to deliver bytes: in a sandboxed
+//! environment, when file descriptors are exhausted, very early in system startup.
+//! The surrounding libraries usually panic at this point (`x25519-dalek` does
+//! `.expect("getrandom failure")`). We must not panic (in the core this is explicitly
+//! forbidden by a lint), and there is no need to: the failure is raised upward as an
+//! error, and the caller decides. Silently returning predictable bytes would be the
+//! worst possible outcome, so there is no such path here.
 
 use thiserror::Error;
 use zeroize::Zeroize;
 
-/// Операционная система не выдала случайность.
+/// The operating system did not provide randomness.
 #[derive(Debug, Error)]
 #[error("операционная система не выдала случайные байты: {0}")]
 pub struct RandomError(getrandom::Error);
 
-/// Случайные байты от ядра ОС.
+/// Random bytes from the OS kernel.
 pub fn random_bytes<const N: usize>() -> Result<[u8; N], RandomError> {
     let mut bytes = [0u8; N];
     if let Err(e) = getrandom::fill(&mut bytes) {
-        // Затираем то, что успело записаться: частично заполненный буфер
-        // предсказуем ровно настолько, насколько не заполнен.
+        // Wipe whatever managed to get written: a partially filled buffer is
+        // predictable exactly to the extent it is not filled.
         bytes.zeroize();
         return Err(RandomError(e));
     }
@@ -41,16 +41,16 @@ mod tests {
 
     #[test]
     fn returns_requested_length() {
-        let a = random_bytes::<32>().expect("ОС должна отдавать случайность");
+        let a = random_bytes::<32>().expect("the OS must provide randomness");
         assert_eq!(a.len(), 32);
     }
 
     #[test]
     fn two_calls_differ() {
-        // Проверка не на качество случайности — этого тестом не показать, —
-        // а на грубую поломку вроде «забыли заполнить буфер».
-        let a = random_bytes::<32>().expect("ОС должна отдавать случайность");
-        let b = random_bytes::<32>().expect("ОС должна отдавать случайность");
+        // This is not a test of randomness quality (a test cannot show that),
+        // but of gross breakage such as "forgot to fill the buffer".
+        let a = random_bytes::<32>().expect("the OS must provide randomness");
+        let b = random_bytes::<32>().expect("the OS must provide randomness");
         assert_ne!(a, b);
         assert_ne!(a, [0u8; 32]);
     }

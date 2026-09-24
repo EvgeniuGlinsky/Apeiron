@@ -1,23 +1,23 @@
-//! Слепой ретранслятор — этап 3.
+//! The blind relay: stage 3.
 //!
-//! Зачем он существует: если получатель офлайн, сообщение обязан принять кто-то, кто
-//! онлайн. Эта роль физически неустранима (§2.1 исследования), и Briar, SimpleX и Keet
-//! независимо пришли к одному и тому же минимуму — узлу, который хранит шифротекст и
-//! не может его прочитать (§13.3). Это не сервер оператора: его поднимает любой, и
-//! в клиенте список сменяемый.
+//! Why it exists: if the recipient is offline, someone who is online must accept the
+//! message. This role is physically irremovable (§2.1 of the research), and Briar, SimpleX
+//! and Keet independently arrived at the same minimum: a node that stores ciphertext and
+//! cannot read it (§13.3). It is not an operator's server: anyone can run one, and
+//! in the client the list is replaceable.
 //!
-//! Что он будет уметь и, что важнее, чего не будет:
-//!   * односторонние очереди, отдельный набор на каждый контакт;
-//!   * адрес отправки не равен адресу получения;
-//!   * никаких записей о пользователях и никаких глобальных идентификаторов;
-//!   * удаление сообщения после доставки;
-//!   * конверты фиксированного размера — иначе длина сама становится метаданными.
+//! What it will be able to do and, more importantly, what it will not:
+//!   * one-way queues, a separate set for each contact;
+//!   * the sending address is not equal to the receiving address;
+//!   * no records about users and no global identifiers;
+//!   * deletion of a message after delivery;
+//!   * fixed-size envelopes: otherwise the length itself becomes metadata.
 //!
-//! Реализация — этап 3 плана. Сейчас это заглушка, которая держит место в workspace.
+//! Implementation: stage 3 of the plan. For now it is a stub that holds a place in the workspace.
 
 fn main() {
     println!(
-        "apeiron-relay {} — заглушка. Реализация на этапе 3, протокол v{}.",
+        "apeiron-relay {}: a stub. Implementation in stage 3, protocol v{}.",
         env!("CARGO_PKG_VERSION"),
         apeiron_core::PROTOCOL_VERSION
     );

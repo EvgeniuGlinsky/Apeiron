@@ -1,16 +1,16 @@
-//! Долговременная личность устройства.
+//! The long-term identity of a device.
 //!
-//! Две независимые пары ключей:
-//!   * Ed25519 — подпись (журнал ключей, подтверждение авторства);
-//!   * X25519  — согласование ключей (вход в двойной храповик).
+//! Two independent key pairs:
+//!   * Ed25519: signing (the key log, proof of authorship);
+//!   * X25519: key agreement (entry into the double ratchet).
 //!
-//! Они не выводятся друг из друга намеренно: связывание одного типа ключа с другим —
-//! источник тонких ошибок, а связь между ними и так устанавливается подписанным
-//! журналом личности (sigchain).
+//! They are deliberately not derived from one another: tying one key type to another is
+//! a source of subtle bugs, and the link between them is established anyway by the signed
+//! sigchain (identity log).
 //!
-//! Секретные части не покидают Rust — решение R-004 в `docs/threat-log.md`.
-//! `SigningKey` и `StaticSecret` затирают себя при уничтожении (feature `zeroize`),
-//! поэтому собственный `Drop` здесь не нужен и намеренно не пишется.
+//! The secret parts do not leave Rust: decision R-004 in `docs/threat-log.md`.
+//! `SigningKey` and `StaticSecret` wipe themselves when destroyed (feature `zeroize`),
+//! so a custom `Drop` is not needed here and deliberately not written.
 
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -19,16 +19,16 @@ use crate::random::{random_bytes, RandomError};
 use sha2::{Digest, Sha256};
 use x25519_dalek::{PublicKey as X25519Public, StaticSecret};
 
-/// Групп в отпечатке, читаемом вслух при сверке.
+/// Groups in a fingerprint read aloud during verification.
 pub const FINGERPRINT_GROUPS: usize = 6;
-/// Цифр в каждой группе.
+/// Digits in each group.
 pub const FINGERPRINT_DIGITS_PER_GROUP: usize = 5;
 
-/// Байт в сериализованной публичной личности: 32 (Ed25519) + 32 (X25519).
+/// Bytes in a serialized public identity: 32 (Ed25519) + 32 (X25519).
 pub const PUBLIC_IDENTITY_BYTES: usize = 64;
 
-/// Разделитель области для хеша отпечатка. Меняя его, вы меняете все отпечатки:
-/// это осознанно ломающее изменение, требующее повторной сверки пользователями.
+/// Domain separator for the fingerprint hash. Changing it changes every fingerprint:
+/// a deliberately breaking change that requires users to verify again.
 const FINGERPRINT_DOMAIN: &[u8] = b"apeiron/fingerprint/v1";
 const SAFETY_NUMBER_DOMAIN: &[u8] = b"apeiron/safety-number/v1";
 
@@ -42,7 +42,7 @@ pub enum IdentityError {
     BadSignature,
 }
 
-/// Публичная часть личности. Передаётся свободно, секретов не содержит.
+/// The public part of an identity. Passed around freely, contains no secrets.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PublicIdentity {
     verifying: VerifyingKey,
@@ -89,10 +89,10 @@ impl PublicIdentity {
         })
     }
 
-    /// Отпечаток одной личности: 30 цифр шестью группами.
+    /// The fingerprint of a single identity: 30 digits in six groups.
     ///
-    /// Показывается в профиле. Для сверки с собеседником используйте
-    /// [`PublicIdentity::safety_number`] — она защищает от подмены обеих сторон сразу.
+    /// Shown in the profile. For verification with a peer use
+    /// [`PublicIdentity::safety_number`]: it protects against substitution of both sides at once.
     pub fn fingerprint(&self) -> String {
         let mut h = Sha256::new();
         h.update(FINGERPRINT_DOMAIN);
@@ -100,16 +100,16 @@ impl PublicIdentity {
         digits_from_hash(&h.finalize())
     }
 
-    /// Число сверки для пары собеседников.
+    /// The safety number for a pair of peers.
     ///
-    /// Симметрично: обе стороны получают одну и ту же строку независимо от того, кто
-    /// кого добавил. Это то, что сравнивают голосом или через QR перед началом переписки.
-    /// Без этой сверки стойкий шифр полностью побеждается активным посредником —
-    /// см. демонстрацию в `radio-mesh-demo/s07_ratchet.py`, раздел F.
+    /// Symmetric: both sides get the same string regardless of who added whom.
+    /// This is what gets compared by voice or via QR before a conversation starts.
+    /// Without this verification a strong cipher is fully defeated by an active
+    /// intermediary; see the demonstration in `radio-mesh-demo/s07_ratchet.py`, section F.
     pub fn safety_number(&self, other: &PublicIdentity) -> String {
         let a = self.to_bytes();
         let b = other.to_bytes();
-        // Упорядочиваем, чтобы результат не зависел от того, кто считает.
+        // Order them so the result does not depend on who computes it.
         let (first, second) = if a <= b { (&a, &b) } else { (&b, &a) };
         let mut h = Sha256::new();
         h.update(SAFETY_NUMBER_DOMAIN);
@@ -118,14 +118,14 @@ impl PublicIdentity {
         digits_from_hash(&h.finalize())
     }
 
-    /// Проверка подписи — **строгая**.
+    /// Signature verification, **strict**.
     ///
-    /// Обычная проверка Ed25519 допускает неканоническую запись подписи и точки
-    /// малого порядка. На стойкость это почти не влияет, но означает, что у
-    /// одного и того же сообщения может быть несколько различающихся подписей,
-    /// каждая из которых верна. Там, где подпись входит в хеш — а у нас она
-    /// входит, журнал личности на этом стоит, — это превратилось бы в две
-    /// разные «одинаковые» цепочки. Строгая проверка такого не допускает.
+    /// Ordinary Ed25519 verification accepts a non-canonical signature encoding and
+    /// small-order points. This barely affects strength, but it means the same message
+    /// can have several differing signatures, each of which is valid. Where the
+    /// signature goes into a hash (and for us it does: the sigchain rests on this),
+    /// this would turn into two different "identical" chains. Strict verification
+    /// does not allow that.
     pub fn verify(&self, message: &[u8], signature: &Signature) -> Result<(), IdentityError> {
         self.verifying
             .verify_strict(message, signature)
@@ -133,24 +133,24 @@ impl PublicIdentity {
     }
 }
 
-/// Длина вывезенного секрета личности: два семени по 32 байта.
+/// Length of an exported identity secret: two seeds of 32 bytes each.
 pub const SECRET_IDENTITY_BYTES: usize = 64;
 
-/// Секрет личности в виде байтов — единственный способ вынести его из
+/// The identity secret as bytes: the only way to take it out of
 /// [`Identity`].
 ///
-/// Обёртка нужна не для красоты. Голый `[u8; 64]` остаётся в памяти после
-/// выхода из области видимости, печатается в журнал первой же неосторожной
-/// отладочной строкой и молча копируется. Здесь: затирается при уничтожении,
-/// `Debug` ничего не показывает, а имя типа прямо говорит, что внутри.
+/// The wrapper is not for looks. A bare `[u8; 64]` stays in memory after it goes
+/// out of scope, gets printed to the log by the first careless debug line, and is
+/// silently copied. Here: it is wiped on destruction, `Debug` shows nothing, and the
+/// type name says plainly what is inside.
 ///
-/// Единственное законное назначение — немедленно запечатать содержимое в
-/// хранилище (`apeiron-store`). Всё остальное — ошибка.
+/// The only legitimate purpose is to seal the contents into storage
+/// (`apeiron-store`) immediately. Anything else is a bug.
 #[derive(Clone, Zeroize, ZeroizeOnDrop)]
 pub struct SecretBytes([u8; SECRET_IDENTITY_BYTES]);
 
 impl SecretBytes {
-    /// Байты для запечатывания. Копировать их куда-либо ещё нельзя.
+    /// Bytes for sealing. They must not be copied anywhere else.
     pub fn as_bytes(&self) -> &[u8; SECRET_IDENTITY_BYTES] {
         &self.0
     }
@@ -158,27 +158,27 @@ impl SecretBytes {
 
 impl std::fmt::Debug for SecretBytes {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("SecretBytes(<скрыт>)")
+        f.write_str("SecretBytes(<hidden>)")
     }
 }
 
-/// Секретная личность. Не сериализуется наружу и не пересекает границу FFI.
+/// The secret identity. Not serialized outward and does not cross the FFI boundary.
 pub struct Identity {
     signing: SigningKey,
     agreement: StaticSecret,
 }
 
 impl Identity {
-    /// Новая личность из системного источника случайности.
+    /// A new identity from the system source of randomness.
     ///
-    /// Возвращает ошибку, а не паникует: отказ ОС в случайности — редкий, но
-    /// возможный исход (изоляция, исчерпание дескрипторов, очень ранний старт),
-    /// и решать, что с ним делать, должен вызывающий. Библиотеки вокруг в этом
-    /// месте паникуют; нам нельзя. Подробнее — `crate::random`.
+    /// Returns an error rather than panicking: the OS refusing randomness is a rare
+    /// but possible outcome (sandboxing, descriptor exhaustion, very early startup),
+    /// and deciding what to do about it is the caller's job. The surrounding libraries
+    /// panic at this point; we must not. More in `crate::random`.
     pub fn generate() -> Result<Self, RandomError> {
-        // Два независимых секрета из двух независимых запросов: общего семени
-        // у подписи и согласования быть не должно, иначе компрометация одного
-        // становится компрометацией второго.
+        // Two independent secrets from two independent requests: signing and
+        // agreement must not share a seed, otherwise compromise of one
+        // becomes compromise of the other.
         let mut signing_seed = random_bytes::<32>()?;
         let mut agreement_seed = random_bytes::<32>()?;
 
@@ -187,21 +187,21 @@ impl Identity {
             agreement: StaticSecret::from(agreement_seed),
         };
 
-        // Семена скопированы внутрь ключей — здесь они больше не нужны.
+        // The seeds have been copied into the keys; they are no longer needed here.
         signing_seed.zeroize();
         agreement_seed.zeroize();
 
         Ok(identity)
     }
 
-    /// Восстанавливает личность из того, что вернул
-    /// [`Identity::export_secret`].
+    /// Restores an identity from what
+    /// [`Identity::export_secret`] returned.
     ///
-    /// Проверка здесь только на длину: любые 64 байта задают корректную пару
-    /// ключей, и «неверного» секрета не существует. Значит, подмена файла
-    /// хранилища дала бы не ошибку разбора, а **другую личность** — и ловится
-    /// она не тут, а проверкой подлинности записи (AEAD) до вызова этой
-    /// функции. Читать секрет из непроверенного источника нельзя.
+    /// The only check here is on length: any 64 bytes define a valid key pair, and
+    /// there is no such thing as a "wrong" secret. So substituting the storage file
+    /// would produce not a parse error but **a different identity**, and it is caught
+    /// not here but by the record authenticity check (AEAD) before this function is
+    /// called. The secret must not be read from an unverified source.
     pub fn from_secret_bytes(bytes: &[u8]) -> Result<Self, IdentityError> {
         if bytes.len() != SECRET_IDENTITY_BYTES {
             return Err(IdentityError::Length {
@@ -231,17 +231,17 @@ impl Identity {
         Ok(identity)
     }
 
-    /// Вывозит секрет наружу — только чтобы тут же его запечатать.
+    /// Exports the secret, only in order to seal it right away.
     ///
-    /// До появления постоянного хранилища этого метода не было намеренно, и
-    /// появился он с одной оговоркой: возвращаемый тип затирает себя сам и
-    /// ничего не печатает. Границу FFI секрет по-прежнему не пересекает
-    /// (R-004): в Dart уходит только публичная часть.
+    /// Until persistent storage appeared this method deliberately did not exist, and
+    /// it appeared with one proviso: the returned type wipes itself and prints
+    /// nothing. The secret still does not cross the FFI boundary
+    /// (R-004): only the public part goes to Dart.
     pub fn export_secret(&self) -> SecretBytes {
         let mut out = [0u8; SECRET_IDENTITY_BYTES];
-        // Раскладка та же, что у generate(): сначала семя подписи, потом
-        // секрет согласования. Порядок входит в формат хранилища, менять его
-        // значит ломать уже записанное.
+        // Same layout as generate(): first the signing seed, then the agreement
+        // secret. The order is part of the storage format; changing it
+        // means breaking what has already been written.
         let signing = self.signing.to_bytes();
         let agreement = self.agreement.to_bytes();
         out[..32].copy_from_slice(&signing);
@@ -260,15 +260,15 @@ impl Identity {
         self.signing.sign(message)
     }
 
-    /// Общий секрет по Диффи — Хеллману. Результат — сырьё для HKDF, а не ключ:
-    /// использовать напрямую нельзя.
+    /// Diffie-Hellman shared secret. The result is raw material for HKDF, not a key:
+    /// it must not be used directly.
     pub fn diffie_hellman(&self, peer: &X25519Public) -> x25519_dalek::SharedSecret {
         self.agreement.diffie_hellman(peer)
     }
 }
 
 impl std::fmt::Debug for Identity {
-    /// Намеренно не печатает секретные части: строки логов переживают процесс.
+    /// Deliberately does not print the secret parts: log lines outlive the process.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Identity")
             .field("public", &self.public().fingerprint())
@@ -276,15 +276,15 @@ impl std::fmt::Debug for Identity {
     }
 }
 
-/// Сколько байтов хеша уходит на одну группу.
+/// How many hash bytes go into one group.
 ///
-/// Не то же самое, что [`FINGERPRINT_DIGITS_PER_GROUP`], хотя числа совпадают:
-/// там цифры для человека, здесь байты для арифметики. Пяти байтов (40 бит)
-/// с запасом хватает на пять десятичных цифр — остаток по модулю 10⁵
-/// распределён почти равномерно, смещение порядка 10⁻⁷.
+/// Not the same as [`FINGERPRINT_DIGITS_PER_GROUP`], though the numbers coincide:
+/// there it is digits for a human, here bytes for arithmetic. Five bytes (40 bits)
+/// are more than enough for five decimal digits: the remainder modulo 10⁵ is
+/// distributed almost uniformly, with a bias on the order of 10⁻⁷.
 const FINGERPRINT_BYTES_PER_GROUP: usize = 5;
 
-/// Превращает хеш в читаемые вслух цифры: шесть групп по пять.
+/// Turns a hash into digits readable aloud: six groups of five.
 fn digits_from_hash(hash: &[u8]) -> String {
     let (groups, _tail) = hash.as_chunks::<FINGERPRINT_BYTES_PER_GROUP>();
     groups
@@ -304,8 +304,8 @@ fn digits_from_hash(hash: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    // В тестах unwrap/expect уместны: падение теста — это и есть сообщение
-    // об ошибке. Запрет остаётся в силе для всего остального кода крейта.
+    // In tests unwrap/expect are appropriate: a test failure is itself the error
+    // message. The ban remains in force for all other code in the crate.
     #![allow(
         clippy::unwrap_used,
         clippy::expect_used,
@@ -317,10 +317,10 @@ mod tests {
 
     #[test]
     fn public_identity_roundtrip() {
-        let id = Identity::generate().expect("ОС отдаёт случайность");
+        let id = Identity::generate().expect("the OS provides randomness");
         let pub_a = id.public();
         let bytes = pub_a.to_bytes();
-        let pub_b = PublicIdentity::from_bytes(&bytes).expect("свои же байты должны разбираться");
+        let pub_b = PublicIdentity::from_bytes(&bytes).expect("our own bytes must parse");
         assert_eq!(pub_a, pub_b);
     }
 
@@ -332,7 +332,7 @@ mod tests {
 
     #[test]
     fn signature_verifies_and_tampering_is_caught() {
-        let id = Identity::generate().expect("ОС отдаёт случайность");
+        let id = Identity::generate().expect("the OS provides randomness");
         let pubkey = id.public();
         let msg = b"road to myworld";
         let sig = id.sign(msg);
@@ -342,8 +342,8 @@ mod tests {
 
     #[test]
     fn diffie_hellman_agrees_both_ways() {
-        let a = Identity::generate().expect("ОС отдаёт случайность");
-        let b = Identity::generate().expect("ОС отдаёт случайность");
+        let a = Identity::generate().expect("the OS provides randomness");
+        let b = Identity::generate().expect("the OS provides randomness");
         let ab = a.diffie_hellman(b.public().agreement_key());
         let ba = b.diffie_hellman(a.public().agreement_key());
         assert_eq!(ab.as_bytes(), ba.as_bytes());
@@ -352,7 +352,7 @@ mod tests {
     #[test]
     fn fingerprint_shape_is_stable() {
         let fp = Identity::generate()
-            .expect("ОС отдаёт случайность")
+            .expect("the OS provides randomness")
             .public()
             .fingerprint();
         let groups: Vec<&str> = fp.split(' ').collect();
@@ -366,34 +366,34 @@ mod tests {
     #[test]
     fn safety_number_is_symmetric() {
         let a = Identity::generate()
-            .expect("ОС отдаёт случайность")
+            .expect("the OS provides randomness")
             .public();
         let b = Identity::generate()
-            .expect("ОС отдаёт случайность")
+            .expect("the OS provides randomness")
             .public();
         assert_eq!(a.safety_number(&b), b.safety_number(&a));
     }
 
     #[test]
     fn safety_number_changes_if_a_key_is_swapped() {
-        // Это и есть обнаружение посредника: подменённый ключ даёт другое число сверки.
+        // This is intermediary detection: a substituted key gives a different safety number.
         let a = Identity::generate()
-            .expect("ОС отдаёт случайность")
+            .expect("the OS provides randomness")
             .public();
         let b = Identity::generate()
-            .expect("ОС отдаёт случайность")
+            .expect("the OS provides randomness")
             .public();
         let impostor = Identity::generate()
-            .expect("ОС отдаёт случайность")
+            .expect("the OS provides randomness")
             .public();
         assert_ne!(a.safety_number(&b), a.safety_number(&impostor));
     }
 
     #[test]
     fn fingerprint_differs_from_safety_number() {
-        // Разделение областей хеширования должно давать разные значения.
+        // Separating the hashing domains must give different values.
         let a = Identity::generate()
-            .expect("ОС отдаёт случайность")
+            .expect("the OS provides randomness")
             .public();
         assert_ne!(a.fingerprint(), a.safety_number(&a));
     }

@@ -1,31 +1,31 @@
-//! Запечатывание записей и привязка каждой к её месту.
+//! Sealing of records and binding each one to its location.
 //!
-//! Шифруется не файл целиком, а каждая запись отдельно. Разница не в удобстве:
-//! у записи появляется **место**, и подменить его нельзя.
+//! What is encrypted is not the whole file but each record separately. The difference is
+//! not convenience: a record gets a **location**, and it cannot be substituted.
 //!
-//! Открытые данные записи (имя таблицы, номер, версия схемы) идут в AEAD как
-//! дополнительные аутентифицируемые данные. Переложить строку на чужой
-//! идентификатор, подсунуть её из другой таблицы или откатить версию схемы
-//! после этого не выйдет — проверка подлинности не сойдётся, и это отказ, а не
-//! другое содержимое.
+//! The record's public data (table name, id, schema version) goes into AEAD as
+//! additional authenticated data. After that, moving a row to someone else's
+//! identifier, slipping it in from another table or rolling back the schema version
+//! will not work: the authenticity check will not match, and that is a rejection, not
+//! different content.
 
 use apeiron_core::{open, seal, AeadError, SecretKey};
 
-/// Разделитель области. Соглашение проекта: `apeiron/<область>/v1`.
+/// Domain separator. Project convention: `apeiron/<area>/v1`.
 const RECORD_DOMAIN: &[u8] = b"apeiron/storage/record/v1";
 
-/// Версия раскладки таблиц.
+/// The table layout version.
 ///
-/// Входит в AEAD каждой записи, а не только в служебную таблицу. Поэтому откат
-/// схемы на старую версию не проходит молча: записи новой версии перестают
-/// читаться, вместо того чтобы читаться неправильно.
+/// It goes into the AEAD of every record, not only into the internal table. So rolling
+/// the schema back to an old version does not pass silently: records of the new version
+/// stop being readable instead of being read wrongly.
 pub const SCHEMA_VERSION: u16 = 1;
 
-/// Таблица, в которой живёт запись.
+/// The table a record lives in.
 ///
-/// Числа зафиксированы навсегда: они входят в проверку подлинности, и смена
-/// числа делает нечитаемым всё, что записано прежним. Добавлять новые можно,
-/// менять существующие — нет.
+/// The numbers are fixed forever: they go into the authenticity check, and changing a
+/// number makes everything written under the previous one unreadable. New ones may be
+/// added; existing ones may not be changed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Table {
     Meta = 1,
@@ -36,7 +36,7 @@ pub enum Table {
     Sigchain = 6,
 }
 
-/// Собирает дополнительные аутентифицируемые данные записи.
+/// Assembles the record's additional authenticated data.
 fn aad(table: Table, id: i64, schema: u16) -> Vec<u8> {
     let mut out = Vec::with_capacity(RECORD_DOMAIN.len() + 1 + 8 + 2);
     out.extend_from_slice(RECORD_DOMAIN);
@@ -46,7 +46,7 @@ fn aad(table: Table, id: i64, schema: u16) -> Vec<u8> {
     out
 }
 
-/// Запечатывает запись для конкретного места в базе.
+/// Seals a record for a specific location in the database.
 pub fn seal_record(
     key: &SecretKey,
     table: Table,
@@ -56,7 +56,7 @@ pub fn seal_record(
     seal(key, &aad(table, id, SCHEMA_VERSION), plaintext)
 }
 
-/// Распечатывает запись, проверяя, что она пришла именно отсюда.
+/// Opens a record, checking that it came from exactly this place.
 pub fn open_record(
     key: &SecretKey,
     table: Table,
@@ -78,7 +78,7 @@ mod tests {
     use super::*;
 
     fn key() -> SecretKey {
-        SecretKey::generate().expect("ОС отдаёт случайность")
+        SecretKey::generate().expect("the OS provides randomness")
     }
 
     #[test]
@@ -101,7 +101,7 @@ mod tests {
     #[test]
     fn record_from_another_table_is_rejected() {
         let k = key();
-        let sealed = seal_record(&k, Table::Contact, 3, "кто-то".as_bytes()).unwrap();
+        let sealed = seal_record(&k, Table::Contact, 3, "someone".as_bytes()).unwrap();
         assert!(open_record(&k, Table::Session, 3, &sealed).is_err());
     }
 
@@ -111,7 +111,7 @@ mod tests {
         let sealed = seal(&k, &aad(Table::Meta, 1, SCHEMA_VERSION + 1), b"x").unwrap();
         assert!(
             open_record(&k, Table::Meta, 1, &sealed).is_err(),
-            "запись другой версии схемы прочиталась как своя"
+            "a record of another schema version was read as our own"
         );
     }
 
