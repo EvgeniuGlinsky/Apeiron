@@ -31,6 +31,25 @@ pub struct Contact {
     /// The name the owner gave them. Does not come from outside and confirms
     /// nothing; see `docs/crypto.md`, section 6.
     pub name: String,
+    /// Whether the owner compared the safety number with them and said it matched. Only ever
+    /// the owner's own act (`docs/transport.md` §8).
+    pub verified: bool,
+}
+
+/// Everything an introduction writes at once (`Storage::introduce`).
+pub struct Introduction<'a> {
+    pub peer: &'a PublicIdentity,
+    /// The name for a new contact; an existing contact keeps the one the owner gave it.
+    pub name: &'a str,
+    pub chat: &'a Chat,
+    /// The device account whose one-time key the introduction spent.
+    pub account: &'a apeiron_core::vodozemac::olm::Account,
+    /// The first messages of the new conversation.
+    pub messages: &'a [Zeroizing<Vec<u8>>],
+    /// Messages of the contact's previous conversation, changed (left "not delivered").
+    pub changed: &'a [(i64, Zeroizing<Vec<u8>>)],
+    /// The invitation this introduction answered, forgotten in the same transaction.
+    pub answered: Option<i64>,
 }
 
 impl Storage {
@@ -153,25 +172,42 @@ impl Storage {
     /// clear could be read from the database file without any key.
     pub fn save_contact(&self, peer: &PublicIdentity, name: &str) -> Result<i64, StorageError> {
         let tx = self.conn().unchecked_transaction()?;
-        let id = self.write_contact(peer, name)?;
+        let id = self.write_contact(peer, name, true)?;
         tx.commit()?;
         Ok(id)
     }
 
     /// The same write, but without its own transaction, so that it can be combined with
-    /// others into one.
-    fn write_contact(&self, peer: &PublicIdentity, name: &str) -> Result<i64, StorageError> {
+    /// others into one. An existing contact keeps its "verified" mark, and its name unless
+    /// `rename`.
+    fn write_contact(
+        &self,
+        peer: &PublicIdentity,
+        name: &str,
+        rename: bool,
+    ) -> Result<i64, StorageError> {
         let tag = self.keys().tag().tag(&peer.to_bytes());
         let tx = self.conn();
 
-        let existing: Option<i64> = tx
-            .query_row("SELECT id FROM contacts WHERE tag = ?1", [&tag[..]], |r| {
-                r.get(0)
-            })
+        let existing: Option<(i64, Vec<u8>)> = tx
+            .query_row(
+                "SELECT id, sealed FROM contacts WHERE tag = ?1",
+                [&tag[..]],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
             .optional()?;
 
+        let mut name = name.to_string();
+        let mut verified = false;
         let id = match existing {
-            Some(id) => id,
+            Some((id, sealed)) => {
+                let old = self.decode_contact(id, &sealed)?;
+                verified = old.verified;
+                if !rename {
+                    name = old.name;
+                }
+                id
+            }
             None => {
                 // The row identifier is part of the record's authenticity check,
                 // so it is needed before sealing. Hence two steps in one
@@ -184,17 +220,45 @@ impl Storage {
             }
         };
 
+        self.write_contact_record(id, peer, &name, verified)?;
+        Ok(id)
+    }
+
+    fn write_contact_record(
+        &self,
+        id: i64,
+        peer: &PublicIdentity,
+        name: &str,
+        verified: bool,
+    ) -> Result<(), StorageError> {
         let sealed = seal_record(
             self.keys().contact(),
             Table::Contact,
             id,
-            &encode_contact(peer, name),
+            &encode_contact(peer, name, verified),
         )?;
-        tx.execute(
+        self.conn().execute(
             "UPDATE contacts SET sealed = ?1 WHERE id = ?2",
             rusqlite::params![sealed, id],
         )?;
-        Ok(id)
+        Ok(())
+    }
+
+    /// The contact with row `id`.
+    pub fn contact(&self, id: i64) -> Result<Option<Contact>, StorageError> {
+        let sealed: Option<Vec<u8>> = self
+            .conn()
+            .query_row("SELECT sealed FROM contacts WHERE id = ?1", [id], |r| {
+                r.get(0)
+            })
+            .optional()?;
+        sealed.map(|s| self.decode_contact(id, &s)).transpose()
+    }
+
+    /// Marks the contact as verified by the owner, or takes the mark back.
+    pub fn set_verified(&self, id: i64, verified: bool) -> Result<(), StorageError> {
+        let contact = self.contact(id)?.ok_or(StorageError::NotFound("contact"))?;
+        self.write_contact_record(id, &contact.peer, &contact.name, verified)
     }
 
     /// Finds a contact by public identity.
@@ -230,8 +294,13 @@ impl Storage {
 
     fn decode_contact(&self, id: i64, sealed: &[u8]) -> Result<Contact, StorageError> {
         let plain = open_record(self.keys().contact(), Table::Contact, id, sealed)?;
-        let (peer, name) = decode_contact(&plain)?;
-        Ok(Contact { id, peer, name })
+        let (peer, name, verified) = decode_contact(&plain)?;
+        Ok(Contact {
+            id,
+            peer,
+            name,
+            verified,
+        })
     }
 
     // ── Conversations ───────────────────────────────────────────────────────
@@ -250,7 +319,7 @@ impl Storage {
 
     /// The same write, but without its own transaction, so that it can be
     /// combined with others into one.
-    fn write_chat(&self, contact_id: i64, chat: &Chat) -> Result<(), StorageError> {
+    fn write_chat(&self, contact_id: i64, chat: &Chat) -> Result<i64, StorageError> {
         let conn = self.conn();
         let tag = self.keys().tag().tag(chat.session_id().as_bytes());
 
@@ -277,7 +346,7 @@ impl Storage {
             "UPDATE sessions SET sealed = ?1, contact_id = ?2 WHERE id = ?3",
             rusqlite::params![sealed, contact_id, id],
         )?;
-        Ok(())
+        Ok(id)
     }
 
     /// Reads the conversations with the given contact.
@@ -330,31 +399,40 @@ impl Storage {
     // nothing of their layout, so it does not depend on the transport.
 
     /// Establishes a contact together with its conversation **in one transaction**: the
-    /// contact, the Olm session, the transport state of the pair, the first messages, and the
-    /// device account whose one-time key the introduction has just spent
-    /// (`docs/transport.md` §8). Returns the contact's id and the ids of the messages.
+    /// contact, the Olm session, the transport state of the pair, the first messages, the
+    /// device account whose one-time key the introduction has just spent, and the answered
+    /// invitation forgotten (`docs/transport.md` §8). The contact's other sessions are removed:
+    /// one session per contact (§2). Returns the contact's id and the ids of the new messages;
+    /// `pair_state` is given those ids, since the pair state refers to them.
     ///
     /// Written separately, a crash in between could leave a contact without a session, or a
     /// spent one-time key without the contact it was spent on — and a second try would then
-    /// fail for good, since that key is gone.
+    /// fail for good, since that key is gone; or an answered invitation, opened again with a
+    /// key that is no longer there.
     pub fn introduce(
         &self,
-        peer: &PublicIdentity,
-        name: &str,
-        chat: &Chat,
-        account: &apeiron_core::vodozemac::olm::Account,
-        pair_state: &[u8],
-        messages: &[Vec<u8>],
+        intro: Introduction<'_>,
+        pair_state: impl FnOnce(&[i64]) -> Zeroizing<Vec<u8>>,
     ) -> Result<(i64, Vec<i64>), StorageError> {
         let tx = self.conn().unchecked_transaction()?;
-        let contact = self.write_contact(peer, name)?;
-        self.write_chat(contact, chat)?;
-        self.write_pair_state(contact, pair_state)?;
-        let mut ids = Vec::with_capacity(messages.len());
-        for m in messages {
+        let contact = self.write_contact(intro.peer, intro.name, false)?;
+        let session = self.write_chat(contact, intro.chat)?;
+        tx.execute(
+            "DELETE FROM sessions WHERE contact_id = ?1 AND id != ?2",
+            rusqlite::params![contact, session],
+        )?;
+        let mut ids = Vec::with_capacity(intro.messages.len());
+        for m in intro.messages {
             ids.push(self.write_new_message(contact, m)?);
         }
-        self.write_account(account)?;
+        for (id, m) in intro.changed {
+            self.write_message(*id, contact, m)?;
+        }
+        self.write_pair_state(contact, &pair_state(&ids))?;
+        self.write_account(intro.account)?;
+        if let Some(invitation) = intro.answered {
+            tx.execute("DELETE FROM invitations WHERE id = ?1", [invitation])?;
+        }
         tx.commit()?;
         Ok((contact, ids))
     }
@@ -367,17 +445,19 @@ impl Storage {
     /// encrypt again with a chain key the peer has already seen, and the second message would
     /// be refused; a pair state saved without its messages would acknowledge what nobody can
     /// ever read.
+    ///
+    /// `pair_state` is given the ids the new messages got: the pair state refers to them (which
+    /// message a later acknowledgement is for), and they exist only inside this transaction.
     pub fn commit_conversation(
         &self,
         contact_id: i64,
         chat: &Chat,
-        pair_state: &[u8],
-        new_messages: &[Vec<u8>],
-        changed_messages: &[(i64, Vec<u8>)],
+        new_messages: &[Zeroizing<Vec<u8>>],
+        changed_messages: &[(i64, Zeroizing<Vec<u8>>)],
+        pair_state: impl FnOnce(&[i64]) -> Zeroizing<Vec<u8>>,
     ) -> Result<Vec<i64>, StorageError> {
         let tx = self.conn().unchecked_transaction()?;
         self.write_chat(contact_id, chat)?;
-        self.write_pair_state(contact_id, pair_state)?;
         let mut ids = Vec::with_capacity(new_messages.len());
         for m in new_messages {
             ids.push(self.write_new_message(contact_id, m)?);
@@ -385,6 +465,7 @@ impl Storage {
         for (id, m) in changed_messages {
             self.write_message(*id, contact_id, m)?;
         }
+        self.write_pair_state(contact_id, &pair_state(&ids))?;
         tx.commit()?;
         Ok(ids)
     }
@@ -491,6 +572,32 @@ impl Storage {
         Ok(out)
     }
 
+    /// One message of the contact, to change it.
+    pub fn message(
+        &self,
+        contact_id: i64,
+        id: i64,
+    ) -> Result<Option<Zeroizing<Vec<u8>>>, StorageError> {
+        let sealed: Option<Vec<u8>> = self
+            .conn()
+            .query_row(
+                "SELECT sealed FROM messages WHERE id = ?1 AND contact_id = ?2",
+                [id, contact_id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        sealed
+            .map(|s| {
+                Ok(Zeroizing::new(open_record(
+                    self.keys().message(),
+                    Table::Message,
+                    id,
+                    &s,
+                )?))
+            })
+            .transpose()
+    }
+
     /// Replaces the items the background job re-puts while the vault is locked, in one
     /// transaction. Sealed under a key derived from `background`, not from the database key:
     /// the job has no PIN (`docs/transport.md` §9).
@@ -532,9 +639,18 @@ impl Storage {
         Ok(out)
     }
 
-    /// Saves an invitation that waits for an answer; returns its id.
-    pub fn save_invitation(&self, plain: &[u8]) -> Result<i64, StorageError> {
+    /// Saves an invitation that waits for an answer, together with the device account that has
+    /// just published the invitation's one-time key; returns its id.
+    ///
+    /// In one transaction: an invitation saved without its account is one whose reply can never
+    /// be opened, since the key it hands out is not in the stored account.
+    pub fn save_invitation(
+        &self,
+        plain: &[u8],
+        account: &apeiron_core::vodozemac::olm::Account,
+    ) -> Result<i64, StorageError> {
         let tx = self.conn().unchecked_transaction()?;
+        self.write_account(account)?;
         tx.execute(
             "INSERT INTO invitations (sealed) VALUES (?1)",
             [Vec::<u8>::new()],
@@ -563,10 +679,17 @@ impl Storage {
         Ok(out)
     }
 
-    /// Forgets an invitation: answered, or expired.
-    pub fn delete_invitation(&self, id: i64) -> Result<(), StorageError> {
-        self.conn()
-            .execute("DELETE FROM invitations WHERE id = ?1", [id])?;
+    /// Forgets an invitation that will not be answered — expired or withdrawn — together with
+    /// the account its one-time key has been removed from, in one transaction.
+    pub fn retire_invitation(
+        &self,
+        id: i64,
+        account: &apeiron_core::vodozemac::olm::Account,
+    ) -> Result<(), StorageError> {
+        let tx = self.conn().unchecked_transaction()?;
+        tx.execute("DELETE FROM invitations WHERE id = ?1", [id])?;
+        self.write_account(account)?;
+        tx.commit()?;
         Ok(())
     }
 
@@ -639,19 +762,27 @@ impl Storage {
     }
 }
 
-/// Layout of a contact record: `public identity (64) ‖ name in UTF-8`.
-fn encode_contact(peer: &PublicIdentity, name: &str) -> Vec<u8> {
-    let mut out = Vec::with_capacity(64 + name.len());
+/// Layout of a contact record: `public identity (64) ‖ flags (1) ‖ name in UTF-8`; bit 0 of the
+/// flags is "verified". (Schema v1 had no flags byte, but the app never wrote a contact then, so
+/// no record of that layout exists on a phone.)
+fn encode_contact(peer: &PublicIdentity, name: &str, verified: bool) -> Vec<u8> {
+    let mut out = Vec::with_capacity(65 + name.len());
     out.extend_from_slice(&peer.to_bytes());
+    out.push(u8::from(verified));
     out.extend_from_slice(name.as_bytes());
     out
 }
 
-fn decode_contact(plain: &[u8]) -> Result<(PublicIdentity, String), StorageError> {
+fn decode_contact(plain: &[u8]) -> Result<(PublicIdentity, String, bool), StorageError> {
     let head = plain.get(..64).ok_or_else(|| {
         StorageError::Wrapper("contact record shorter than a public identity".to_string())
     })?;
-    let tail = plain.get(64..).unwrap_or_default();
+    let verified = match plain.get(64) {
+        Some(0) => false,
+        Some(1) => true,
+        _ => return Err(StorageError::Wrapper("contact record flags".to_string())),
+    };
+    let tail = plain.get(65..).unwrap_or_default();
     let peer = PublicIdentity::from_bytes(head)?;
-    Ok((peer, String::from_utf8_lossy(tail).into_owned()))
+    Ok((peer, String::from_utf8_lossy(tail).into_owned(), verified))
 }

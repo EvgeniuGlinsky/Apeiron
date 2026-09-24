@@ -13,9 +13,11 @@ use std::path::Path;
 
 use apeiron_core::vodozemac::olm::Account;
 use apeiron_core::{Chat, Identity, PrekeyBundle, SecretKey, Sigchain};
+use apeiron_store::repo::Introduction;
 use apeiron_store::testing::TestVault;
 use apeiron_store::wrapper::presence;
 use apeiron_store::{KdfParams, Opening, Presence, Storage, StorageError, DATABASE_FILE};
+use zeroize::Zeroizing;
 
 const PIN: &[u8] = b"24681357";
 const MARK: [u8; 8] = [2; 8];
@@ -43,6 +45,15 @@ fn chat_with(peer: &Identity) -> Chat {
     .verify()
     .unwrap();
     Chat::initiate(&Account::new(), &bundle).unwrap()
+}
+
+fn z(bytes: &[u8]) -> Zeroizing<Vec<u8>> {
+    Zeroizing::new(bytes.to_vec())
+}
+
+/// A pair state that does not depend on the ids of the new messages.
+fn fixed(bytes: &'static [u8]) -> impl FnOnce(&[i64]) -> Zeroizing<Vec<u8>> {
+    move |_| z(bytes)
 }
 
 fn raw(dir: &Path) -> rusqlite::Connection {
@@ -129,7 +140,7 @@ fn every_record_of_v1_survives_the_migration() {
 
     // And the new tables work at once.
     let ids = store
-        .commit_conversation(contact, &chat, b"pair", &[b"first".to_vec()], &[])
+        .commit_conversation(contact, &chat, &[z(b"first")], &[], fixed(b"pair"))
         .unwrap();
     assert_eq!(ids.len(), 1);
     assert_eq!(&*store.messages(contact, None, 10).unwrap()[0].1, b"first");
@@ -150,9 +161,9 @@ fn a_conversation_commit_is_all_or_nothing() {
     let result = store.commit_conversation(
         contact,
         &chat,
-        b"pair state",
-        &[b"new".to_vec()],
-        &[(999, b"changed".to_vec())],
+        &[z(b"new")],
+        &[(999, z(b"changed"))],
+        fixed(b"pair state"),
     );
     assert!(matches!(result, Err(StorageError::NotFound(_))));
     assert!(store.load_pair_state(contact).unwrap().is_none());
@@ -169,9 +180,9 @@ fn history_comes_a_page_at_a_time_newest_first() {
     let contact = store.save_contact(&peer.public(), "Peer").unwrap();
     let chat = chat_with(&peer);
 
-    let texts: Vec<Vec<u8>> = (0..5).map(|i| format!("m{i}").into_bytes()).collect();
+    let texts: Vec<Zeroizing<Vec<u8>>> = (0..5).map(|i| z(format!("m{i}").as_bytes())).collect();
     let ids = store
-        .commit_conversation(contact, &chat, b"p", &texts, &[])
+        .commit_conversation(contact, &chat, &texts, &[], fixed(b"p"))
         .unwrap();
 
     let page = store.messages(contact, None, 2).unwrap();
@@ -185,7 +196,13 @@ fn history_comes_a_page_at_a_time_newest_first() {
 
     // A message changed in place keeps its place.
     store
-        .commit_conversation(contact, &chat, b"p", &[], &[(ids[0], b"m0, read".to_vec())])
+        .commit_conversation(
+            contact,
+            &chat,
+            &[],
+            &[(ids[0], z(b"m0, read"))],
+            fixed(b"p"),
+        )
         .unwrap();
     let all = store.messages(contact, None, 10).unwrap();
     assert_eq!(&*all[4].1, b"m0, read");
@@ -203,9 +220,9 @@ fn messages_are_bound_to_their_place() {
         .commit_conversation(
             contact,
             &chat_with(&peer),
-            b"p",
-            &[b"a".to_vec(), b"b".to_vec()],
+            &[z(b"a"), z(b"b")],
             &[],
+            fixed(b"p"),
         )
         .unwrap();
     let conn = raw(dir.path());
@@ -268,12 +285,16 @@ fn an_introduction_is_stored_whole() {
 
     let (contact, ids) = store
         .introduce(
-            &peer.public(),
-            "Peer",
-            &chat,
-            &account,
-            b"pair",
-            &[b"hello".to_vec()],
+            Introduction {
+                peer: &peer.public(),
+                name: "Peer",
+                chat: &chat,
+                account: &account,
+                messages: &[z(b"hello")],
+                changed: &[],
+                answered: None,
+            },
+            |ids| z(format!("pair of {}", ids[0]).as_bytes()),
         )
         .unwrap();
     assert_eq!(
@@ -284,7 +305,11 @@ fn an_introduction_is_stored_whole() {
         store.load_chats(contact).unwrap()[0].session_id(),
         chat.session_id()
     );
-    assert_eq!(&*store.load_pair_state(contact).unwrap().unwrap(), b"pair");
+    // The pair state was written knowing the id its first message got.
+    assert_eq!(
+        &*store.load_pair_state(contact).unwrap().unwrap(),
+        format!("pair of {}", ids[0]).as_bytes()
+    );
     assert_eq!(store.messages(contact, None, 10).unwrap()[0].0, ids[0]);
     assert_eq!(
         store.load_account().unwrap().unwrap().curve25519_key(),
@@ -297,12 +322,13 @@ fn invitations_are_kept_until_forgotten() {
     let dir = tempfile::tempdir().unwrap();
     let vault = TestVault::empty();
     let store = open(dir.path(), &vault);
-    let a = store.save_invitation(b"invitation a").unwrap();
-    let b = store.save_invitation(b"invitation b").unwrap();
+    let account = Account::new();
+    let a = store.save_invitation(b"invitation a", &account).unwrap();
+    let b = store.save_invitation(b"invitation b", &account).unwrap();
     let all = store.invitations().unwrap();
     assert_eq!(all.len(), 2);
     assert_eq!(&*all[0].1, b"invitation a");
-    store.delete_invitation(a).unwrap();
+    store.retire_invitation(a, &account).unwrap();
     let left = store.invitations().unwrap();
     assert_eq!(left.len(), 1);
     assert_eq!(left[0].0, b);
@@ -321,9 +347,9 @@ fn nothing_new_is_in_the_file_in_the_clear() {
         let peer = Identity::generate().unwrap();
         let contact = store.save_contact(&peer.public(), "Peer").unwrap();
         store
-            .commit_conversation(contact, &chat_with(&peer), pair, &[text.to_vec()], &[])
+            .commit_conversation(contact, &chat_with(&peer), &[z(text)], &[], |_| z(pair))
             .unwrap();
-        store.save_invitation(invitation).unwrap();
+        store.save_invitation(invitation, &Account::new()).unwrap();
         store
             .replace_outbox(
                 &SecretKey::generate().unwrap(),
@@ -348,4 +374,68 @@ fn nothing_new_is_in_the_file_in_the_clear() {
             String::from_utf8_lossy(needle)
         );
     }
+}
+
+/// Introduced again: one session is left, the name the owner gave stays, the answered
+/// invitation is gone, and messages of the old conversation are changed in the same step.
+#[test]
+fn an_introduction_again_replaces_the_session_and_forgets_the_invitation() {
+    let dir = tempfile::tempdir().unwrap();
+    let vault = TestVault::empty();
+    let store = open(dir.path(), &vault);
+    let peer = Identity::generate().unwrap();
+    let account = Account::new();
+    let first = chat_with(&peer);
+    let (contact, old) = store
+        .introduce(
+            Introduction {
+                peer: &peer.public(),
+                name: "Named by me",
+                chat: &first,
+                account: &account,
+                messages: &[z(b"queued")],
+                changed: &[],
+                answered: None,
+            },
+            fixed(b"old pair"),
+        )
+        .unwrap();
+    store.set_verified(contact, true).unwrap();
+    let invitation = store.save_invitation(b"answered", &account).unwrap();
+
+    let second = chat_with(&peer);
+    let (again, _) = store
+        .introduce(
+            Introduction {
+                peer: &peer.public(),
+                name: "A label from the invitation",
+                chat: &second,
+                account: &account,
+                messages: &[],
+                changed: &[(old[0], z(b"queued, not delivered"))],
+                answered: Some(invitation),
+            },
+            fixed(b"new pair"),
+        )
+        .unwrap();
+
+    assert_eq!(again, contact);
+    let chats = store.load_chats(contact).unwrap();
+    assert_eq!(chats.len(), 1);
+    assert_eq!(chats[0].session_id(), second.session_id());
+    let found = store.contact(contact).unwrap().unwrap();
+    assert_eq!(found.name, "Named by me");
+    assert!(
+        found.verified,
+        "the verified mark belongs to the identity, not the session"
+    );
+    assert!(store.invitations().unwrap().is_empty());
+    assert_eq!(
+        &*store.message(contact, old[0]).unwrap().unwrap(),
+        b"queued, not delivered"
+    );
+    assert_eq!(
+        &*store.load_pair_state(contact).unwrap().unwrap(),
+        b"new pair"
+    );
 }
