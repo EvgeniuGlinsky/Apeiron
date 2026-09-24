@@ -4,11 +4,14 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'check_screen.dart';
 import 'fingerprint.dart';
 import 'lock_policy.dart';
 import 'raven.dart';
+import 'vault_panel.dart';
 import 'wordmark.dart';
 import 'src/rust/api/identity.dart';
+import 'src/rust/api/vault.dart';
 import 'src/rust/frb_generated.dart';
 import 'theme/tokens.dart';
 
@@ -46,6 +49,9 @@ class IdentityScreen extends StatefulWidget {
 class _IdentityScreenState extends State<IdentityScreen>
     with WidgetsBindingObserver {
   PublicIdentityView? _identity;
+
+  /// Положение хранилища ключа. `null` — ещё не спрашивали.
+  VaultStatus? _vault;
   String? _error;
   bool _busy = false;
 
@@ -105,10 +111,39 @@ class _IdentityScreenState extends State<IdentityScreen>
     }
   }
 
+  /// Открывает хранилище и читает из него личность.
+  ///
+  /// Разблокировка идёт первой и всегда: ключ базы разворачивается аппаратным
+  /// хранилищем устройства, и без него читать нечего. На запертом телефоне
+  /// железо этого не сделает — так и задумано (R-001).
   Future<void> _refresh() => _run(() async {
-    final id = await currentIdentity();
-    if (mounted) setState(() => _identity = id);
+    final vault = await unlockVault();
+    final id = vault.state == VaultState.opened
+        ? await currentIdentity()
+        : null;
+    if (mounted) {
+      setState(() {
+        _vault = vault;
+        _identity = id;
+      });
+    }
     _noteActivity();
+  });
+
+  /// Стирает всё криптографически (R-005): уничтожается ключ, а не данные.
+  ///
+  /// Предлагается ровно в одном положении — когда ключ действительно исчез и
+  /// расшифровать нечем. Во всех остальных данные целы, и стирать их за
+  /// владельца нельзя.
+  Future<void> _freshStart() => _run(() async {
+    await wipeEverything();
+    if (mounted) {
+      setState(() {
+        _identity = null;
+        _vault = null;
+      });
+    }
+    await _refresh();
   });
 
   Future<void> _generate() => _run(() async {
@@ -121,12 +156,19 @@ class _IdentityScreenState extends State<IdentityScreen>
     _idle?.cancel();
     _idle = null;
     await lockIdentity();
-    if (mounted) setState(() => _identity = null);
+    final vault = await vaultStatus();
+    if (mounted) {
+      setState(() {
+        _identity = null;
+        _vault = vault;
+      });
+    }
   });
 
   @override
   Widget build(BuildContext context) {
     final id = _identity;
+    final vault = _vault;
     return Listener(
       // Отодвигаем таймер бездействия. `translucent`, чтобы события доходили
       // и до виджетов под нами: мы слушаем, а не перехватываем.
@@ -148,6 +190,18 @@ class _IdentityScreenState extends State<IdentityScreen>
           actions: [
             if (id != null)
               IconButton(
+                tooltip: 'Самопроверка',
+                onPressed: _busy
+                    ? null
+                    : () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const CheckScreen(),
+                        ),
+                      ),
+                icon: const Icon(Icons.fact_check_outlined, color: Ap.fog400),
+              ),
+            if (id != null)
+              IconButton(
                 tooltip: 'Заблокировать',
                 onPressed: _busy ? null : _lock,
                 icon: const Icon(Icons.lock_outline, color: Ap.fog400),
@@ -165,10 +219,21 @@ class _IdentityScreenState extends State<IdentityScreen>
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (_error != null) _ErrorBanner(message: _error!),
-                    if (id == null)
-                      _LockedState(busy: _busy, onGenerate: _generate)
-                    else
-                      _IdentityView(identity: id),
+                    if (vault != null) ...[
+                      VaultPanel(
+                        status: vault,
+                        onRetry: vault.state == VaultState.opened || _busy
+                            ? null
+                            : _refresh,
+                        onFreshStart: _busy ? null : _freshStart,
+                      ),
+                      const SizedBox(height: Ap.s20),
+                    ],
+                    if (vault != null && vault.state == VaultState.opened)
+                      if (id == null)
+                        _LockedState(busy: _busy, onGenerate: _generate)
+                      else
+                        _IdentityView(identity: id),
                     const SizedBox(height: Ap.s40),
                     _HonestNote(policy: _policy),
                   ],
@@ -197,13 +262,15 @@ class _LockedState extends StatelessWidget {
         const ApeironRaven(size: 92, color: Ap.stone600),
         const SizedBox(height: Ap.s28),
         Text(
-          'ЛИЧНОСТЬ ЗАБЛОКИРОВАНА',
+          'ЛИЧНОСТИ ЕЩЁ НЕТ',
           style: t.labelLarge?.copyWith(color: Ap.bone100),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: Ap.s12),
         Text(
-          'Ключи уничтожены в памяти. Разблокировка по пину появится на этапе 2.',
+          'В хранилище этого устройства личности ещё нет. Вместе с ней будут '
+          'заведены ключи устройства и журнал личности — порознь они '
+          'бессмысленны.',
           style: t.bodySmall,
           textAlign: TextAlign.center,
         ),

@@ -6,21 +6,22 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `store`
+// These functions are ignored because they are not marked as `pub`: `view`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from`
 
-/// Создаёт новую личность, заменяя текущую.
+/// Создаёт новую личность и сохраняет её.
 ///
-/// Прежняя уничтожается, её ключи затираются. На этапе 2 это станет необратимой
-/// операцией с подтверждением: смена личности рвёт все существующие переписки.
+/// Вместе с ней заводятся аккаунт устройства и журнал личности: порознь они
+/// бессмысленны. Операция необратима — смена личности рвёт все существующие
+/// переписки, — и хранилище к этому моменту обязано быть открыто.
 Future<PublicIdentityView> generateIdentity() =>
     RustLib.instance.api.crateApiIdentityGenerateIdentity();
 
-/// Текущая личность, если она разблокирована.
+/// Текущая личность, если хранилище открыто.
 Future<PublicIdentityView?> currentIdentity() =>
     RustLib.instance.api.crateApiIdentityCurrentIdentity();
 
-/// Блокировка: уничтожает `Identity` и затирает ключи.
+/// Блокировка: запирает хранилище и затирает ключи.
 ///
 /// Вызывается при уходе приложения в фон и при гашении экрана — решение R-001.
 Future<void> lockIdentity() =>
@@ -28,14 +29,15 @@ Future<void> lockIdentity() =>
 
 /// Число сверки с собеседником по его публичной личности.
 ///
-/// Обе стороны получают одну и ту же строку. Расхождение означает, что между вами
-/// кто-то есть, и переписку начинать нельзя.
+/// Обе стороны получают одну и ту же строку. Расхождение означает, что между
+/// вами кто-то есть, и переписку начинать нельзя.
 Future<String> safetyNumberWith({required String peerPublicHex}) => RustLib
     .instance
     .api
     .crateApiIdentitySafetyNumberWith(peerPublicHex: peerPublicHex);
 
-/// Публичная личность целиком, hex — то, что кодируется в QR при добавлении контакта.
+/// Публичная личность целиком, hex — то, что кодируется в QR при добавлении
+/// контакта.
 Future<String> publicIdentityHex() =>
     RustLib.instance.api.crateApiIdentityPublicIdentityHex();
 

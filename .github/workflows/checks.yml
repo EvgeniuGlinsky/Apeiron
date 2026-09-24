@@ -45,6 +45,16 @@ jobs:
         # не предупреждение. В ядре к тому же запрещены unwrap/expect/panic.
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      - name: Линты кода под Android
+        # Весь JNI лежит под cfg(target_os = "android") и обычным прогоном не
+        # проверяется вовсе: на рабочей машине его не компилирует никто, а
+        # ошибка в нём обнаруживается уже на телефоне. Здесь это бесплатно —
+        # clippy проверяет, а не линкует, и NDK ему не нужен: у apeiron-platform
+        # нет зависимостей с кодом на C.
+        run: |
+          rustup target add aarch64-linux-android
+          cargo clippy --target aarch64-linux-android -p apeiron-platform -- -D warnings
+
       - name: Тесты
         run: cargo test --workspace
 

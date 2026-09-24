@@ -21,6 +21,7 @@ apeiron-core = { path = "../../core" }
 apeiron-store = { path = "../../store" }
 apeiron-platform = { path = "../../platform" }
 hex = "0.4"
+zeroize.workspace = true
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }

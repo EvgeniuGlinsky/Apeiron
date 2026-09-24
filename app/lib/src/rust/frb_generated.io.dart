@@ -23,7 +23,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String dco_decode_String(dynamic raw);
 
   @protected
+  bool dco_decode_bool(dynamic raw);
+
+  @protected
   PublicIdentityView dco_decode_box_autoadd_public_identity_view(dynamic raw);
+
+  @protected
+  CheckLine dco_decode_check_line(dynamic raw);
+
+  @protected
+  int dco_decode_i_32(dynamic raw);
+
+  @protected
+  List<CheckLine> dco_decode_list_check_line(dynamic raw);
 
   @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
@@ -43,12 +55,30 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void dco_decode_unit(dynamic raw);
 
   @protected
+  VaultState dco_decode_vault_state(dynamic raw);
+
+  @protected
+  VaultStatus dco_decode_vault_status(dynamic raw);
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer);
+
+  @protected
+  bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
   PublicIdentityView sse_decode_box_autoadd_public_identity_view(
     SseDeserializer deserializer,
   );
+
+  @protected
+  CheckLine sse_decode_check_line(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_i_32(SseDeserializer deserializer);
+
+  @protected
+  List<CheckLine> sse_decode_list_check_line(SseDeserializer deserializer);
 
   @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
@@ -70,17 +100,32 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_decode_unit(SseDeserializer deserializer);
 
   @protected
-  int sse_decode_i_32(SseDeserializer deserializer);
+  VaultState sse_decode_vault_state(SseDeserializer deserializer);
 
   @protected
-  bool sse_decode_bool(SseDeserializer deserializer);
+  VaultStatus sse_decode_vault_status(SseDeserializer deserializer);
 
   @protected
   void sse_encode_String(String self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bool(bool self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_public_identity_view(
     PublicIdentityView self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_check_line(CheckLine self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_i_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_check_line(
+    List<CheckLine> self,
     SseSerializer serializer,
   );
 
@@ -109,10 +154,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_unit(void self, SseSerializer serializer);
 
   @protected
-  void sse_encode_i_32(int self, SseSerializer serializer);
+  void sse_encode_vault_state(VaultState self, SseSerializer serializer);
 
   @protected
-  void sse_encode_bool(bool self, SseSerializer serializer);
+  void sse_encode_vault_status(VaultStatus self, SseSerializer serializer);
 }
 
 // Section: wire_class

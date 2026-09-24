@@ -6,10 +6,143 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
+// These functions are ignored because they are not marked as `pub`: `create_identity`, `from_session`, `state`, `storage_dir`, `with_identity`, `without_vault`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Session`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `eq`, `fmt`
+
+/// Открывает хранилище и загружает личность.
+///
+/// `Result` здесь намеренно нет: отказ железа — это положение, о котором надо
+/// рассказать, а не красный баннер с именем класса Java.
+Future<VaultStatus> unlockVault() =>
+    RustLib.instance.api.crateApiVaultUnlockVault();
+
+/// Текущее положение, без попытки открыть.
+Future<VaultStatus> vaultStatus() =>
+    RustLib.instance.api.crateApiVaultVaultStatus();
+
+/// Запирает: уничтожает ключ базы и всё, что из него выведено.
+///
+/// Вызывается при уходе приложения в фон и при гашении экрана — решение R-001.
+/// Разблокировка потребует аппаратного ключа заново, а на запертом телефоне
+/// железо им работать откажется.
+Future<void> lockVault() => RustLib.instance.api.crateApiVaultLockVault();
+
+/// Стирает всё криптографически (R-005): уничтожает ключ, а не данные.
+///
+/// Требовать нечего, потому что расшифровать нечем — даже если копию базы
+/// успели снять. Действие необратимо и вызывается только осознанно.
+Future<void> wipeEverything() =>
+    RustLib.instance.api.crateApiVaultWipeEverything();
+
+/// Прогоняет самопроверку на этом устройстве.
+Future<List<CheckLine>> selfCheck() =>
+    RustLib.instance.api.crateApiVaultSelfCheck();
+
 /// Диагностика платформы одной строкой на каждый факт.
 ///
 /// Нужна затем, что проверка на устройстве одна: установка обязана ответить на
 /// все вопросы сразу, а не на тот, который догадались задать. Отчёт
-/// показывается как есть и пересылается целиком.
+/// показывается как есть и пересылается целиком. Секретов не содержит.
 Future<String> platformDiagnostics() =>
     RustLib.instance.api.crateApiVaultPlatformDiagnostics();
+
+/// Одна строка отчёта самопроверки.
+class CheckLine {
+  final String name;
+  final bool passed;
+  final String detail;
+
+  const CheckLine({
+    required this.name,
+    required this.passed,
+    required this.detail,
+  });
+
+  @override
+  int get hashCode => name.hashCode ^ passed.hashCode ^ detail.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CheckLine &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          passed == other.passed &&
+          detail == other.detail;
+}
+
+/// В каком положении хранилище.
+enum VaultState {
+  /// Открыто и готово.
+  opened,
+
+  /// Заперто: ключ базы затёрт, нужна разблокировка.
+  locked,
+
+  /// Ключ исчез из защищённого модуля. Расшифровать нельзя ничем.
+  keyGone,
+
+  /// Преходящий отказ. Данные целы, надо повторить.
+  retry,
+
+  /// Аппаратного хранилища на этой платформе нет.
+  unavailable,
+}
+
+/// Что показывать про хранилище.
+class VaultStatus {
+  final VaultState state;
+
+  /// Пояснение для человека. Пустая строка, если пояснять нечего.
+  final String message;
+
+  /// Название уровня: StrongBox, TEE, программный, железо без уточнения.
+  final String levelName;
+
+  /// Сырое число `KeyInfo.getSecurityLevel()`. Показывается рядом, чтобы
+  /// незнакомое значение было видно, а не подменялось ближайшим знакомым.
+  final int levelRaw;
+
+  /// Лежит ли ключ в железе, по сообщению системы.
+  final bool hardwareBacked;
+
+  /// Первый ли это запуск с этим хранилищем.
+  final bool firstRun;
+
+  /// Есть ли в хранилище личность.
+  final bool hasIdentity;
+
+  const VaultStatus({
+    required this.state,
+    required this.message,
+    required this.levelName,
+    required this.levelRaw,
+    required this.hardwareBacked,
+    required this.firstRun,
+    required this.hasIdentity,
+  });
+
+  @override
+  int get hashCode =>
+      state.hashCode ^
+      message.hashCode ^
+      levelName.hashCode ^
+      levelRaw.hashCode ^
+      hardwareBacked.hashCode ^
+      firstRun.hashCode ^
+      hasIdentity.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is VaultStatus &&
+          runtimeType == other.runtimeType &&
+          state == other.state &&
+          message == other.message &&
+          levelName == other.levelName &&
+          levelRaw == other.levelRaw &&
+          hardwareBacked == other.hardwareBacked &&
+          firstRun == other.firstRun &&
+          hasIdentity == other.hasIdentity;
+}
