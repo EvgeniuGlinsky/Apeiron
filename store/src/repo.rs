@@ -152,8 +152,17 @@ impl Storage {
     /// It is looked up by an opaque tag, not by the public key: a list of peers in the
     /// clear could be read from the database file without any key.
     pub fn save_contact(&self, peer: &PublicIdentity, name: &str) -> Result<i64, StorageError> {
-        let tag = self.keys().tag().tag(&peer.to_bytes());
         let tx = self.conn().unchecked_transaction()?;
+        let id = self.write_contact(peer, name)?;
+        tx.commit()?;
+        Ok(id)
+    }
+
+    /// The same write, but without its own transaction, so that it can be combined with
+    /// others into one.
+    fn write_contact(&self, peer: &PublicIdentity, name: &str) -> Result<i64, StorageError> {
+        let tag = self.keys().tag().tag(&peer.to_bytes());
+        let tx = self.conn();
 
         let existing: Option<i64> = tx
             .query_row("SELECT id FROM contacts WHERE tag = ?1", [&tag[..]], |r| {
@@ -185,7 +194,6 @@ impl Storage {
             "UPDATE contacts SET sealed = ?1 WHERE id = ?2",
             rusqlite::params![sealed, id],
         )?;
-        tx.commit()?;
         Ok(id)
     }
 
@@ -320,6 +328,36 @@ impl Storage {
     // The records here are bytes the caller encodes (the transport's pair state, a message
     // with its direction, time and status): the storage seals them in their place and knows
     // nothing of their layout, so it does not depend on the transport.
+
+    /// Establishes a contact together with its conversation **in one transaction**: the
+    /// contact, the Olm session, the transport state of the pair, the first messages, and the
+    /// device account whose one-time key the introduction has just spent
+    /// (`docs/transport.md` §8). Returns the contact's id and the ids of the messages.
+    ///
+    /// Written separately, a crash in between could leave a contact without a session, or a
+    /// spent one-time key without the contact it was spent on — and a second try would then
+    /// fail for good, since that key is gone.
+    pub fn introduce(
+        &self,
+        peer: &PublicIdentity,
+        name: &str,
+        chat: &Chat,
+        account: &apeiron_core::vodozemac::olm::Account,
+        pair_state: &[u8],
+        messages: &[Vec<u8>],
+    ) -> Result<(i64, Vec<i64>), StorageError> {
+        let tx = self.conn().unchecked_transaction()?;
+        let contact = self.write_contact(peer, name)?;
+        self.write_chat(contact, chat)?;
+        self.write_pair_state(contact, pair_state)?;
+        let mut ids = Vec::with_capacity(messages.len());
+        for m in messages {
+            ids.push(self.write_new_message(contact, m)?);
+        }
+        self.write_account(account)?;
+        tx.commit()?;
+        Ok((contact, ids))
+    }
 
     /// Commits one round of a conversation **in one transaction**: the Olm session, the
     /// transport state of the pair, new messages and changed ones (`docs/transport.md` §4, §6).

@@ -255,6 +255,43 @@ fn the_outbox_is_for_the_background_key_only() {
     assert_eq!(columns, vec!["id".to_string(), "sealed".to_string()]);
 }
 
+/// An introduction is one transaction: the contact, its session, pair state, first message and
+/// the account whose one-time key was spent.
+#[test]
+fn an_introduction_is_stored_whole() {
+    let dir = tempfile::tempdir().unwrap();
+    let vault = TestVault::empty();
+    let store = open(dir.path(), &vault);
+    let peer = Identity::generate().unwrap();
+    let account = Account::new();
+    let chat = chat_with(&peer);
+
+    let (contact, ids) = store
+        .introduce(
+            &peer.public(),
+            "Peer",
+            &chat,
+            &account,
+            b"pair",
+            &[b"hello".to_vec()],
+        )
+        .unwrap();
+    assert_eq!(
+        store.find_contact(&peer.public()).unwrap().unwrap().id,
+        contact
+    );
+    assert_eq!(
+        store.load_chats(contact).unwrap()[0].session_id(),
+        chat.session_id()
+    );
+    assert_eq!(&*store.load_pair_state(contact).unwrap().unwrap(), b"pair");
+    assert_eq!(store.messages(contact, None, 10).unwrap()[0].0, ids[0]);
+    assert_eq!(
+        store.load_account().unwrap().unwrap().curve25519_key(),
+        account.curve25519_key()
+    );
+}
+
 #[test]
 fn invitations_are_kept_until_forgotten() {
     let dir = tempfile::tempdir().unwrap();
