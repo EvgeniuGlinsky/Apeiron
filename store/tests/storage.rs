@@ -509,7 +509,7 @@ fn the_self_check_does_not_claim_success_on_the_first_run() {
         !survived.passed,
         "on the first launch the state was declared to have survived a restart"
     );
-    assert!(survived.detail.contains("Убейте приложение"));
+    assert!(survived.detail.contains("«Остановить»"));
 }
 
 /// The most important property of the self-check: it does not turn green without a real
@@ -575,6 +575,73 @@ fn the_self_check_passes_after_a_real_reopen() {
         "2",
         "runs are not counted"
     );
+}
+
+/// The proof of a restart is not lost by running the check again in the new process.
+///
+/// On the phone the check screen runs the self-check more than once per launch, and the
+/// report that gets sent is the last one. Before this was fixed, the second run saw the
+/// mark written by the first and turned red although the restart had been proven.
+#[test]
+fn the_proof_of_a_restart_survives_a_second_run_in_the_new_process() {
+    let dir = temp();
+    let vault = TestVault::empty();
+    {
+        let store = open(dir.path(), &vault);
+        store.save_identity(&Identity::generate().unwrap()).unwrap();
+        store.save_account(&Account::new()).unwrap();
+        let _ = apeiron_store::selfcheck::run_with_mark(&store, "process-A");
+    }
+
+    let store = open(dir.path(), &vault);
+    for run in 1..=3 {
+        let checks = apeiron_store::selfcheck::run_with_mark(&store, "process-B");
+        let failed: Vec<_> = checks
+            .iter()
+            .filter(|c| !c.passed)
+            .map(|c| format!("{}: {}", c.name, c.detail))
+            .collect();
+        assert!(
+            failed.is_empty(),
+            "run {run} in the new process lost the proof: {failed:#?}"
+        );
+    }
+
+    // And a third process still sees the probe the first one planted.
+    let checks = apeiron_store::selfcheck::run_with_mark(&store, "process-C");
+    assert!(checks.iter().all(|c| c.passed));
+}
+
+/// A probe planted anew inside a process is that process's own, whatever was proven
+/// before in it.
+///
+/// Guards against keeping "restart proven" in memory: after the storage is reset within
+/// the same process, such a memory would outlive the probe it was about and turn the new
+/// probe, planted by this very process, green.
+#[test]
+fn a_probe_planted_anew_in_the_same_process_is_not_counted() {
+    let vault = TestVault::empty();
+    let old = temp();
+    {
+        let store = open(old.path(), &vault);
+        store.save_identity(&Identity::generate().unwrap()).unwrap();
+        store.save_account(&Account::new()).unwrap();
+        let _ = apeiron_store::selfcheck::run_with_mark(&store, "process-A");
+        let proven = apeiron_store::selfcheck::run_with_mark(&store, "process-B");
+        assert!(find(&proven, "закладку делал другой процесс").passed);
+    }
+
+    // The same process B starts over with an empty storage.
+    let reset = temp();
+    let vault = TestVault::empty();
+    let store = open(reset.path(), &vault);
+    store.save_identity(&Identity::generate().unwrap()).unwrap();
+    store.save_account(&Account::new()).unwrap();
+    for _ in 0..2 {
+        let checks = apeiron_store::selfcheck::run_with_mark(&store, "process-B");
+        assert!(!find(&checks, "закладку делал другой процесс").passed);
+        assert!(!find(&checks, "переписка читается после перезапуска").passed);
+    }
 }
 
 /// The self-check has no right to touch production data.

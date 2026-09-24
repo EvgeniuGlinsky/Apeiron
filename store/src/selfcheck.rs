@@ -38,6 +38,11 @@ const META_SEED_PROCESS: &str = "самопроверка/процесс, зал
 /// The text of the probe message. Stored encrypted between launches.
 const PROBE_TEXT: &str = "это сообщение зашифровано до перезапуска";
 
+/// How to really restart the app. Swiping it away from the recents list does not kill the
+/// process on Samsung, and a check that asks for a restart it cannot get stays red forever.
+const HOW_TO_RESTART: &str =
+    "Остановите приложение: Настройки → Приложения → Apeiron → «Остановить» (смахивание из недавних процесс не завершает), откройте заново и повторите";
+
 /// A random mark of **this** process.
 ///
 /// Needed because otherwise the self-check cannot tell "the app was restarted"
@@ -117,24 +122,31 @@ pub fn run_with_mark(storage: &Storage, mark: &str) -> Vec<Check> {
         detail: if fresh {
             "да — значит строкам про выживание состояния можно верить".to_string()
         } else {
-            concat!(
-                "НЕТ: пробу заложил этот же процесс. Убейте приложение из ",
-                "списка недавних и откройте заново — иначе перезапуск не ",
-                "проверен ничем"
-            )
-            .to_string()
+            format!("НЕТ: пробу заложил этот же процесс, перезапуск не проверен ничем. {HOW_TO_RESTART}")
         },
     });
 
+    let mut planted = false;
     out.push(check_level(storage));
-    out.push(check_identity(storage, fresh));
-    out.push(check_account(storage, fresh));
-    out.push(check_conversation(storage, fresh));
+    out.push(check_identity(storage, fresh, &mut planted));
+    out.push(check_account(storage, fresh, &mut planted));
+    out.push(check_conversation(storage, fresh, &mut planted));
     out.push(check_record_binding(storage));
     out.push(check_damaged_record(storage));
 
-    // The mark is written last: up to this point the checks above were reading it.
-    let _ = storage.meta_set(META_SEED_PROCESS, mark.as_bytes());
+    // The mark names the process that planted the probe, so it moves only when this run
+    // planted something. It is written last: up to this point the checks above were reading
+    // it. Rewriting it on every run made the second run in the same process see its own
+    // mark and lose the proof the first run had.
+    //
+    // No proof is kept in memory instead, on purpose: if the storage were reset within this
+    // process, a remembered "restart proven" would outlive the probe it was about, and the
+    // probe planted anew by this very process would then turn green. Here that cannot
+    // happen: planting anew moves the mark to this process.
+    let has_mark = matches!(storage.meta_get(META_SEED_PROCESS), Ok(Some(_)));
+    if planted || !has_mark {
+        let _ = storage.meta_set(META_SEED_PROCESS, mark.as_bytes());
+    }
 
     out
 }
@@ -187,7 +199,7 @@ fn check_level(storage: &Storage) -> Check {
     }
 }
 
-fn check_identity(storage: &Storage, fresh: bool) -> Check {
+fn check_identity(storage: &Storage, fresh: bool, planted: &mut bool) -> Check {
     let name = "личность пережила перезапуск";
     let identity = match storage.load_identity() {
         Ok(Some(id)) => id,
@@ -209,6 +221,7 @@ fn check_identity(storage: &Storage, fresh: bool) -> Check {
             }
         }
         Ok(None) => {
+            *planted = true;
             let _ = storage.meta_set(META_FINGERPRINT, current.as_bytes());
             not_yet(name, format!("запомнен отпечаток {current}"))
         }
@@ -216,7 +229,7 @@ fn check_identity(storage: &Storage, fresh: bool) -> Check {
     }
 }
 
-fn check_account(storage: &Storage, fresh: bool) -> Check {
+fn check_account(storage: &Storage, fresh: bool, planted: &mut bool) -> Check {
     let name = "аккаунт устройства тот же";
     let account = match storage.load_account() {
         Ok(Some(a)) => a,
@@ -238,6 +251,7 @@ fn check_account(storage: &Storage, fresh: bool) -> Check {
             }
         }
         Ok(None) => {
+            *planted = true;
             let _ = storage.meta_set(META_DEVICE_KEY, current.as_bytes());
             not_yet(name, "ключ устройства запомнен")
         }
@@ -251,7 +265,7 @@ fn check_account(storage: &Storage, fresh: bool) -> Check {
 /// ratchet state is lost between launches, the peers diverge
 /// forever, and there is nothing to fix it with; that is why it is exactly this that must
 /// be checked, not "the file is in place".
-fn check_conversation(storage: &Storage, fresh: bool) -> Check {
+fn check_conversation(storage: &Storage, fresh: bool, planted: &mut bool) -> Check {
     let name = "переписка читается после перезапуска";
 
     let saved_chat = storage.meta_get(META_PROBE_CHAT).ok().flatten();
@@ -267,7 +281,10 @@ fn check_conversation(storage: &Storage, fresh: bool) -> Check {
             Ok(text) => Check::failed(name, format!("расшифровалось другое: {text}")),
             Err(e) => Check::failed(name, e.to_string()),
         },
-        _ => match seed_probe(storage) {
+        _ => match {
+            *planted = true;
+            seed_probe(storage)
+        } {
             Ok(()) => not_yet(name, "проба заложена"),
             Err(e) => Check::failed(name, e.to_string()),
         },
@@ -386,10 +403,7 @@ fn not_yet(name: &str, detail: impl Into<String>) -> Check {
     Check {
         name: name.to_string(),
         passed: false,
-        detail: format!(
-            "проверять нечего, {}. Убейте приложение из списка недавних, откройте заново и повторите",
-            detail.into()
-        ),
+        detail: format!("проверять нечего, {}. {HOW_TO_RESTART}", detail.into()),
     }
 }
 
@@ -407,7 +421,7 @@ fn verified(name: &str, fresh: bool, detail: impl Into<String>) -> Check {
             name: name.to_string(),
             passed: false,
             detail: format!(
-                "{detail}, но закладку делал этот же процесс — перезапуск не проверен. Убейте приложение и повторите"
+                "{detail}, но закладку делал этот же процесс — перезапуск не проверен. {HOW_TO_RESTART}"
             ),
         }
     }
@@ -519,7 +533,7 @@ pub fn pin_checks<H: HardwareKey + Sync>(
             )
         } else {
             format!(
-                "неудач всего {}, все в этом процессе. Введите неверный пин, закройте приложение из недавних, откройте и повторите",
+                "неудач всего {}, все в этом процессе. Введите неверный пин и повторите после перезапуска. {HOW_TO_RESTART}",
                 state.total
             )
         },
