@@ -500,6 +500,7 @@ dependencies = [
 name = "dht-probe"
 version = "0.1.0"
 dependencies = [
+ "apeiron-core",
  "apeiron-transport",
 ]
 

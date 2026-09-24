@@ -9,7 +9,12 @@
 //!       without anything being sent to it), then read them back on the schedule;
 //!   dht-probe get --file F [--dir D]
 //!       read the items whose seeds (64 hex characters each) appear anywhere in F —
-//!       for example a report pasted from the phone.
+//!       for example a report pasted from the phone;
+//!   dht-probe chat [--items N] [--dir D]
+//!       two sides of a conversation on two nodes exchange N messages and N answers through
+//!       the real DHT, with the time each took to be read and acknowledged.
+
+mod chat;
 
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -171,6 +176,7 @@ fn real_main() -> Result<(), String> {
             }
             log(&args.dir, "[run] done");
         }
+        "chat" => chat::run(args.items, &|line| log(&args.dir, line))?,
         other => return Err(format!("unknown command {other}")),
     }
     Ok(())

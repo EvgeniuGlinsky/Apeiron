@@ -10,6 +10,7 @@
 //! - [`envelope`] and [`item`] — what an item is: one length, sealed, signed once;
 //! - [`pair`] — the state of one conversation, pure;
 //! - [`engine`] — a round of sending and one of receiving against a [`dht::Dht`];
+//! - [`mainline_dht`] — the real one;
 //! - [`probe`] — the go/no-go measurement that came first.
 
 use apeiron_core::{AeadError, ChatError, IdentityError};
@@ -19,6 +20,7 @@ pub mod dht;
 pub mod engine;
 pub mod envelope;
 pub mod item;
+pub mod mainline_dht;
 pub mod pair;
 pub mod probe;
 

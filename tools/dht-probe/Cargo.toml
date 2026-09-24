@@ -8,6 +8,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
+apeiron-core = { path = "../../core" }
 apeiron-transport = { path = "../../transport" }
 
 [lints.rust]
