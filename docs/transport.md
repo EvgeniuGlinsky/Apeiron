@@ -130,7 +130,9 @@ peer's that the open chat has shown, plus one. The peer's messages arrive in ord
 before it was shown too; the sender's message turns "read" when the mark passes its first index.
 The body length tells the two forms apart — 32 bytes without the mark, 40 with it — so a state of
 the first builds still reads, and a side that does not send receipts makes its state the old way:
-nothing in it says the setting exists. The setting is mutual, as in Signal: off, no mark is sent
+nothing in it says the setting exists. The reverse does not hold: a build before this one refuses
+a 40-byte state, and a phone that cannot read its peer's state sees neither acknowledgements nor
+new messages — both phones take the update. The setting is mutual, as in Signal: off, no mark is sent
 and none is shown. What it tells: the peer learns when a message was shown. The network learns
 little new — an open chat already shows in how often it asks (§7) — except that the state item is
 re-put when the chat is opened.
