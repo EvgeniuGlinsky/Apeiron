@@ -27,14 +27,29 @@ class _CheckScreenState extends State<CheckScreen> {
   String? _error;
   bool _busy = false;
 
-  /// Output of the DHT measurement (R-012), accumulated over the buttons pressed.
-  final StringBuffer _probe = StringBuffer();
+  /// Log of the DHT measurement (R-012). It lives in a file on the Rust side, so it
+  /// survives leaving this screen and stopping the app; this is only its copy.
+  String _probe = '';
   bool _probing = false;
 
   @override
   void initState() {
     super.initState();
     _run();
+    _showProbeLog();
+  }
+
+  Future<String> _readProbeLog() async {
+    try {
+      return await dhtProbeLog();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Future<void> _showProbeLog() async {
+    final log = await _readProbeLog();
+    if (mounted) setState(() => _probe = log);
   }
 
   Future<void> _run() async {
@@ -65,23 +80,41 @@ class _CheckScreenState extends State<CheckScreen> {
     return '${d.year}-${two(d.month)}-${two(d.day)}';
   }
 
-  /// Runs one step of the DHT measurement and appends its report.
+  /// Runs one step of the DHT measurement. The step writes its report into the log
+  /// itself; the screen then shows the log.
   Future<void> _measure(Future<String> Function() step) async {
     setState(() => _probing = true);
+    var extra = '';
     try {
-      final started = DateTime.now();
-      final text = await step();
-      final took = DateTime.now().difference(started).inSeconds;
-      _probe
-        ..writeln(text.trimRight())
-        ..writeln('(took $took s)')
-        ..writeln();
+      final report = await step();
+      // A report the log does not end with was not saved: show it anyway.
+      extra = report;
     } catch (e) {
-      _probe
-        ..writeln('DHT probe failed: $e')
-        ..writeln();
-    } finally {
-      if (mounted) setState(() => _probing = false);
+      extra = 'DHT probe failed: $e\n';
+    }
+    final log = await _readProbeLog();
+    if (mounted) {
+      setState(() {
+        _probe = log.endsWith(extra) ? log : '$log$extra';
+        _probing = false;
+      });
+    }
+  }
+
+  Future<void> _clearProbeLog() async {
+    setState(() => _probing = true);
+    var problem = '';
+    try {
+      problem = await dhtProbeClearLog();
+    } catch (e) {
+      problem = 'could not clear the log: $e';
+    }
+    final log = await _readProbeLog();
+    if (mounted) {
+      setState(() {
+        _probe = problem.isEmpty ? log : '$log$problem\n';
+        _probing = false;
+      });
     }
   }
 
@@ -96,7 +129,7 @@ class _CheckScreenState extends State<CheckScreen> {
     buffer.writeln(_diagnostics ?? '');
     if (_probe.isNotEmpty) {
       buffer.writeln();
-      buffer.write(_probe.toString());
+      buffer.write(_probe);
     }
     return buffer.toString();
   }
@@ -168,7 +201,8 @@ class _CheckScreenState extends State<CheckScreen> {
                     'Можно ли доставлять сообщения без единого сервера. '
                     'Конверты тестовые: случайные байты, ничего о вас. '
                     'Положите, через несколько часов проверьте свои, и '
-                    'заберите конверты, которые положил ПК.',
+                    'заберите конверты, которые положил ПК. Журнал '
+                    'сохраняется между запусками.',
                     style: t.bodySmall,
                   ),
                   const SizedBox(height: Ap.s12),
@@ -193,19 +227,21 @@ class _CheckScreenState extends State<CheckScreen> {
                             ? null
                             // Two sets from the desktop: one put once in the
                             // morning (does it survive?) and one re-put every
-                            // half hour (can this phone fetch at all?).
-                            : () => _measure(() async {
-                                final aged = await dhtProbeGetPublic(
-                                  day: _today(),
+                            // half hour (can this phone fetch at all?). One
+                            // call: one bootstrap, every lookup at once.
+                            : () => _measure(
+                                () => dhtProbeGetPublic(
+                                  days: [_today(), '${_today()}/fresh'],
                                   count: 24,
-                                );
-                                final fresh = await dhtProbeGetPublic(
-                                  day: '${_today()}/fresh',
-                                  count: 24,
-                                );
-                                return '$aged$fresh';
-                              }),
+                                ),
+                              ),
                         child: const Text('ЗАБРАТЬ С ПК'),
+                      ),
+                      TextButton(
+                        onPressed: _probing || _probe.isEmpty
+                            ? null
+                            : _clearProbeLog,
+                        child: const Text('ОЧИСТИТЬ ЖУРНАЛ'),
                       ),
                     ],
                   ),
@@ -220,7 +256,7 @@ class _CheckScreenState extends State<CheckScreen> {
                       padding: const EdgeInsets.all(Ap.s12),
                       color: Ap.basalt800,
                       child: Text(
-                        _probe.toString(),
+                        _probe,
                         style: Ap.mono(size: 12, color: Ap.fog400),
                       ),
                     ),

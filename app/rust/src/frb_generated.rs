@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -995903554;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1174883898;
 
 // Section: executor
 
@@ -73,6 +73,38 @@ fn wire__crate__api__identity__current_identity_impl(
             move |context| {
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::identity::current_identity()?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__probe__dht_probe_clear_log_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "dht_probe_clear_log",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Ok::<_, ()>(crate::api::probe::dht_probe_clear_log())?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -133,13 +165,45 @@ fn wire__crate__api__probe__dht_probe_get_public_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_day = <String>::sse_decode(&mut deserializer);
+            let api_days = <Vec<String>>::sse_decode(&mut deserializer);
             let api_count = <u32>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, ()>((move || {
                     let output_ok =
-                        Ok::<_, ()>(crate::api::probe::dht_probe_get_public(api_day, api_count))?;
+                        Ok::<_, ()>(crate::api::probe::dht_probe_get_public(api_days, api_count))?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__probe__dht_probe_log_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "dht_probe_log",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Ok::<_, ()>(crate::api::probe::dht_probe_log())?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -764,6 +828,18 @@ impl SseDecode for i32 {
     }
 }
 
+impl SseDecode for Vec<String> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<String>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<crate::api::vault::CheckLine> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -893,30 +969,32 @@ fn pde_ffi_dispatcher_primary_impl(
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
         1 => wire__crate__api__identity__current_identity_impl(port, ptr, rust_vec_len, data_len),
-        2 => wire__crate__api__probe__dht_probe_get_own_impl(port, ptr, rust_vec_len, data_len),
-        3 => wire__crate__api__probe__dht_probe_get_public_impl(port, ptr, rust_vec_len, data_len),
-        4 => wire__crate__api__probe__dht_probe_put_impl(port, ptr, rust_vec_len, data_len),
-        5 => wire__crate__api__identity__generate_identity_impl(port, ptr, rust_vec_len, data_len),
-        6 => wire__crate__api__identity__lock_identity_impl(port, ptr, rust_vec_len, data_len),
-        7 => wire__crate__api__vault__lock_vault_impl(port, ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__pin__pin_pad_begin_impl(port, ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__pin__pin_pad_clear_impl(port, ptr, rust_vec_len, data_len),
-        10 => wire__crate__api__pin__pin_pad_erase_impl(port, ptr, rust_vec_len, data_len),
-        11 => wire__crate__api__pin__pin_pad_press_impl(port, ptr, rust_vec_len, data_len),
-        12 => wire__crate__api__vault__pin_setup_confirm_impl(port, ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__vault__pin_setup_first_impl(port, ptr, rust_vec_len, data_len),
-        14 => wire__crate__api__vault__platform_diagnostics_impl(port, ptr, rust_vec_len, data_len),
-        15 => {
+        2 => wire__crate__api__probe__dht_probe_clear_log_impl(port, ptr, rust_vec_len, data_len),
+        3 => wire__crate__api__probe__dht_probe_get_own_impl(port, ptr, rust_vec_len, data_len),
+        4 => wire__crate__api__probe__dht_probe_get_public_impl(port, ptr, rust_vec_len, data_len),
+        5 => wire__crate__api__probe__dht_probe_log_impl(port, ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__probe__dht_probe_put_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__identity__generate_identity_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__identity__lock_identity_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__vault__lock_vault_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__pin__pin_pad_begin_impl(port, ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__pin__pin_pad_clear_impl(port, ptr, rust_vec_len, data_len),
+        12 => wire__crate__api__pin__pin_pad_erase_impl(port, ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__pin__pin_pad_press_impl(port, ptr, rust_vec_len, data_len),
+        14 => wire__crate__api__vault__pin_setup_confirm_impl(port, ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__vault__pin_setup_first_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__vault__platform_diagnostics_impl(port, ptr, rust_vec_len, data_len),
+        17 => {
             wire__crate__api__identity__public_identity_hex_impl(port, ptr, rust_vec_len, data_len)
         }
-        16 => wire__crate__api__vault__reset_legacy_impl(port, ptr, rust_vec_len, data_len),
-        17 => {
+        18 => wire__crate__api__vault__reset_legacy_impl(port, ptr, rust_vec_len, data_len),
+        19 => {
             wire__crate__api__identity__safety_number_with_impl(port, ptr, rust_vec_len, data_len)
         }
-        18 => wire__crate__api__vault__self_check_impl(port, ptr, rust_vec_len, data_len),
-        19 => wire__crate__api__vault__unlock_with_pin_impl(port, ptr, rust_vec_len, data_len),
-        20 => wire__crate__api__vault__vault_status_impl(port, ptr, rust_vec_len, data_len),
-        21 => wire__crate__api__vault__wipe_everything_impl(port, ptr, rust_vec_len, data_len),
+        20 => wire__crate__api__vault__self_check_impl(port, ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__vault__unlock_with_pin_impl(port, ptr, rust_vec_len, data_len),
+        22 => wire__crate__api__vault__vault_status_impl(port, ptr, rust_vec_len, data_len),
+        23 => wire__crate__api__vault__wipe_everything_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1060,6 +1138,16 @@ impl SseEncode for i32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         serializer.cursor.write_i32::<NativeEndian>(self).unwrap();
+    }
+}
+
+impl SseEncode for Vec<String> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <String>::sse_encode(item, serializer);
+        }
     }
 }
 

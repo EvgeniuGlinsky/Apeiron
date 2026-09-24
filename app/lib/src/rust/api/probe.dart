@@ -6,7 +6,14 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `unix_s`
+// These functions are ignored because they are not marked as `pub`: `log_path`, `newest`, `own_report`, `public_report`, `put_report`, `record`, `unix_s`, `utc`, `verdict`
+
+/// The log of every step so far, oldest first. Empty if nothing was measured yet.
+Future<String> dhtProbeLog() => RustLib.instance.api.crateApiProbeDhtProbeLog();
+
+/// Forgets the log. The seeds stay: "check own" still finds what was put.
+Future<String> dhtProbeClearLog() =>
+    RustLib.instance.api.crateApiProbeDhtProbeClearLog();
 
 /// Puts `count` probe items with random seeds and remembers them on this phone.
 ///
@@ -15,10 +22,17 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 Future<String> dhtProbePut({required int count}) =>
     RustLib.instance.api.crateApiProbeDhtProbePut(count: count);
 
-/// Fetches the items this phone put earlier, and says how old they are.
+/// Fetches the items this phone put earlier, all at once, and lists each with its age.
 Future<String> dhtProbeGetOwn() =>
     RustLib.instance.api.crateApiProbeDhtProbeGetOwn();
 
-/// Fetches the desktop's items for `day` — public seeds, so nothing had to be sent here.
-Future<String> dhtProbeGetPublic({required String day, required int count}) =>
-    RustLib.instance.api.crateApiProbeDhtProbeGetPublic(day: day, count: count);
+/// Fetches the desktop's items for each of `days` — public seeds, so nothing had to be sent
+/// here. One node for all of them and every lookup at once: bootstrapping twice and looking
+/// up one by one made this take minutes.
+Future<String> dhtProbeGetPublic({
+  required List<String> days,
+  required int count,
+}) => RustLib.instance.api.crateApiProbeDhtProbeGetPublic(
+  days: days,
+  count: count,
+);
