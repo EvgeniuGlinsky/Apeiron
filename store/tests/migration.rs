@@ -119,6 +119,14 @@ fn every_record_of_v1_survives_the_migration() {
         b"yes".to_vec()
     );
 
+    // The self-check says so, as it will on the phone after the update.
+    let checks = apeiron_store::selfcheck::run_with_mark(&store, "after the migration");
+    let schema = checks
+        .iter()
+        .find(|c| c.name == "database schema")
+        .expect("a line about the schema");
+    assert!(schema.passed, "{}", schema.detail);
+
     // And the new tables work at once.
     let ids = store
         .commit_conversation(contact, &chat, b"pair", &[b"first".to_vec()], &[])

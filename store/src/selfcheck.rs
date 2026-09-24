@@ -132,6 +132,7 @@ pub fn run_with_mark(storage: &Storage, mark: &str) -> Vec<Check> {
 
     let mut planted = false;
     out.push(check_level(storage));
+    out.push(check_schema(storage));
     out.push(check_identity(storage, fresh, &mut planted));
     out.push(check_account(storage, fresh, &mut planted));
     out.push(check_conversation(storage, fresh, &mut planted));
@@ -200,6 +201,42 @@ fn check_level(storage: &Storage) -> Check {
         name: "where the key is kept".to_string(),
         passed: level.is_hardware(),
         detail,
+    }
+}
+
+/// The schema the database is at, and that the tables of the latest one are there.
+///
+/// Schema v2 arrived on phones that had v1: the migration ran on the owner's data. The lines
+/// after this one read the records v1 wrote; this one says the migration happened at all.
+fn check_schema(storage: &Storage) -> Check {
+    let name = "database schema";
+    let conn = storage.conn();
+    let version: Result<u16, _> =
+        conn.query_row("SELECT version FROM schema_version WHERE id = 1", [], |r| {
+            r.get(0)
+        });
+    let tables: Result<u32, _> = conn.query_row(
+        "SELECT count(*) FROM sqlite_master WHERE type = 'table'
+         AND name IN ('messages', 'pair_state', 'outbox', 'invitations')",
+        [],
+        |r| r.get(0),
+    );
+    match (version, tables) {
+        (Ok(v), Ok(4)) if v == crate::SCHEMA_VERSION => Check::ok(
+            name,
+            format!(
+                "version {v}, record format {}; the tables of v2 are there",
+                crate::record::RECORD_FORMAT
+            ),
+        ),
+        (Ok(v), Ok(n)) => Check::failed(
+            name,
+            format!(
+                "version {v} (expected {}), {n} of 4 tables of v2",
+                crate::SCHEMA_VERSION
+            ),
+        ),
+        (Err(e), _) | (_, Err(e)) => Check::failed(name, e.to_string()),
     }
 }
 
