@@ -19,7 +19,7 @@ use apeiron_core::{random_bytes, Identity, Sigchain};
 use apeiron_platform::{HardwareKey, SecurityLevel};
 use apeiron_store::pin::PinState;
 use apeiron_store::wrapper::{self, presence};
-use apeiron_store::{selfcheck, KdfParams, Opening, Presence, Storage, StorageError};
+use apeiron_store::{selfcheck, KdfParams, Opening, PinChange, Presence, Storage, StorageError};
 
 use crate::paths::storage_dir;
 use crate::pin_entry;
@@ -262,13 +262,60 @@ fn open_session(guard: &mut Option<Session>, storage: Storage) -> VaultStatus {
 #[flutter_rust_bridge::frb]
 pub fn pin_setup_first() -> Result<u32, String> {
     let len = pin_entry::keep_as_first()?;
-    if (apeiron_store::MIN_PIN_DIGITS..=apeiron_store::MAX_PIN_DIGITS)
-        .contains(&usize::try_from(len).unwrap_or(0))
-    {
+    if apeiron_store::PIN_LENGTHS.contains(&usize::try_from(len).unwrap_or(0)) {
         Ok(len)
     } else {
         pin_entry::clear()?;
         Err(StorageError::BadPin.to_string())
+    }
+}
+
+/// Keeps the typed digits as the current PIN, the first step of changing it. Nothing is
+/// checked yet: the current PIN is tried once, together with the new one, in
+/// [`pin_change_confirm`].
+#[flutter_rust_bridge::frb]
+pub fn pin_change_current() -> Result<u32, String> {
+    pin_entry::keep_as_current()
+}
+
+/// Changes the PIN: the kept current PIN, the new one from [`pin_setup_first`], and the typed
+/// confirmation. The data is not re-encrypted; the database key is sealed under the new PIN.
+/// A wrong current PIN is counted like any wrong PIN.
+#[flutter_rust_bridge::frb]
+pub fn pin_change_confirm() -> VaultStatus {
+    let current = pin_entry::take_current();
+    let entries = pin_entry::take_first_and_confirmation();
+    let (Ok(Some(current)), Ok((Some(first), confirmation))) = (current, entries) else {
+        let _ = pin_entry::clear();
+        return VaultStatus::bare(VaultState::PinMismatch, "");
+    };
+    if first.as_slice() != confirmation.as_slice() {
+        return VaultStatus::bare(VaultState::PinMismatch, "");
+    }
+    let guard = match state().lock() {
+        Ok(g) => g,
+        Err(_) => return VaultStatus::bare(VaultState::Retry, POISONED),
+    };
+    let Some(session) = guard.as_ref() else {
+        return VaultStatus::bare(VaultState::Locked, LOCKED);
+    };
+    let dir = session.storage.dir().to_path_buf();
+    match Storage::change_pin(&dir, &Vault::default(), &current, &first, writer()) {
+        Ok(PinChange::Changed) => {
+            let mut prefs = apeiron_store::PinPrefs::load(&dir);
+            prefs.digits = u8::try_from(first.len()).ok();
+            let _ = prefs.save(&dir);
+            VaultStatus::from_session(session)
+        }
+        Ok(PinChange::WrongPin { failures, wait_ms }) => {
+            FAILURES_HERE.fetch_add(1, Ordering::Relaxed);
+            VaultStatus::waiting(VaultState::WrongPin, failures, wait_ms)
+        }
+        Ok(PinChange::Delayed { wait_ms }) => {
+            let failures = PinState::load(&dir).consecutive;
+            VaultStatus::waiting(VaultState::Delayed, failures, wait_ms)
+        }
+        Err(e) => VaultStatus::from_error(e),
     }
 }
 
@@ -302,7 +349,13 @@ pub fn pin_setup_confirm() -> VaultStatus {
         KdfParams::production(),
         writer(),
     ) {
-        Ok(storage) => open_session(&mut guard, storage),
+        Ok(storage) => {
+            // The pad submits by itself at the last digit from now on.
+            let mut prefs = apeiron_store::PinPrefs::load(&dir);
+            prefs.digits = u8::try_from(first.len()).ok();
+            let _ = prefs.save(&dir);
+            open_session(&mut guard, storage)
+        }
         Err(e) => VaultStatus::from_error(e),
     }
 }
@@ -337,6 +390,8 @@ pub fn reset_legacy() -> VaultStatus {
 pub fn lock_vault() -> Result<(), String> {
     let mut guard = state().lock().map_err(|_| POISONED.to_string())?;
     *guard = None;
+    // In the background the phone does not listen (R-012): the DHT node goes with the keys.
+    crate::messaging::drop_network();
     pin_entry::clear()
 }
 
@@ -471,6 +526,15 @@ pub(crate) fn create_identity() -> Result<(), String> {
 
     session.identity = Some(identity);
     Ok(())
+}
+
+/// Runs `f` on the open storage and a copy of the identity; `None` when locked or without an
+/// identity. The copy is for work that has to happen outside this lock (the network).
+pub(crate) fn with_open<T>(f: impl FnOnce(&Storage, &Identity) -> T) -> Result<Option<T>, String> {
+    let guard = state().lock().map_err(|_| POISONED.to_string())?;
+    Ok(guard
+        .as_ref()
+        .and_then(|s| s.identity.as_ref().map(|id| f(&s.storage, id))))
 }
 
 /// Reads something public from the current identity.

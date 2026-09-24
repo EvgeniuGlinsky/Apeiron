@@ -33,6 +33,7 @@
 mod fsutil;
 pub mod keys;
 pub mod pin;
+pub mod prefs;
 pub mod record;
 pub mod repo;
 pub mod selfcheck;
@@ -47,8 +48,9 @@ use apeiron_platform::{HardwareKey, PlatformError, SecurityLevel};
 use rusqlite::Connection;
 
 pub use keys::Keys;
+pub use prefs::PinPrefs;
 pub use record::{Table, SCHEMA_VERSION};
-pub use wrapper::{KdfParams, Presence, Timing, MAX_PIN_DIGITS, MIN_PIN_DIGITS};
+pub use wrapper::{KdfParams, Presence, Timing, MAX_PIN_DIGITS, MIN_PIN_DIGITS, PIN_LENGTHS};
 
 /// The database file name.
 pub const DATABASE_FILE: &str = "apeiron.db";
@@ -172,6 +174,20 @@ impl std::fmt::Debug for Storage {
     }
 }
 
+/// The outcome of a PIN change that reached a decision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PinChange {
+    Changed,
+    /// The current PIN is wrong: counted like any wrong PIN.
+    WrongPin {
+        failures: u32,
+        wait_ms: u64,
+    },
+    Delayed {
+        wait_ms: u64,
+    },
+}
+
 /// The outcome of an unlock attempt that reached a decision.
 pub enum Opening {
     Opened(Box<Storage>),
@@ -218,6 +234,24 @@ impl Storage {
                 Opening::WrongPin { failures, wait_ms }
             }
             wrapper::Unlock::Delayed { wait_ms } => Opening::Delayed { wait_ms },
+        })
+    }
+
+    /// Changes the PIN of the vault in `dir` (see [`wrapper::change_pin`]). The open storage,
+    /// if any, stays open: its key does not change.
+    pub fn change_pin<H: HardwareKey>(
+        dir: &Path,
+        hw: &H,
+        current: &[u8],
+        new: &[u8],
+        writer: [u8; 8],
+    ) -> Result<PinChange, StorageError> {
+        Ok(match wrapper::change_pin(dir, hw, current, new, writer)? {
+            wrapper::Unlock::Opened(_) => PinChange::Changed,
+            wrapper::Unlock::WrongPin { failures, wait_ms } => {
+                PinChange::WrongPin { failures, wait_ms }
+            }
+            wrapper::Unlock::Delayed { wait_ms } => PinChange::Delayed { wait_ms },
         })
     }
 
@@ -314,6 +348,11 @@ impl Storage {
         let _guard = wrapper::open_lock()?;
         hw.destroy().map_err(StorageError::from)?;
         wrapper::remove(dir)?;
+        // A fresh start chooses the pad again.
+        let prefs = dir.join(prefs::PIN_PREFS_FILE);
+        if prefs.exists() {
+            std::fs::remove_file(&prefs)?;
+        }
 
         let db = dir.join(DATABASE_FILE);
         // The write-ahead log and the shared-memory index are database files just the same,

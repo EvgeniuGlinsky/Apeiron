@@ -21,6 +21,7 @@ apeiron-core = { path = "../../core" }
 apeiron-store = { path = "../../store" }
 apeiron-platform = { path = "../../platform" }
 apeiron-transport = { path = "../../transport" }
+apeiron-messenger = { path = "../../messenger" }
 hex = "0.4"
 zeroize.workspace = true
 

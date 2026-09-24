@@ -1362,6 +1362,7 @@ name = "rust_lib_apeiron"
 version = "0.1.0"
 dependencies = [
  "apeiron-core",
+ "apeiron-messenger",
  "apeiron-platform",
  "apeiron-store",
  "apeiron-transport",

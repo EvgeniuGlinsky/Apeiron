@@ -1,4 +1,5 @@
 pub mod api;
+mod messaging;
 mod paths;
 mod pin_entry;
 

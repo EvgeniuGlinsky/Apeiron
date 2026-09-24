@@ -19,6 +19,8 @@ struct Entry {
     /// First entry while a new PIN is being set; compared with the confirmation here,
     /// not in Dart.
     first: Option<Zeroizing<Vec<u8>>>,
+    /// The current PIN, while it is being changed.
+    current: Option<Zeroizing<Vec<u8>>>,
 }
 
 static ENTRY: OnceLock<Mutex<Entry>> = OnceLock::new();
@@ -29,6 +31,7 @@ fn entry() -> &'static Mutex<Entry> {
             layout: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
             digits: Zeroizing::new(Vec::with_capacity(MAX_DIGITS)),
             first: None,
+            current: None,
         })
     })
 }
@@ -55,9 +58,13 @@ fn shuffled() -> Result<[u8; 10], String> {
     Ok(layout)
 }
 
-/// Starts a new attempt: a fresh layout and no digits. Returns the layout.
-pub(crate) fn begin() -> Result<Vec<u8>, String> {
-    let layout = shuffled()?;
+/// The usual layout: 1 2 3 / 4 5 6 / 7 8 9 / 0.
+const ORDERED: [u8; 10] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
+
+/// Starts a new attempt: a fresh layout — scrambled, or the usual one if the owner chose
+/// it — and no digits. Returns the layout.
+pub(crate) fn begin(scrambled: bool) -> Result<Vec<u8>, String> {
+    let layout = if scrambled { shuffled()? } else { ORDERED };
     let mut e = entry().lock().map_err(|_| POISONED.to_string())?;
     e.layout = layout;
     e.digits.clear();
@@ -89,6 +96,7 @@ pub(crate) fn clear() -> Result<(), String> {
     let mut e = entry().lock().map_err(|_| POISONED.to_string())?;
     e.digits.clear();
     e.first = None;
+    e.current = None;
     Ok(())
 }
 
@@ -107,6 +115,21 @@ pub(crate) fn keep_as_first() -> Result<u32, String> {
     let mut e = entry().lock().map_err(|_| POISONED.to_string())?;
     e.first = Some(digits);
     Ok(len)
+}
+
+/// Stores the typed digits as the current PIN, for a change of PIN.
+pub(crate) fn keep_as_current() -> Result<u32, String> {
+    let digits = take()?;
+    let len = digits.len() as u32;
+    let mut e = entry().lock().map_err(|_| POISONED.to_string())?;
+    e.current = Some(digits);
+    Ok(len)
+}
+
+/// Takes the kept current PIN.
+pub(crate) fn take_current() -> Result<Option<Zeroizing<Vec<u8>>>, String> {
+    let mut e = entry().lock().map_err(|_| POISONED.to_string())?;
+    Ok(e.current.take())
 }
 
 /// The first entry of a new PIN (if any) and its confirmation.

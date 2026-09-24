@@ -55,9 +55,16 @@ const KDF_LEGACY: u8 = 1;
 /// Argon2id → HMAC chain in the secure hardware → HKDF.
 const KDF_PIN: u8 = 2;
 
-/// Shortest and longest accepted PIN, in digits.
-pub const MIN_PIN_DIGITS: usize = 6;
+/// Shortest and longest PIN an unlock accepts, in digits. A PIN set by an earlier build
+/// (6 to 16 digits) keeps working.
+pub const MIN_PIN_DIGITS: usize = 4;
 pub const MAX_PIN_DIGITS: usize = 16;
+
+/// The lengths a new PIN may have — the owner's choice (24.09.2026). What each costs someone
+/// with root on the phone (Galaxy A24, chain ≈ 0.8 s a guess): 4 digits — minutes, 6 — about
+/// half a day, 8 — about a month. Without root the attempt counter and its delays hold all of
+/// them; the interface recommends 8.
+pub const PIN_LENGTHS: [usize; 3] = [4, 6, 8];
 
 /// `magic (6) ‖ kdf (1) ‖ level (1) ‖ rounds (4) ‖ argon KiB (4) ‖ argon t (4) ‖
 /// argon p (1) ‖ salt (16) ‖ key check value (16)`.
@@ -381,6 +388,16 @@ fn check_pin(pin: &[u8]) -> Result<(), StorageError> {
     }
 }
 
+/// A PIN about to be set: digits only, and one of [`PIN_LENGTHS`].
+fn check_new_pin(pin: &[u8]) -> Result<(), StorageError> {
+    check_pin(pin)?;
+    if PIN_LENGTHS.contains(&pin.len()) {
+        Ok(())
+    } else {
+        Err(StorageError::BadPin)
+    }
+}
+
 fn kcv_of<H: HardwareKey>(hw: &H) -> Result<[u8; 16], StorageError> {
     let out = hw.hmac_chain(&KCV_INPUT, 1)?;
     out.get(..16)
@@ -434,7 +451,7 @@ pub fn create<H: HardwareKey>(
     writer: [u8; 8],
 ) -> Result<OpenedVault, StorageError> {
     let _guard = open_lock()?;
-    check_pin(pin)?;
+    check_new_pin(pin)?;
     if !matches!(inspect(dir)?, VaultFile::Absent) {
         return Err(StorageError::Wrapper(
             "a vault already exists here".to_string(),
@@ -520,6 +537,66 @@ pub fn unlock<H: HardwareKey>(
     writer: [u8; 8],
 ) -> Result<Unlock, StorageError> {
     let _guard = open_lock()?;
+    Ok(match attempt(dir, hw, pin, writer)? {
+        Attempt::Opened { vault, .. } => Unlock::Opened(vault),
+        Attempt::Refused(refused) => refused,
+    })
+}
+
+/// Changes the PIN: opens with `current` — counted like any attempt — and seals the same
+/// database key under `new`. The conversations are not touched; thirty-two bytes are
+/// re-sealed, under a fresh salt.
+///
+/// The new file replaces the old one atomically and is read back and opened with `new`
+/// before this returns; if that fails, the old file is put back. A PIN that does not open
+/// what it just sealed must not be the only way in.
+pub fn change_pin<H: HardwareKey>(
+    dir: &Path,
+    hw: &H,
+    current: &[u8],
+    new: &[u8],
+    writer: [u8; 8],
+) -> Result<Unlock, StorageError> {
+    let _guard = open_lock()?;
+    check_new_pin(new)?;
+    let (vault, dek, header) = match attempt(dir, hw, current, writer)? {
+        Attempt::Opened { vault, dek, header } => (vault, dek, header),
+        Attempt::Refused(refused) => return Ok(refused),
+    };
+    let path = dir.join(WRAPPER_FILE);
+    let old = std::fs::read(&path)?;
+    let header = Header {
+        salt: random_bytes::<16>()?,
+        ..header
+    };
+    let (w, _) = derive(hw, &header, new)?;
+    let head = header.to_bytes();
+    let mut file = head.clone();
+    file.extend_from_slice(&seal(&w, &head, dek.as_ref())?);
+    write_atomically(dir, &path, &file)?;
+    if let Err(e) = verify_from_disk(dir, hw, new, &dek) {
+        write_atomically(dir, &path, &old)?;
+        return Err(e);
+    }
+    Ok(Unlock::Opened(vault))
+}
+
+enum Attempt {
+    Opened {
+        vault: OpenedVault,
+        dek: Zeroizing<[u8; 32]>,
+        header: Header,
+    },
+    Refused(Unlock),
+}
+
+/// The body of [`unlock`], under the caller's lock.
+fn attempt<H: HardwareKey>(
+    dir: &Path,
+    hw: &H,
+    pin: &[u8],
+    writer: [u8; 8],
+) -> Result<Attempt, StorageError> {
     let (header, sealed) = match inspect(dir)? {
         VaultFile::Pin(h, s) => (h, s),
         VaultFile::Absent => return Err(StorageError::NoVault),
@@ -547,9 +624,9 @@ pub fn unlock<H: HardwareKey>(
         if let Some(anchored) = reanchored {
             anchored.save(dir)?;
         }
-        return Ok(Unlock::Delayed {
+        return Ok(Attempt::Refused(Unlock::Delayed {
             wait_ms: remaining_ms,
-        });
+        }));
     }
 
     let counted = state.begin_attempt(now, writer);
@@ -568,32 +645,36 @@ pub fn unlock<H: HardwareKey>(
     match open(&w, &head, &sealed) {
         Ok(plain) => {
             let plain = Zeroizing::new(plain);
-            let dek: [u8; 32] = plain
-                .as_slice()
-                .try_into()
-                .map_err(|_| StorageError::Wrapper("sealed key of wrong length".to_string()))?;
+            let dek: Zeroizing<[u8; 32]> =
+                Zeroizing::new(plain.as_slice().try_into().map_err(|_| {
+                    StorageError::Wrapper("sealed key of wrong length".to_string())
+                })?);
             // A failure to reset the counter must not keep the owner out: the verdict was
             // "correct". The worst outcome is a count that is too high.
             let _ = counted.after_success(writer).save(dir);
-            Ok(Unlock::Opened(OpenedVault {
-                dek: SecretKey::from_bytes(dek),
-                level: status.level,
-                level_at_creation: SecurityLevel::from_raw(i32::from(header.level)),
-                created_now: false,
-                creation_note: status.note,
-                timing,
-                rounds: header.rounds,
-            }))
+            Ok(Attempt::Opened {
+                vault: OpenedVault {
+                    dek: SecretKey::from_bytes(*dek),
+                    level: status.level,
+                    level_at_creation: SecurityLevel::from_raw(i32::from(header.level)),
+                    created_now: false,
+                    creation_note: status.note,
+                    timing,
+                    rounds: header.rounds,
+                },
+                dek,
+                header,
+            })
         }
         Err(_) => {
             let wait_ms = match counted.gate(now) {
                 Gate::Open => 0,
                 Gate::Wait { remaining_ms, .. } => remaining_ms,
             };
-            Ok(Unlock::WrongPin {
+            Ok(Attempt::Refused(Unlock::WrongPin {
                 failures: counted.consecutive,
                 wait_ms,
-            })
+            }))
         }
     }
 }

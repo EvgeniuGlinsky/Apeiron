@@ -17,7 +17,7 @@ use apeiron_platform::{HardwareKey, SecurityLevel};
 use apeiron_store::pin::{PinState, FREE_ATTEMPTS, PIN_STATE_FILE};
 use apeiron_store::testing::{Behaviour, Call, TestVault};
 use apeiron_store::wrapper::{self, presence, WRAPPER_FILE};
-use apeiron_store::{KdfParams, Opening, Presence, Storage, StorageError};
+use apeiron_store::{KdfParams, Opening, PinChange, Presence, Storage, StorageError};
 
 const PIN: &[u8] = b"24681357";
 const WRONG: &[u8] = b"13572468";
@@ -294,7 +294,7 @@ fn an_impossible_pin_is_refused_and_not_counted() {
     let dir = temp();
     let vault = TestVault::empty();
     create(dir.path(), &vault);
-    for pin in [&b"12345"[..], b"12345678901234567", b"1234567a", b""] {
+    for pin in [&b"123"[..], b"12345678901234567", b"1234567a", b""] {
         let err = attempt(dir.path(), &vault, pin)
             .err()
             .expect("an impossible PIN was tried");
@@ -303,20 +303,57 @@ fn an_impossible_pin_is_refused_and_not_counted() {
     assert_eq!(consecutive(dir.path()), 0);
 }
 
+/// A new PIN is 4, 6 or 8 digits; nothing else is set.
 #[test]
-fn a_short_pin_cannot_be_set() {
+fn a_pin_of_another_length_cannot_be_set() {
     let dir = temp();
     let vault = TestVault::empty();
-    let err = Storage::create(
-        dir.path(),
-        &vault,
-        b"12345",
-        KdfParams::fast_for_tests(),
-        MARK,
-    )
-    .expect_err("a five-digit PIN was accepted");
-    assert!(matches!(err, StorageError::BadPin));
+    for pin in [&b"123"[..], b"12345", b"1234567", b"1234567890"] {
+        let err = Storage::create(dir.path(), &vault, pin, KdfParams::fast_for_tests(), MARK)
+            .expect_err("a PIN of a length not offered was accepted");
+        assert!(matches!(err, StorageError::BadPin));
+    }
     assert_eq!(presence(dir.path()).unwrap(), Presence::Absent);
+    for pin in [&b"1234"[..], b"123456", b"12345678"] {
+        let dir = temp();
+        assert!(
+            Storage::create(dir.path(), &vault, pin, KdfParams::fast_for_tests(), MARK).is_ok()
+        );
+    }
+}
+
+/// Changing the PIN keeps every record: the database key is the same, sealed anew. A wrong
+/// current PIN is counted and changes nothing.
+#[test]
+fn a_changed_pin_opens_the_same_data_and_the_old_one_does_not() {
+    let dir = temp();
+    let vault = TestVault::empty();
+    {
+        let store = Storage::create(dir.path(), &vault, PIN, KdfParams::fast_for_tests(), MARK)
+            .expect("created");
+        store
+            .meta_set("kept", b"across the change")
+            .expect("written");
+    }
+    assert!(matches!(
+        Storage::change_pin(dir.path(), &vault, b"00000000", b"1234", MARK).expect("decided"),
+        PinChange::WrongPin { failures: 1, .. }
+    ));
+    assert_eq!(
+        Storage::change_pin(dir.path(), &vault, PIN, b"1234", MARK).expect("decided"),
+        PinChange::Changed
+    );
+    match Storage::unlock(dir.path(), &vault, b"1234", MARK).expect("decided") {
+        Opening::Opened(store) => assert_eq!(
+            store.meta_get("kept").expect("read").expect("present"),
+            b"across the change".to_vec()
+        ),
+        _ => panic!("the new PIN did not open"),
+    }
+    assert!(!matches!(
+        Storage::unlock(dir.path(), &vault, PIN, MARK).expect("decided"),
+        Opening::Opened(_)
+    ));
 }
 
 /// A header asking for 2³² rounds or gigabytes of Argon2 memory would hang the app.
