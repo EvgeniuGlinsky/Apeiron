@@ -281,13 +281,15 @@ fn check_conversation(storage: &Storage, fresh: bool, planted: &mut bool) -> Che
             Ok(text) => Check::failed(name, format!("расшифровалось другое: {text}")),
             Err(e) => Check::failed(name, e.to_string()),
         },
-        _ => match {
+        _ => {
+            // Counted as planted before the attempt: a half-planted probe is this process's
+            // own too, and erring towards red is the only safe direction.
             *planted = true;
-            seed_probe(storage)
-        } {
-            Ok(()) => not_yet(name, "проба заложена"),
-            Err(e) => Check::failed(name, e.to_string()),
-        },
+            match seed_probe(storage) {
+                Ok(()) => not_yet(name, "проба заложена"),
+                Err(e) => Check::failed(name, e.to_string()),
+            }
+        }
     }
 }
 
