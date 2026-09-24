@@ -1,0 +1,33 @@
+[package]
+name = "apeiron-platform"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Доступ к аппаратному хранилищу ключей платформы. Один вызов JNI, только Android."
+publish = false
+
+[dependencies]
+zeroize.workspace = true
+thiserror.workspace = true
+
+# Только Android. Иначе jni поедет и в сборку под Windows, которая объявлена
+# в [graph] targets файла deny.toml.
+[target.'cfg(target_os = "android")'.dependencies]
+jni.workspace = true
+
+[lints.rust]
+# Не forbid: JNI без unsafe не бывает. Каждое снятие именованное и с
+# объяснением на месте — их перечень держится в src/lib.rs.
+unsafe_code = "deny"
+
+[lints.clippy]
+# В релизе panic = "abort": паника здесь — мгновенная смерть процесса без
+# единого слова в журнале. Поэтому запрещено всё, что паникует, включая
+# индексирование и усечение при приведении типов.
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+cast_possible_truncation = "deny"
+arithmetic_side_effects = "warn"

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Ничего из данных приложения не покидает устройство.
+
+  Мастер-ключ лежит в аппаратном хранилище этого телефона и не выгружается.
+  Любая копия базы, оказавшаяся вне устройства, нерасшифровываема — и при этом
+  остаётся лежать там, где её могут получить. Поэтому исключены оба раздела
+  целиком: cloud-backup (облако) и device-transfer (перенос на новый телефон).
+
+  Читается начиная с API 31. На 28-30 ту же роль исполняет
+  android:allowBackup="false" в манифесте.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>

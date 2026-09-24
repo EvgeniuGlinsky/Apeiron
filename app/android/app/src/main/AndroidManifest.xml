@@ -2,7 +2,20 @@
     <application
         android:label="Apeiron"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules">
+        <!-- Резервное копирование выключено намеренно, и двумя способами сразу.
+
+             Мастер-ключ живёт в аппаратном хранилище устройства и наружу не
+             выгружается — значит в бэкап уедет зашифрованная база, а ключ от неё
+             нет. Восстановление дало бы нерасшифровываемый мусор, а копия
+             шифротекста осталась бы лежать в облаке.
+
+             allowBackup="false" закрывает облачный бэкап и работает на API 28-30.
+             На targetSdk 31+ его одного мало: на части прошивок перенос на новый
+             телефон им не отключается. Поэтому рядом лежит dataExtractionRules,
+             где исключены оба раздела — и cloud-backup, и device-transfer. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"

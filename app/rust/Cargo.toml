@@ -18,6 +18,8 @@ crate-type = ["cdylib", "staticlib"]
 [dependencies]
 flutter_rust_bridge = "=2.13.0"
 apeiron-core = { path = "../../core" }
+apeiron-store = { path = "../../store" }
+apeiron-platform = { path = "../../platform" }
 hex = "0.4"
 
 [lints.rust]

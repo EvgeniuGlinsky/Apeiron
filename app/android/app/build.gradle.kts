@@ -28,7 +28,14 @@ android {
         applicationId = "io.apeiron.apeiron"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // minSdk задан числом, а не flutter.minSdkVersion, намеренно.
+        // И setIsStrongBoxBacked, и setUnlockedDeviceRequired появляются в API 28,
+        // на которых держится хранение мастер-ключа (R-002). Ниже 28 они
+        // недоступны, и схема выродилась бы в программный ключ — то есть во
+        // вторую ветку кода, которую здесь никто никогда не выполнит.
+        // Цена: API 24 покрывает 96,6 % устройств, API 28 — 93,5 %
+        // (Statcounter, апрель 2026). Теряются Android 7 и 8.
+        minSdk = 28
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
