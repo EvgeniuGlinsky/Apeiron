@@ -130,6 +130,8 @@ pub enum StorageError {
 
     #[error("internal lock poisoned: restart the app")]
     Poisoned,
+    #[error("no such {0}")]
+    NotFound(&'static str),
 }
 
 impl StorageError {
@@ -391,6 +393,42 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE INDEX IF NOT EXISTS sessions_by_contact ON sessions(contact_id);
 ";
 
+/// What schema v2 adds (`docs/transport.md` §9). Only new tables: no existing record is
+/// touched, which is what keeping the record format apart from the schema version is for.
+///
+/// - `messages` — the history, one sealed record per message, in order of `id`;
+/// - `pair_state` — the transport state of each conversation, one sealed record per contact
+///   (what was sent and not yet acknowledged, what arrived and is not yet decrypted);
+/// - `outbox` — the signed items the background job re-puts while the vault is locked, sealed
+///   under the background key, not the database key; no reference to a contact, on purpose:
+///   the background job must not learn who they are for;
+/// - `invitations` — invitations that wait for an answer.
+const SCHEMA_V2_SQL: &str = "
+CREATE TABLE IF NOT EXISTS messages (
+    id         INTEGER PRIMARY KEY,
+    contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+    sealed     BLOB NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS messages_by_contact ON messages(contact_id, id);
+
+CREATE TABLE IF NOT EXISTS pair_state (
+    id         INTEGER PRIMARY KEY,
+    contact_id INTEGER NOT NULL UNIQUE REFERENCES contacts(id) ON DELETE CASCADE,
+    sealed     BLOB NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS outbox (
+    id     INTEGER PRIMARY KEY,
+    sealed BLOB NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS invitations (
+    id     INTEGER PRIMARY KEY,
+    sealed BLOB NOT NULL
+);
+";
+
 /// Creates the schema or brings it up to the current version.
 fn prepare_schema(conn: &Connection) -> Result<(), StorageError> {
     conn.execute_batch(SCHEMA_SQL)?;
@@ -403,10 +441,15 @@ fn prepare_schema(conn: &Connection) -> Result<(), StorageError> {
 
     match found {
         None => {
-            conn.execute(
+            // A new database gets every table at once, and its version with them: a crash in
+            // between leaves no version, and the next opening starts over from here.
+            let tx = conn.unchecked_transaction()?;
+            tx.execute_batch(SCHEMA_V2_SQL)?;
+            tx.execute(
                 "INSERT INTO schema_version (id, version) VALUES (1, ?1)",
                 [SCHEMA_VERSION],
             )?;
+            tx.commit()?;
             Ok(())
         }
         Some(v) if v == SCHEMA_VERSION => Ok(()),
@@ -424,16 +467,123 @@ fn prepare_schema(conn: &Connection) -> Result<(), StorageError> {
 
 /// Moves the schema from an old version to the current one.
 ///
-/// So far there is only one version, and so this is empty. This function exists not "for
-/// the future": the first real migration will have to run on the owner's live
-/// data, and a place for it must be ready in advance, together with the rule
-/// that **every migration brings its own test proving that the data survived
-/// the transition**. There is nothing to add such a test to after the fact.
-///
-/// The steps will go one at a time, `from -> from+1 -> ... -> to`, each in its own
-/// transaction, and the version will be updated in the same transaction as the data.
+/// The steps go one at a time, `from -> from+1 -> ... -> to`, each in its own transaction,
+/// and the version is updated in the same transaction as the tables: a crash in the middle
+/// of a step leaves the database exactly as it was before it. The rule stands: **every
+/// migration brings its own test proving that the data survived the transition**
+/// (`store/tests/migration.rs`).
 fn migrate(conn: &Connection, from: u16, to: u16) -> Result<(), StorageError> {
-    debug_assert!(from < to, "migration called not to raise the version");
-    let _ = (conn, from, to);
+    for version in from..to {
+        let tx = conn.unchecked_transaction()?;
+        migration_step(&tx, version)?;
+        tx.execute(
+            "UPDATE schema_version SET version = ?1 WHERE id = 1",
+            [version.saturating_add(1)],
+        )?;
+        tx.commit()?;
+    }
     Ok(())
+}
+
+/// One step, `version -> version + 1`, inside the caller's transaction.
+fn migration_step(conn: &Connection, version: u16) -> Result<(), StorageError> {
+    match version {
+        // New tables only; the records of v1 open as they are (`record::RECORD_FORMAT`).
+        1 => conn.execute_batch(SCHEMA_V2_SQL)?,
+        other => {
+            return Err(StorageError::SchemaTooNew {
+                found: other,
+                known: SCHEMA_VERSION,
+            })
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod migration_tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+
+    /// A database exactly as schema v1 left it: its tables, version 1, a row in one of them.
+    fn v1() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA_SQL).unwrap();
+        conn.execute("INSERT INTO schema_version (id, version) VALUES (1, 1)", [])
+            .unwrap();
+        conn.execute(
+            "INSERT INTO meta (id, tag, sealed) VALUES (1, x'01', x'02')",
+            [],
+        )
+        .unwrap();
+        conn
+    }
+
+    fn tables(conn: &Connection) -> Vec<String> {
+        let mut stmt = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+            .unwrap();
+        stmt.query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap()
+    }
+
+    fn version(conn: &Connection) -> u16 {
+        conn.query_row("SELECT version FROM schema_version WHERE id = 1", [], |r| {
+            r.get(0)
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn a_step_cut_short_leaves_the_database_as_it_was() {
+        let conn = v1();
+        let before = tables(&conn);
+        {
+            // What a crash between the step and the commit leaves: the transaction is gone.
+            let tx = conn.unchecked_transaction().unwrap();
+            migration_step(&tx, 1).unwrap();
+            drop(tx);
+        }
+        assert_eq!(tables(&conn), before);
+        assert_eq!(version(&conn), 1);
+        // And the next opening migrates as if nothing had happened.
+        prepare_schema(&conn).unwrap();
+        assert_eq!(version(&conn), 2);
+    }
+
+    #[test]
+    fn v1_becomes_v2_keeping_its_rows() {
+        let conn = v1();
+        prepare_schema(&conn).unwrap();
+        assert_eq!(version(&conn), SCHEMA_VERSION);
+        let t = tables(&conn);
+        for table in ["messages", "pair_state", "outbox", "invitations"] {
+            assert!(t.iter().any(|n| n == table), "no table {table}");
+        }
+        let kept: Vec<u8> = conn
+            .query_row("SELECT sealed FROM meta WHERE id = 1", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(kept, vec![2]);
+    }
+
+    #[test]
+    fn a_new_database_is_v2_at_once() {
+        let conn = Connection::open_in_memory().unwrap();
+        prepare_schema(&conn).unwrap();
+        assert_eq!(version(&conn), SCHEMA_VERSION);
+        assert!(tables(&conn).iter().any(|n| n == "messages"));
+    }
+
+    #[test]
+    fn opening_twice_changes_nothing() {
+        let conn = v1();
+        prepare_schema(&conn).unwrap();
+        let t = tables(&conn);
+        prepare_schema(&conn).unwrap();
+        assert_eq!(tables(&conn), t);
+        assert_eq!(version(&conn), SCHEMA_VERSION);
+    }
 }

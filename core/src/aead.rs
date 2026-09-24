@@ -82,10 +82,21 @@ pub mod purpose {
     /// The key that seals the database key, from the output of the PIN's hardware chain
     /// (R-011). Not derived from the database key — it is what protects it.
     pub const PIN_WRAP: &str = "apeiron/storage/pin-wrap/v1";
+    /// The history of messages (schema v2).
+    pub const MESSAGE: &str = "apeiron/storage/message/v1";
+    /// The transport state of each conversation (schema v2).
+    pub const PAIR_STATE: &str = "apeiron/storage/pair-state/v1";
+    /// Invitations that wait for an answer (schema v2).
+    pub const INVITATION: &str = "apeiron/storage/invitation/v1";
+    /// Signed items the background job re-puts (schema v2). Derived from the **background**
+    /// key, not from the database key: the job runs while the vault is locked
+    /// (`docs/transport.md` §9).
+    pub const OUTBOX: &str = "apeiron/storage/outbox/v1";
 
     /// All labels at once, to check that there are no duplicates among them.
     pub const ALL: &[&str] = &[
-        IDENTITY, ACCOUNT, SESSION, SIGCHAIN, CONTACT, META, TAG, PIN_WRAP,
+        IDENTITY, ACCOUNT, SESSION, SIGCHAIN, CONTACT, META, TAG, PIN_WRAP, MESSAGE, PAIR_STATE,
+        INVITATION, OUTBOX,
     ];
 }
 

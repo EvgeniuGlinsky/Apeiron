@@ -251,8 +251,18 @@ goes to 2. The v1 → v2 migration only creates tables, in one transaction. Its 
 database with every kind of record, opens it with the v2 code and reads every table; and again with
 a crash injected in the middle, after which the database is still a readable v1.
 
-New tables, with their tags fixed now: `messages` (7), `outbox` (8), `inbound` (9), `pair_state`
-(10), `invitations` (11). History lives in Rust and reaches Dart one visible page at a time (R-004).
+New tables, with their tags fixed now: `messages` (7), `outbox` (8), `pair_state` (10),
+`invitations` (11). Tag 9 is reserved for a separate inbound queue: for now the parts that arrived
+and are not yet decrypted live inside the pair state, which is sealed as one record and committed
+with the session. The storage keeps these records as opaque sealed bytes and does not depend on
+the transport. A round of a conversation — the Olm session, the pair state, new and changed
+messages — is one call, one transaction (`Storage::commit_conversation`). History lives in Rust
+and reaches Dart one visible page at a time (R-004).
+
+Done (24.09.2026): `RECORD_FORMAT` split, v1 → v2 in one transaction, a record sealed by the v1
+code kept as a known answer (`a_record_sealed_by_schema_v1_still_opens`), every kind of v1 record
+read back after the migration, a step cut short leaves v1 as it was (`store/tests/migration.rs`,
+`store/src/lib.rs`).
 
 **The background key.** The background re-put needs the outbox without the PIN, so the signed items
 are sealed under a separate Keystore key without user authentication. Such a key also works on a

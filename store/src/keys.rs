@@ -21,6 +21,9 @@ pub struct Keys {
     contact: SecretKey,
     meta: SecretKey,
     tag: SecretKey,
+    message: SecretKey,
+    pair_state: SecretKey,
+    invitation: SecretKey,
 }
 
 impl Keys {
@@ -34,7 +37,22 @@ impl Keys {
             contact: dek.derive(purpose::CONTACT),
             meta: dek.derive(purpose::META),
             tag: dek.derive(purpose::TAG),
+            message: dek.derive(purpose::MESSAGE),
+            pair_state: dek.derive(purpose::PAIR_STATE),
+            invitation: dek.derive(purpose::INVITATION),
         }
+    }
+
+    pub(crate) fn message(&self) -> &SecretKey {
+        &self.message
+    }
+
+    pub(crate) fn pair_state(&self) -> &SecretKey {
+        &self.pair_state
+    }
+
+    pub(crate) fn invitation(&self) -> &SecretKey {
+        &self.invitation
     }
 
     pub(crate) fn identity(&self) -> &SecretKey {

@@ -7,7 +7,9 @@
 //! conversation state through its own parsing: corruption inside the trusted boundary
 //! goes no further than the boundary.
 
-use apeiron_core::{pickle_account, unpickle_account, Chat, Identity, PublicIdentity, Sigchain};
+use apeiron_core::{
+    pickle_account, purpose, unpickle_account, Chat, Identity, PublicIdentity, SecretKey, Sigchain,
+};
 use rusqlite::OptionalExtension;
 use zeroize::Zeroizing;
 
@@ -16,6 +18,9 @@ use crate::{Storage, StorageError};
 
 /// Row identifier in tables where there is always exactly one row.
 const SINGLETON: i64 = 1;
+
+/// Opened records with their row ids; wiped when dropped.
+pub type Records = Vec<(i64, Zeroizing<Vec<u8>>)>;
 
 /// A contact: a peer and what we have recorded about them.
 pub struct Contact {
@@ -307,6 +312,223 @@ impl Storage {
         self.write_chat(contact_id, chat)?;
         self.write_account(account)?;
         tx.commit()?;
+        Ok(())
+    }
+
+    // ── Conversations through the transport (schema v2) ─────────────────────
+    //
+    // The records here are bytes the caller encodes (the transport's pair state, a message
+    // with its direction, time and status): the storage seals them in their place and knows
+    // nothing of their layout, so it does not depend on the transport.
+
+    /// Commits one round of a conversation **in one transaction**: the Olm session, the
+    /// transport state of the pair, new messages and changed ones (`docs/transport.md` §4, §6).
+    /// Returns the ids of the new messages, in order.
+    ///
+    /// Separately they would diverge on a crash: a session saved without the pair state would
+    /// encrypt again with a chain key the peer has already seen, and the second message would
+    /// be refused; a pair state saved without its messages would acknowledge what nobody can
+    /// ever read.
+    pub fn commit_conversation(
+        &self,
+        contact_id: i64,
+        chat: &Chat,
+        pair_state: &[u8],
+        new_messages: &[Vec<u8>],
+        changed_messages: &[(i64, Vec<u8>)],
+    ) -> Result<Vec<i64>, StorageError> {
+        let tx = self.conn().unchecked_transaction()?;
+        self.write_chat(contact_id, chat)?;
+        self.write_pair_state(contact_id, pair_state)?;
+        let mut ids = Vec::with_capacity(new_messages.len());
+        for m in new_messages {
+            ids.push(self.write_new_message(contact_id, m)?);
+        }
+        for (id, m) in changed_messages {
+            self.write_message(*id, contact_id, m)?;
+        }
+        tx.commit()?;
+        Ok(ids)
+    }
+
+    fn write_pair_state(&self, contact_id: i64, plain: &[u8]) -> Result<(), StorageError> {
+        let conn = self.conn();
+        let existing: Option<i64> = conn
+            .query_row(
+                "SELECT id FROM pair_state WHERE contact_id = ?1",
+                [contact_id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        let id = match existing {
+            Some(id) => id,
+            None => {
+                conn.execute(
+                    "INSERT INTO pair_state (contact_id, sealed) VALUES (?1, ?2)",
+                    rusqlite::params![contact_id, Vec::<u8>::new()],
+                )?;
+                conn.last_insert_rowid()
+            }
+        };
+        let sealed = seal_record(self.keys().pair_state(), Table::PairState, id, plain)?;
+        conn.execute(
+            "UPDATE pair_state SET sealed = ?1 WHERE id = ?2",
+            rusqlite::params![sealed, id],
+        )?;
+        Ok(())
+    }
+
+    /// The transport state of the conversation with the contact, if there is one.
+    pub fn load_pair_state(
+        &self,
+        contact_id: i64,
+    ) -> Result<Option<Zeroizing<Vec<u8>>>, StorageError> {
+        let row: Option<(i64, Vec<u8>)> = self
+            .conn()
+            .query_row(
+                "SELECT id, sealed FROM pair_state WHERE contact_id = ?1",
+                [contact_id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
+        row.map(|(id, sealed)| {
+            Ok(Zeroizing::new(open_record(
+                self.keys().pair_state(),
+                Table::PairState,
+                id,
+                &sealed,
+            )?))
+        })
+        .transpose()
+    }
+
+    fn write_new_message(&self, contact_id: i64, plain: &[u8]) -> Result<i64, StorageError> {
+        let conn = self.conn();
+        conn.execute(
+            "INSERT INTO messages (contact_id, sealed) VALUES (?1, ?2)",
+            rusqlite::params![contact_id, Vec::<u8>::new()],
+        )?;
+        let id = conn.last_insert_rowid();
+        self.write_message(id, contact_id, plain)?;
+        Ok(id)
+    }
+
+    fn write_message(&self, id: i64, contact_id: i64, plain: &[u8]) -> Result<(), StorageError> {
+        let sealed = seal_record(self.keys().message(), Table::Message, id, plain)?;
+        let changed = self.conn().execute(
+            "UPDATE messages SET sealed = ?1 WHERE id = ?2 AND contact_id = ?3",
+            rusqlite::params![sealed, id, contact_id],
+        )?;
+        if changed == 1 {
+            Ok(())
+        } else {
+            Err(StorageError::NotFound("message of this contact"))
+        }
+    }
+
+    /// A page of the history with the contact: at most `limit` messages older than `before`
+    /// (all, if `None`), newest first. The history reaches the interface one page at a time
+    /// (R-004), never whole.
+    pub fn messages(
+        &self,
+        contact_id: i64,
+        before: Option<i64>,
+        limit: u32,
+    ) -> Result<Records, StorageError> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT id, sealed FROM messages WHERE contact_id = ?1 AND id < ?2
+             ORDER BY id DESC LIMIT ?3",
+        )?;
+        let rows = stmt.query_map(
+            rusqlite::params![contact_id, before.unwrap_or(i64::MAX), limit],
+            |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Vec<u8>>(1)?)),
+        )?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, sealed) = row?;
+            let plain = open_record(self.keys().message(), Table::Message, id, &sealed)?;
+            out.push((id, Zeroizing::new(plain)));
+        }
+        Ok(out)
+    }
+
+    /// Replaces the items the background job re-puts while the vault is locked, in one
+    /// transaction. Sealed under a key derived from `background`, not from the database key:
+    /// the job has no PIN (`docs/transport.md` §9).
+    pub fn replace_outbox(
+        &self,
+        background: &SecretKey,
+        items: &[Vec<u8>],
+    ) -> Result<(), StorageError> {
+        let key = background.derive(purpose::OUTBOX);
+        let tx = self.conn().unchecked_transaction()?;
+        tx.execute("DELETE FROM outbox", [])?;
+        for item in items {
+            tx.execute(
+                "INSERT INTO outbox (sealed) VALUES (?1)",
+                [Vec::<u8>::new()],
+            )?;
+            let id = tx.last_insert_rowid();
+            let sealed = seal_record(&key, Table::Outbox, id, item)?;
+            tx.execute(
+                "UPDATE outbox SET sealed = ?1 WHERE id = ?2",
+                rusqlite::params![sealed, id],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// The items the background job re-puts.
+    pub fn outbox(&self, background: &SecretKey) -> Result<Vec<Vec<u8>>, StorageError> {
+        let key = background.derive(purpose::OUTBOX);
+        let conn = self.conn();
+        let mut stmt = conn.prepare("SELECT id, sealed FROM outbox ORDER BY id")?;
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Vec<u8>>(1)?)))?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, sealed) = row?;
+            out.push(open_record(&key, Table::Outbox, id, &sealed)?);
+        }
+        Ok(out)
+    }
+
+    /// Saves an invitation that waits for an answer; returns its id.
+    pub fn save_invitation(&self, plain: &[u8]) -> Result<i64, StorageError> {
+        let tx = self.conn().unchecked_transaction()?;
+        tx.execute(
+            "INSERT INTO invitations (sealed) VALUES (?1)",
+            [Vec::<u8>::new()],
+        )?;
+        let id = tx.last_insert_rowid();
+        let sealed = seal_record(self.keys().invitation(), Table::Invitation, id, plain)?;
+        tx.execute(
+            "UPDATE invitations SET sealed = ?1 WHERE id = ?2",
+            rusqlite::params![sealed, id],
+        )?;
+        tx.commit()?;
+        Ok(id)
+    }
+
+    /// Every invitation that waits for an answer.
+    pub fn invitations(&self) -> Result<Records, StorageError> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare("SELECT id, sealed FROM invitations ORDER BY id")?;
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Vec<u8>>(1)?)))?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, sealed) = row?;
+            let plain = open_record(self.keys().invitation(), Table::Invitation, id, &sealed)?;
+            out.push((id, Zeroizing::new(plain)));
+        }
+        Ok(out)
+    }
+
+    /// Forgets an invitation: answered, or expired.
+    pub fn delete_invitation(&self, id: i64) -> Result<(), StorageError> {
+        self.conn()
+            .execute("DELETE FROM invitations WHERE id = ?1", [id])?;
         Ok(())
     }
 
