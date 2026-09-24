@@ -82,6 +82,8 @@ pub struct OpenedVault {
     pub level_at_creation: SecurityLevel,
     /// Была ли обёртка создана прямо сейчас (то есть первый ли это запуск).
     pub created_now: bool,
+    /// Как появился аппаратный ключ. Пусто, если не в этом запуске.
+    pub creation_note: String,
 }
 
 /// Читает обёртку или создаёт её, если это первый запуск.
@@ -104,7 +106,8 @@ fn read_existing<W: KeyWrapper>(path: &Path, wrapper: &W) -> Result<OpenedVault,
     // запуском» и «ключ исчез». Обёртка на диске означает, что ключ был; если
     // его нет, создавать новый нельзя ни при каких условиях — это уничтожило бы
     // переписку безвозвратно.
-    let level = wrapper.ensure_key(false)?;
+    let status = wrapper.ensure_key(false)?;
+    let level = status.level;
 
     let plain = wrapper.unwrap(&parsed.blob)?;
     if plain.len() != SEALED_PLAIN_BYTES {
@@ -144,6 +147,7 @@ fn read_existing<W: KeyWrapper>(path: &Path, wrapper: &W) -> Result<OpenedVault,
         level,
         level_at_creation: SecurityLevel::from_raw(i32::from(parsed.level)),
         created_now: false,
+        creation_note: status.note,
     })
 }
 
@@ -152,7 +156,8 @@ fn create_new<W: KeyWrapper>(
     path: &Path,
     wrapper: &W,
 ) -> Result<OpenedVault, StorageError> {
-    let level = wrapper.ensure_key(true)?;
+    let status = wrapper.ensure_key(true)?;
+    let level = status.level;
 
     let raw_level = clamp_level(level.raw());
     let mut plain = Zeroizing::new(Vec::with_capacity(SEALED_PLAIN_BYTES));
@@ -185,6 +190,7 @@ fn create_new<W: KeyWrapper>(
         level,
         level_at_creation: level,
         created_now: true,
+        creation_note: status.note,
     })
 }
 

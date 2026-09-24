@@ -230,6 +230,19 @@ pub fn platform_diagnostics() -> Result<String, String> {
                     created.name(),
                     created.raw()
                 ));
+                match session.storage.meta_get(apeiron_store::META_KEY_ORIGIN) {
+                    Ok(Some(note)) => report.push_str(&format!(
+                        "как появился ключ: {}\n",
+                        String::from_utf8_lossy(&note)
+                    )),
+                    // Пусто — значит хранилище создано сборкой, которая этого
+                    // ещё не записывала. Молчать нельзя: иначе отсутствие
+                    // строки прочтут как «ничего особенного не было».
+                    Ok(None) => {
+                        report.push_str("как появился ключ: не записано (создан прежней сборкой)\n")
+                    }
+                    Err(e) => report.push_str(&format!("как появился ключ: {e}\n")),
+                }
                 report.push_str(&format!(
                     "личность в хранилище: {}\n",
                     if session.identity.is_some() {

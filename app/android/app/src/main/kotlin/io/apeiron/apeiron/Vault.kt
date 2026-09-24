@@ -154,8 +154,14 @@ object Vault {
     /**
      * Убеждается, что ключ на месте, и сообщает уровень железа.
      *
-     * Ответ: `[STATUS_OK, уровень]`, где уровень — сырое число из
-     * `KeyInfo.getSecurityLevel()`, либо `[состояние] + сообщение`.
+     * Ответ: `[STATUS_OK, уровень] + заметка в UTF-8`, где уровень — сырое
+     * число из `KeyInfo.getSecurityLevel()`, либо `[состояние] + сообщение`.
+     *
+     * Заметка говорит, **как ключ появился**: пробовался ли StrongBox и чем
+     * кончилась попытка. Она отдаётся наружу, а не остаётся здесь, потому что
+     * здесь она живёт только до конца процесса — и пропадает ровно к тому
+     * моменту, когда её захотят прочитать. Хранить её будет Rust, вместе с
+     * обёрткой.
      *
      * @param allowCreate создавать ключ, если его нет. Rust передаёт `false`,
      *   когда файл обёртки уже существует: в этой ситуации отсутствие ключа
@@ -167,7 +173,7 @@ object Vault {
             val store = openStore()
             val existing = loadKey(store)
             if (existing != null) {
-                return byteArrayOf(STATUS_OK.toByte(), securityLevelOf(existing).toByte())
+                return ok(securityLevelOf(existing), "")
             }
             if (!allowCreate) {
                 lastKeyNote = "алиаса нет, а файл обёртки есть"
@@ -177,7 +183,7 @@ object Vault {
                 )
             }
             val created = createKey(store)
-            byteArrayOf(STATUS_OK.toByte(), securityLevelOf(created).toByte())
+            ok(securityLevelOf(created), lastKeyNote)
         } catch (e: KeyPermanentlyInvalidatedException) {
             lastKeyNote = describe(e)
             fail(STATUS_GONE, "ключ хранилища необратимо обесценен системой")
@@ -314,7 +320,7 @@ object Vault {
         } catch (e: Exception) {
             out.append("чтение хранилища: ").append(describe(e)).append('\n')
         }
-        out.append("последнее о ключе: ").append(lastKeyNote).append('\n')
+        out.append("о ключе в этом запуске: ").append(lastKeyNote).append('\n')
         out.append("StrongBox заявлен системой: ")
             .append(if (hasStrongBoxFeature()) "да" else "нет").append('\n')
         out.append("устройство заперто сейчас: ").append(deviceLockedNote()).append('\n')
@@ -492,6 +498,9 @@ object Vault {
         val cause = e.cause
         return if (cause != null && cause !== e) "$self <- ${cause.javaClass.name}" else self
     }
+
+    private fun ok(level: Int, note: String): ByteArray =
+        byteArrayOf(STATUS_OK.toByte(), level.toByte()) + note.toByteArray(Charsets.UTF_8)
 
     private fun fail(status: Int, message: String): ByteArray =
         byteArrayOf(status.toByte()) + message.toByteArray(Charsets.UTF_8)

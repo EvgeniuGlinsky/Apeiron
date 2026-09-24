@@ -485,13 +485,47 @@ fn the_self_check_does_not_claim_success_on_the_first_run() {
     store.save_identity(&Identity::generate().unwrap()).unwrap();
     store.save_account(&Account::new()).unwrap();
 
-    let checks = apeiron_store::selfcheck::run(&store);
+    let checks = apeiron_store::selfcheck::run_with_mark(&store, "процесс-А");
     let survived = find(&checks, "переписка читается после перезапуска");
     assert!(
         !survived.passed,
         "на первом запуске объявлено, что состояние пережило перезапуск"
     );
-    assert!(survived.detail.contains("Перезапустите"));
+    assert!(survived.detail.contains("Убейте приложение"));
+}
+
+/// Самое важное свойство самопроверки: она не зеленеет без настоящего
+/// перезапуска.
+///
+/// Открыть экран проверки второй раз в том же сеансе — не перезапуск. Без этой
+/// защиты всё стало бы зелёным, не доказав ничего, а зелёная отметка там, где
+/// ничего не проверялось, вреднее отсутствия проверки: на неё полагаются.
+#[test]
+fn the_self_check_stays_red_within_the_same_process() {
+    let dir = temp();
+    let vault = TestVault::empty();
+    let store = open(dir.path(), &vault);
+    store.save_identity(&Identity::generate().unwrap()).unwrap();
+    store.save_account(&Account::new()).unwrap();
+
+    let _ = apeiron_store::selfcheck::run_with_mark(&store, "процесс-А");
+    // Тот же процесс, второй прогон: состояние сойдётся, но зачесть нельзя.
+    let checks = apeiron_store::selfcheck::run_with_mark(&store, "процесс-А");
+
+    assert!(!find(&checks, "закладку делал другой процесс").passed);
+    for name in [
+        "личность пережила перезапуск",
+        "аккаунт устройства тот же",
+        "переписка читается после перезапуска",
+    ] {
+        let check = find(&checks, name);
+        assert!(
+            !check.passed,
+            "«{name}» зачтено без перезапуска: {}",
+            check.detail
+        );
+        assert!(check.detail.contains("этот же процесс"));
+    }
 }
 
 /// А на втором — обязана пройти целиком.
@@ -503,11 +537,12 @@ fn the_self_check_passes_after_a_real_reopen() {
         let store = open(dir.path(), &vault);
         store.save_identity(&Identity::generate().unwrap()).unwrap();
         store.save_account(&Account::new()).unwrap();
-        let _ = apeiron_store::selfcheck::run(&store);
+        let _ = apeiron_store::selfcheck::run_with_mark(&store, "процесс-А");
     }
 
+    // Другая метка = другой процесс, то есть настоящий перезапуск.
     let store = open(dir.path(), &vault);
-    let checks = apeiron_store::selfcheck::run(&store);
+    let checks = apeiron_store::selfcheck::run_with_mark(&store, "процесс-Б");
     let failed: Vec<_> = checks
         .iter()
         .filter(|c| !c.passed)
@@ -518,9 +553,9 @@ fn the_self_check_passes_after_a_real_reopen() {
         "после настоящего перезапуска не прошло: {failed:#?}"
     );
     assert_eq!(
-        find(&checks, "запусков с этим хранилищем").detail,
+        find(&checks, "прогонов проверки").detail,
         "2",
-        "запуски не считаются"
+        "прогоны не считаются"
     );
 }
 
@@ -537,8 +572,8 @@ fn the_self_check_touches_nothing_it_checks() {
     store.save_account(&Account::new()).unwrap();
     let contact = store.save_contact(&peer.public(), "Собеседник").unwrap();
 
-    let _ = apeiron_store::selfcheck::run(&store);
-    let _ = apeiron_store::selfcheck::run(&store);
+    let _ = apeiron_store::selfcheck::run_with_mark(&store, "процесс-А");
+    let _ = apeiron_store::selfcheck::run_with_mark(&store, "процесс-Б");
 
     assert_eq!(
         store

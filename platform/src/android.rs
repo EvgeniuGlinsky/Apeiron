@@ -23,7 +23,7 @@ use jni::refs::Global;
 use jni::{jni_sig, jni_str, Env, JavaVM};
 use zeroize::{Zeroize, Zeroizing};
 
-use crate::{KeyWrapper, PlatformError, SecurityLevel};
+use crate::{KeyStatus, KeyWrapper, PlatformError, SecurityLevel};
 
 /// Состояния, которыми отвечает Kotlin. Первый байт каждого ответа.
 const STATUS_OK: u8 = 0;
@@ -165,7 +165,7 @@ enum Arg<'a> {
 }
 
 impl KeyWrapper for AndroidVault {
-    fn ensure_key(&self, allow_create: bool) -> Result<SecurityLevel, PlatformError> {
+    fn ensure_key(&self, allow_create: bool) -> Result<KeyStatus, PlatformError> {
         let reply = call(
             jni_str!("ensureKey"),
             &jni_sig!((allow: boolean) -> jbyte[]),
@@ -177,7 +177,9 @@ impl KeyWrapper for AndroidVault {
             .ok_or_else(|| PlatformError::Internal("ответ ensureKey без уровня".to_string()))?;
         // Уровень приходит знаковым байтом: значений у getSecurityLevel() пять,
         // и два из них отрицательные.
-        Ok(SecurityLevel::from_raw(i32::from(*raw as i8)))
+        let level = SecurityLevel::from_raw(i32::from(*raw as i8));
+        let note = String::from_utf8_lossy(body.get(1..).unwrap_or_default()).into_owned();
+        Ok(KeyStatus { level, note })
     }
 
     fn wrap(&self, plain: &[u8]) -> Result<Vec<u8>, PlatformError> {

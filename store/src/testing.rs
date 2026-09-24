@@ -19,7 +19,7 @@ compile_error!(
 use std::sync::Mutex;
 
 use apeiron_core::{open, seal, SecretKey};
-use apeiron_platform::{KeyWrapper, PlatformError, SecurityLevel};
+use apeiron_platform::{KeyStatus, KeyWrapper, PlatformError, SecurityLevel};
 use zeroize::Zeroizing;
 
 /// Чем подставное хранилище отвечает вместо работы.
@@ -103,7 +103,7 @@ impl TestVault {
 const TEST_AAD: &[u8] = b"apeiron/testing/vault/v1";
 
 impl KeyWrapper for TestVault {
-    fn ensure_key(&self, allow_create: bool) -> Result<SecurityLevel, PlatformError> {
+    fn ensure_key(&self, allow_create: bool) -> Result<KeyStatus, PlatformError> {
         let mut state = self
             .state
             .lock()
@@ -117,8 +117,15 @@ impl KeyWrapper for TestVault {
             }
             state.key =
                 Some(SecretKey::generate().map_err(|e| PlatformError::Internal(e.to_string()))?);
+            return Ok(KeyStatus {
+                level: state.level,
+                note: "создан подставой, настоящей защиты нет".to_string(),
+            });
         }
-        Ok(state.level)
+        Ok(KeyStatus {
+            level: state.level,
+            note: String::new(),
+        })
     }
 
     fn wrap(&self, plain: &[u8]) -> Result<Vec<u8>, PlatformError> {

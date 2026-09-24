@@ -50,6 +50,9 @@ pub use record::{Table, SCHEMA_VERSION};
 /// Имя файла базы.
 pub const DATABASE_FILE: &str = "apeiron.db";
 
+/// Служебная запись: как появился аппаратный ключ.
+pub const META_KEY_ORIGIN: &str = "ключ/как появился";
+
 /// Что может пойти не так в хранилище.
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
@@ -148,14 +151,23 @@ impl Storage {
         configure(&conn)?;
         prepare_schema(&conn)?;
 
-        Ok(Self {
+        let storage = Self {
             conn,
             keys,
             level: opened.level,
             level_at_creation: opened.level_at_creation,
             created_now: opened.created_now,
             dir: dir.to_path_buf(),
-        })
+        };
+
+        // Заметку о том, как появился ключ, кладём в базу сразу: на стороне
+        // платформы она живёт только до конца процесса, а прочитать её захотят
+        // позже — когда будут разбираться, почему уровень именно такой.
+        if opened.created_now && !opened.creation_note.is_empty() {
+            storage.meta_set(META_KEY_ORIGIN, opened.creation_note.as_bytes())?;
+        }
+
+        Ok(storage)
     }
 
     /// Что система сообщает об уровне защиты ключа **сейчас**.

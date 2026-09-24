@@ -3,7 +3,7 @@
 //! Живёт вне `api/` намеренно: всё, что лежит там, разбирает
 //! flutter_rust_bridge, а этому типу через границу FFI ходить незачем.
 
-use apeiron_platform::{KeyWrapper, PlatformError, SecurityLevel};
+use apeiron_platform::{KeyStatus, KeyWrapper, PlatformError};
 
 /// Заглушка для платформ без аппаратного хранилища.
 ///
@@ -20,7 +20,7 @@ fn unavailable() -> PlatformError {
 }
 
 impl KeyWrapper for NoVault {
-    fn ensure_key(&self, _allow_create: bool) -> Result<SecurityLevel, PlatformError> {
+    fn ensure_key(&self, _allow_create: bool) -> Result<KeyStatus, PlatformError> {
         Err(unavailable())
     }
     fn wrap(&self, _plain: &[u8]) -> Result<Vec<u8>, PlatformError> {
