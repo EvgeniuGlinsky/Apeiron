@@ -314,6 +314,58 @@ drew both alike and said the fingerprint was read aloud, and on two phones peopl
 the other. **The 30 digits are a collision target** for an intermediary who knows both identities
 in advance (≈ 2⁵⁰, R-013); short codes with a commitment (SAS) replace them next.
 
+**SAS with a commitment — the design, after an adversarial review (24.09.2026), not built yet.**
+Both people have the chat open, on a voice call not carried by the messenger the invitation went
+through. The run's state is sealed in the conversation record (a format 3 of it) and every change of
+it commits **in the same transaction** as the service message it sends. **One live run per contact.**
+
+1. I → R `Start{v = 1, sas_id (16), created_at, commit}`, `commit = SHA-256("apeiron/sas/commit/v1"
+   ‖ sas_id ‖ e_I_pub)`, `e_I` a fresh X25519 pair.
+2. R, **only after its person taps "compare"**: the Start is younger than the expiry, its `sas_id`
+   is unknown, no run is live — or, while R's own Start is unanswered, the lower `sas_id` wins and
+   a tie cancels. A fresh `e_R`; `Key{sas_id, e_R_pub}`.
+3. I: its live run, the first Key, `e_R ≠ e_I`, contributory. Derives, **deletes `e_I`'s secret**,
+   shows the emoji, sends `Key{sas_id, e_I_pub}`.
+4. R: the commitment holds, `e_I ≠ e_R`, contributory. Derives, deletes `e_R`'s secret, shows.
+
+        T         = SHA-256("apeiron/sas/transcript/v1" ‖ v ‖ sas_id ‖ lower identity ‖ higher
+                            identity ‖ Olm session id ‖ e_I_pub ‖ e_R_pub)   — identities as held here
+        PRK       = HKDF-Extract(no salt, X25519(e_mine, e_theirs))
+        sas_bytes = HKDF-Expand(PRK, "apeiron/sas/v1/show" ‖ T, 6)  → 42 bits → 7 emoji of 64
+        K_mac     = HKDF-Expand(PRK, "apeiron/sas/v1/mac" ‖ T, 32)
+
+5. The person decides. **Match:** verified on this phone only, then `Done{sas_id, HMAC-SHA256(K_mac,
+   "match" ‖ T)}`. **Do not match:** the mark is taken back, `Cancel{sas_id, mismatch}`.
+6. A Done is checked: a bad MAC says "the phones disagree — not a match" and takes the mark back; a
+   good one is shown **only after the local decision** ("their phone agrees") and marks nothing.
+7. `Cancel{sas_id, reason}` at any time; a later Start cancels the live run and counts as a run;
+   at most **3 runs per contact an hour**; 10 minutes to expire, checked at unlock too.
+
+What the review changed, and why each rule is there:
+
+- *Critical:* an ephemeral key serving two runs voids the commitment — the relay knows it before
+  choosing its own and grinds 2⁴² toward a target, GPU-hours. → A fresh key per `sas_id`, made in
+  the transaction that sends it; a run is never resumed; a used `sas_id` is remembered.
+- "A failed attempt shows as a mismatch" was false: the initiator learns the code as soon as the
+  responder's key arrives, and a relay can always take that role and cancel instead. → R answers
+  only on its person's tap; every start, cancel and expiry is a system row in the history; the rate
+  limit; after two runs cut short the screen says that this is itself a warning sign.
+- Identities are sorted in `T` (as for `K_pair`), not placed by role: an honest run must either
+  match or end with a Cancel and a reason — **never show a mismatch**, or people learn that a
+  mismatch is a glitch. For the same reason the mismatch screen has no "try again".
+- Done carries a MAC and never counts as the decision: unauthenticated, it lets the relay show
+  "Bob confirmed" before A compared. Checked, it catches a wrong `contact.peer` or a bug at 256 bits
+  when the person only skimmed the emoji.
+- Service messages ride in the Olm conversation as `"\0" ‖ "apeiron-sas/1:" ‖ base64url(body)` plus
+  a readable tail for older builds. Sending a text with a NUL is refused; a NUL-prefixed payload
+  that does not parse is dropped, never shown. They are acknowledged like texts (they hold
+  indices) but stay out of the history, read marks, unread counts and ticks; stale ones — re-put
+  for up to 7 days — are ignored by `created_at` and by the remembered `sas_id`s. The background
+  "new message" would still fire for one.
+- The emoji: numbered 1–7, the name in both languages (an en screen and an ru screen are compared
+  by gist otherwise), both buttons of equal weight, the peer's state hidden until the local
+  decision. The system emoji font differs by vendor; bundled images are the better choice.
+
 ## 9. Storage (schema v2)
 
 **Records are not re-sealed.** Today `SCHEMA_VERSION` is part of every record's AAD, so raising it
