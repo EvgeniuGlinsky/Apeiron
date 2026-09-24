@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["core", "store", "platform", "relay", "app/rust"]
+members = ["core", "store", "platform", "relay", "transport", "tools/dht-probe", "app/rust"]
 
 [workspace.package]
 version = "0.1.0"

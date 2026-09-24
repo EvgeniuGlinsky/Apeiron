@@ -1,0 +1,14 @@
+[package]
+name = "dht-probe"
+description = "Desktop side of the DHT measurement: puts and fetches probe envelopes and logs survival."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+apeiron-transport = { path = "../../transport" }
+
+[lints.rust]
+unsafe_code = "forbid"
