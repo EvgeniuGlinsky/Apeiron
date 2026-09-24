@@ -79,9 +79,14 @@ pub mod purpose {
     /// closer to the content. The same technique as `K_addr` in the research
     /// (§16.2), applied to the local database.
     pub const TAG: &str = "apeiron/storage/tag/v1";
+    /// The key that seals the database key, from the output of the PIN's hardware chain
+    /// (R-011). Not derived from the database key — it is what protects it.
+    pub const PIN_WRAP: &str = "apeiron/storage/pin-wrap/v1";
 
     /// All labels at once, to check that there are no duplicates among them.
-    pub const ALL: &[&str] = &[IDENTITY, ACCOUNT, SESSION, SIGCHAIN, CONTACT, META, TAG];
+    pub const ALL: &[&str] = &[
+        IDENTITY, ACCOUNT, SESSION, SIGCHAIN, CONTACT, META, TAG, PIN_WRAP,
+    ];
 }
 
 /// What can go wrong.

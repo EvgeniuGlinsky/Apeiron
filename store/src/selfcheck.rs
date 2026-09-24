@@ -19,7 +19,9 @@ use std::sync::OnceLock;
 
 use apeiron_core::vodozemac::olm::Account;
 use apeiron_core::{random_bytes, Chat, Identity, PrekeyBundle};
+use apeiron_platform::HardwareKey;
 
+use crate::pin::PinState;
 use crate::record::{open_record, seal_record, Table};
 use crate::{Storage, StorageError};
 
@@ -409,4 +411,187 @@ fn verified(name: &str, fresh: bool, detail: impl Into<String>) -> Check {
             ),
         }
     }
+}
+
+// ─── The PIN (R-011) ─────────────────────────────────────────────────────────
+
+/// Safety factor on the attacker's speed. Measured here, one operation goes through
+/// keystore2, its database and the HAL; someone with root can talk to the secure hardware
+/// directly and skip most of that. Five to twenty times faster is plausible, so the
+/// estimate is divided by ten and called what it is: an estimate.
+const ATTACKER_SPEEDUP: u64 = 10;
+
+/// Threads used to see whether the secure hardware serves several operations at once.
+const PARALLEL_THREADS: u64 = 4;
+
+/// Checks of the PIN that only the real phone can answer.
+///
+/// `failures_in_this_process` is how many wrong PINs this very process has seen: if the
+/// counter on disk holds more, it survived a restart.
+pub fn pin_checks<H: HardwareKey + Sync>(
+    storage: &Storage,
+    hw: &H,
+    failures_in_this_process: u32,
+) -> Vec<Check> {
+    let mut out = Vec::new();
+    let dir = storage.dir();
+
+    let params = match crate::wrapper::params(dir) {
+        Ok(Some(p)) => p,
+        Ok(None) => {
+            out.push(Check::failed("пин: хранилище", "хранилище без пина"));
+            return out;
+        }
+        Err(e) => {
+            out.push(Check::failed("пин: хранилище", e.to_string()));
+            return out;
+        }
+    };
+    out.push(Check::ok(
+        "пин: параметры",
+        format!(
+            "цепочка {} операций в железе, Argon2id {} МиБ × {} прохода",
+            params.rounds,
+            params.argon_kib / 1024,
+            params.argon_t
+        ),
+    ));
+
+    let t = storage.timing();
+    out.push(Check::ok(
+        "пин: разблокировка в этом запуске",
+        format!("Argon2id {} мс, цепочка {} мс", t.argon_ms, t.chain_ms),
+    ));
+
+    let calibration = match crate::wrapper::calibrate(hw, storage.security_level(), u32::MAX) {
+        Ok(c) => c,
+        Err(e) => {
+            out.push(Check::failed("пин: замер операции", e.to_string()));
+            return out;
+        }
+    };
+    out.push(Check::ok(
+        "пин: одна операция в железе",
+        format!(
+            "{} мкс (лучшая из трёх пачек по 64)",
+            calibration.per_op_ns / 1_000
+        ),
+    ));
+
+    let parallel = parallel_speedup(hw, calibration.per_op_ns);
+    out.push(Check::ok(
+        "пин: параллельность железа",
+        match parallel {
+            Some(x) => format!(
+                "{PARALLEL_THREADS} потока дают ×{:.1} к одному",
+                x as f64 / 100.0
+            ),
+            None => "замерить не удалось".to_string(),
+        },
+    ));
+
+    out.push(estimate(params.rounds, calibration.per_op_ns, parallel));
+
+    match crate::wrapper::random_candidate_rejected(dir, hw) {
+        Ok((true, _)) => out.push(Check::ok(
+            "пин: случайный неверный пин отвергнут",
+            "проверено без счётчика: кандидат рождён внутри и наружу не выходит",
+        )),
+        Ok((false, _)) => out.push(Check::failed(
+            "пин: случайный неверный пин отвергнут",
+            "НЕТ: случайный пин открыл хранилище",
+        )),
+        Err(e) => out.push(Check::failed(
+            "пин: случайный неверный пин отвергнут",
+            e.to_string(),
+        )),
+    }
+
+    let state = PinState::load(dir);
+    let survived = state.total > failures_in_this_process;
+    out.push(Check {
+        name: "пин: счётчик пережил перезапуск".to_string(),
+        passed: survived,
+        detail: if survived {
+            format!(
+                "неудач всего {}, из них в этом процессе {failures_in_this_process}: остальные записал прежний процесс",
+                state.total
+            )
+        } else {
+            format!(
+                "неудач всего {}, все в этом процессе. Введите неверный пин, закройте приложение из недавних, откройте и повторите",
+                state.total
+            )
+        },
+    });
+
+    out.push(match hw.boot_clock() {
+        Ok(c) if c.elapsed_ms > 0 => Check::ok(
+            "пин: часы загрузки",
+            format!(
+                "BOOT_COUNT {}, elapsedRealtime {} с{}",
+                c.boot_count,
+                c.elapsed_ms / 1_000,
+                if c.boot_count < 0 {
+                    " (счётчика загрузок нет: перезагрузка узнаётся только по часам)"
+                } else {
+                    ""
+                }
+            ),
+        ),
+        Ok(c) => Check::failed("пин: часы загрузки", format!("странные часы: {c:?}")),
+        Err(e) => Check::failed("пин: часы загрузки", e.to_string()),
+    });
+
+    out
+}
+
+/// How much faster `PARALLEL_THREADS` threads get through operations than one, in
+/// hundredths (250 = ×2.5). `None` if it could not be measured.
+fn parallel_speedup<H: HardwareKey + Sync>(hw: &H, per_op_ns: u64) -> Option<u64> {
+    const ROUNDS: u32 = 64;
+    let probe = random_bytes::<32>().ok()?;
+    let started = std::time::Instant::now();
+    let all_ok = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..PARALLEL_THREADS)
+            .map(|_| scope.spawn(|| hw.hmac_chain(&probe, ROUNDS).is_ok()))
+            .collect();
+        handles.into_iter().all(|h| h.join().unwrap_or(false))
+    });
+    if !all_ok {
+        return None;
+    }
+    let wall_ns = u64::try_from(started.elapsed().as_nanos()).ok()?.max(1);
+    let serial_ns = per_op_ns
+        .checked_mul(u64::from(ROUNDS))?
+        .checked_mul(PARALLEL_THREADS)?;
+    serial_ns.checked_mul(100)?.checked_div(wall_ns)
+}
+
+/// The honest estimate of guessing the PIN by someone with root on this very phone.
+fn estimate(rounds: u32, per_op_ns: u64, parallel: Option<u64>) -> Check {
+    let speedup_x100 = parallel.unwrap_or(100).max(100);
+    // Nanoseconds per guess for the attacker: the chain, faster by the safety factor and
+    // by the parallelism measured here. Argon2id is not counted: they can precompute it.
+    let guess_ns = u64::from(rounds)
+        .saturating_mul(per_op_ns)
+        .saturating_mul(100)
+        / ATTACKER_SPEEDUP
+        / speedup_x100;
+    // On average half of the space is searched.
+    let days = |digits: u32| -> f64 {
+        let half = 10f64.powi(i32::try_from(digits).unwrap_or(0)) / 2.0;
+        half * guess_ns as f64 / 1e9 / 86_400.0
+    };
+    Check::ok(
+        "пин: оценка перебора с root на этом телефоне",
+        format!(
+            "в среднем 6 цифр ≈ {:.1} сут, 8 цифр ≈ {:.0} сут, 10 цифр ≈ {:.0} лет. \
+             Оценка с запасом ×{ATTACKER_SPEEDUP}: в обход фреймворка железо может отвечать быстрее. \
+             Если ключ извлекут из железа — эти числа не действуют, остаётся Argon2id и длина пина",
+            days(6),
+            days(8),
+            days(10) / 365.0
+        ),
+    )
 }

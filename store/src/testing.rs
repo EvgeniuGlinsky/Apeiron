@@ -1,4 +1,4 @@
-//! A test hardware vault: only for checks on the development machine.
+//! A test hardware key: only for checks on the development machine.
 //!
 //! It exists because the whole of `apeiron-store` must be testable without a phone.
 //! There is only one on-device check, and spending it on what can be found out here
@@ -16,76 +16,148 @@ compile_error!(
      the `testing` feature is enabled together with target_os = \"android\""
 );
 
+use std::path::PathBuf;
 use std::sync::Mutex;
 
-use apeiron_core::{open, seal, SecretKey};
-use apeiron_platform::{KeyStatus, KeyWrapper, PlatformError, SecurityLevel};
+use apeiron_core::random_bytes;
+use apeiron_platform::{BootClock, HardwareKey, KeyStatus, PlatformError, SecurityLevel};
+use hmac::{Hmac, KeyInit, Mac};
+use sha2::Sha256;
 use zeroize::Zeroizing;
 
-/// What the test vault answers with instead of working.
+/// What the test key answers with instead of working.
 ///
 /// Needed to check the most valuable property: a transient failure must not
-/// turn into "key gone".
+/// turn into "key gone", and must not cost the owner an attempt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Behaviour {
     /// Work as usual.
     Normal,
     /// Fail transiently: the data is intact, retry.
     Transient,
-    /// The key is gone. The only thing that gives the right to start over.
+    /// No key. The only thing that gives the right to start over.
     Gone,
-    /// Its own error.
+    /// Our own error.
     Internal,
 }
 
-struct State {
-    key: Option<SecretKey>,
-    level: SecurityLevel,
-    behaviour: Behaviour,
+/// One call, for tests that check the order of operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Call {
+    EnsureKey { allow_create: bool },
+    Chain { rounds: u32 },
+    Clock,
+    Destroy,
 }
 
-/// The test key vault.
+struct State {
+    key: Option<[u8; 32]>,
+    level: SecurityLevel,
+    behaviour: Behaviour,
+    /// Fail the chain call with this index (counting from 0) with this behaviour, once.
+    fail_chain_at: Option<(usize, Behaviour)>,
+    chain_calls: usize,
+    clock: BootClock,
+    log: Vec<Call>,
+    /// File whose content is recorded at every PIN chain (more than one round), to prove
+    /// what was on disk at the moment the hardware was asked.
+    watched: Option<PathBuf>,
+    snapshots: Vec<Option<Vec<u8>>>,
+}
+
+/// The test hardware key.
 pub struct TestVault {
     state: Mutex<State>,
 }
 
 impl TestVault {
-    /// An empty vault: no key yet, as on first launch.
+    /// No key yet, as on first launch.
     pub fn empty() -> Self {
-        Self::with_level(SecurityLevel::from_raw(SecurityLevel::STRONGBOX))
+        Self::with_level(SecurityLevel::from_raw(SecurityLevel::TRUSTED_ENVIRONMENT))
     }
 
-    /// The same, but with a given hardware level, to check the labels.
+    /// The same, with a given hardware level — to check the labels and the round floors.
     pub fn with_level(level: SecurityLevel) -> Self {
         Self {
             state: Mutex::new(State {
                 key: None,
                 level,
                 behaviour: Behaviour::Normal,
+                fail_chain_at: None,
+                chain_calls: 0,
+                clock: BootClock {
+                    boot_count: 1,
+                    elapsed_ms: 1_000,
+                },
+                log: Vec::new(),
+                watched: None,
+                snapshots: Vec::new(),
             }),
         }
     }
 
+    fn with_state<T>(&self, f: impl FnOnce(&mut State) -> T) -> Option<T> {
+        self.state.lock().ok().map(|mut s| f(&mut s))
+    }
+
     /// How to behave from now on.
     pub fn set_behaviour(&self, behaviour: Behaviour) {
-        if let Ok(mut state) = self.state.lock() {
-            state.behaviour = behaviour;
-        }
+        self.with_state(|s| s.behaviour = behaviour);
+    }
+
+    /// Make the chain call number `index` (from now, counting from 0) fail once.
+    pub fn fail_chain_call(&self, index: usize, behaviour: Behaviour) {
+        self.with_state(|s| {
+            s.fail_chain_at = Some((s.chain_calls.saturating_add(index), behaviour));
+        });
     }
 
     /// Forget the key, leaving the wrapper file in place.
     ///
-    /// This is what regularly happens in the field: a firmware update,
-    /// removal of the screen lock, restoring data from a backup without the keys.
+    /// This is what happens in the field regularly: a firmware update, removing the screen
+    /// lock, restoring data from a backup without the keys.
     pub fn forget_key(&self) {
-        if let Ok(mut state) = self.state.lock() {
-            state.key = None;
+        self.with_state(|s| s.key = None);
+    }
+
+    /// Replace the key with a different one: what a reissued key looks like.
+    pub fn replace_key(&self) {
+        if let Ok(k) = random_bytes::<32>() {
+            self.with_state(|s| s.key = Some(k));
         }
     }
 
-    /// Whether there is a key right now.
+    /// Whether there is a key now.
     pub fn has_key(&self) -> bool {
-        self.state.lock().map(|s| s.key.is_some()).unwrap_or(false)
+        self.with_state(|s| s.key.is_some()).unwrap_or(false)
+    }
+
+    /// Move the boot clock forward.
+    pub fn advance_ms(&self, ms: i64) {
+        self.with_state(|s| s.clock.elapsed_ms = s.clock.elapsed_ms.saturating_add(ms));
+    }
+
+    /// Simulate a reboot: a new boot count and a small elapsed time.
+    pub fn reboot(&self) {
+        self.with_state(|s| {
+            s.clock.boot_count = s.clock.boot_count.saturating_add(1);
+            s.clock.elapsed_ms = 5_000;
+        });
+    }
+
+    /// Record the content of `path` at every PIN chain from now on.
+    pub fn watch_file(&self, path: PathBuf) {
+        self.with_state(|s| s.watched = Some(path));
+    }
+
+    /// What the watched file held at each PIN chain, in order (`None` if it did not exist).
+    pub fn snapshots(&self) -> Vec<Option<Vec<u8>>> {
+        self.with_state(|s| s.snapshots.clone()).unwrap_or_default()
+    }
+
+    /// Calls so far, in order.
+    pub fn log(&self) -> Vec<Call> {
+        self.with_state(|s| s.log.clone()).unwrap_or_default()
     }
 
     fn fail(behaviour: Behaviour) -> Option<PlatformError> {
@@ -96,18 +168,18 @@ impl TestVault {
             Behaviour::Internal => Some(PlatformError::Internal("the fake".to_string())),
         }
     }
+
+    fn lock(&self) -> Result<std::sync::MutexGuard<'_, State>, PlatformError> {
+        self.state
+            .lock()
+            .map_err(|_| PlatformError::Internal("lock poisoned".to_string()))
+    }
 }
 
-/// The domain in which the test vault seals. Separate, so that these
-/// bytes cannot be confused with database records.
-const TEST_AAD: &[u8] = b"apeiron/testing/vault/v1";
-
-impl KeyWrapper for TestVault {
+impl HardwareKey for TestVault {
     fn ensure_key(&self, allow_create: bool) -> Result<KeyStatus, PlatformError> {
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|_| PlatformError::Internal("lock is poisoned".to_string()))?;
+        let mut state = self.lock()?;
+        state.log.push(Call::EnsureKey { allow_create });
         if let Some(e) = Self::fail(state.behaviour) {
             return Err(e);
         }
@@ -116,7 +188,7 @@ impl KeyWrapper for TestVault {
                 return Err(PlatformError::Gone);
             }
             state.key =
-                Some(SecretKey::generate().map_err(|e| PlatformError::Internal(e.to_string()))?);
+                Some(random_bytes::<32>().map_err(|e| PlatformError::Internal(e.to_string()))?);
             return Ok(KeyStatus {
                 level: state.level,
                 note: "created by the fake, no real protection".to_string(),
@@ -128,63 +200,62 @@ impl KeyWrapper for TestVault {
         })
     }
 
-    fn wrap(&self, plain: &[u8]) -> Result<Vec<u8>, PlatformError> {
-        // The same limit as on the device: tens of bytes go through the KEK.
-        if plain.is_empty() || plain.len() > 64 {
-            return Err(PlatformError::Internal(
-                "no more than 64 bytes go through the KEK".to_string(),
-            ));
+    fn hmac_chain(
+        &self,
+        input: &[u8; 32],
+        rounds: u32,
+    ) -> Result<Zeroizing<[u8; 32]>, PlatformError> {
+        let mut state = self.lock()?;
+        state.log.push(Call::Chain { rounds });
+        if rounds > 1 {
+            if let Some(path) = state.watched.clone() {
+                state.snapshots.push(std::fs::read(path).ok());
+            }
         }
-        let state = self
-            .state
-            .lock()
-            .map_err(|_| PlatformError::Internal("lock is poisoned".to_string()))?;
+        let index = state.chain_calls;
+        state.chain_calls = index.saturating_add(1);
+        if let Some((at, behaviour)) = state.fail_chain_at {
+            if at == index {
+                state.fail_chain_at = None;
+                if let Some(e) = Self::fail(behaviour) {
+                    return Err(e);
+                }
+            }
+        }
         if let Some(e) = Self::fail(state.behaviour) {
             return Err(e);
         }
-        let key = state.key.as_ref().ok_or(PlatformError::Gone)?;
-        seal(key, TEST_AAD, plain).map_err(|e| PlatformError::Internal(e.to_string()))
+        let key = state.key.ok_or(PlatformError::Gone)?;
+        let mut x = Zeroizing::new(*input);
+        for _ in 0..rounds {
+            let mut mac = <Hmac<Sha256> as KeyInit>::new_from_slice(&key)
+                .map_err(|e| PlatformError::Internal(e.to_string()))?;
+            mac.update(x.as_ref());
+            *x = mac.finalize().into_bytes().into();
+        }
+        Ok(x)
     }
 
-    fn unwrap(&self, blob: &[u8]) -> Result<Zeroizing<Vec<u8>>, PlatformError> {
-        let state = self
-            .state
-            .lock()
-            .map_err(|_| PlatformError::Internal("lock is poisoned".to_string()))?;
-        if let Some(e) = Self::fail(state.behaviour) {
-            return Err(e);
-        }
-        let key = state.key.as_ref().ok_or(PlatformError::Gone)?;
-        // A damaged wrapper is NOT "key gone": the data is in place, it is just that
-        // this file cannot be trusted. The same distinction as on the device.
-        open(key, TEST_AAD, blob)
-            .map(Zeroizing::new)
-            .map_err(|e| PlatformError::Transient(e.to_string()))
+    fn boot_clock(&self) -> Result<BootClock, PlatformError> {
+        let mut state = self.lock()?;
+        state.log.push(Call::Clock);
+        Ok(state.clock)
     }
 
     fn destroy(&self) -> Result<(), PlatformError> {
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|_| PlatformError::Internal("lock is poisoned".to_string()))?;
+        let mut state = self.lock()?;
+        state.log.push(Call::Destroy);
         state.key = None;
         Ok(())
     }
 
     fn diagnostics(&self) -> Result<String, PlatformError> {
-        let state = self
-            .state
-            .lock()
-            .map_err(|_| PlatformError::Internal("lock is poisoned".to_string()))?;
+        let state = self.lock()?;
         Ok(format!(
-            "TEST key vault, no real protection\n\
+            "FAKE key store, no real protection\n\
              key in memory: {}\n\
              level: {} ({})\n",
-            if state.key.is_some() {
-                "present"
-            } else {
-                "absent"
-            },
+            if state.key.is_some() { "yes" } else { "no" },
             state.level.name(),
             state.level.raw()
         ))

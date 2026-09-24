@@ -16,11 +16,16 @@ serde_json.workspace = true
 zeroize.workspace = true
 thiserror.workspace = true
 hex.workspace = true
+# Argon2id in front of the hardware chain (R-011). Same RustCrypto generation as the rest.
+argon2 = { version = "0.6", default-features = false, features = ["alloc", "zeroize"] }
+# Only for the test hardware key.
+hmac = { version = "0.13", optional = true }
+sha2 = { workspace = true, optional = true }
 
 [features]
-# A test source of the master key for tests on the host. It must not get into a device
-# build; see compile_error! in src/testing.rs.
-testing = []
+# A test hardware key for tests on the host. It must not get into a device build; see
+# compile_error! in src/testing.rs.
+testing = ["dep:hmac", "dep:sha2"]
 
 [dev-dependencies]
 apeiron-store = { path = ".", features = ["testing"] }

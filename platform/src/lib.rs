@@ -1,10 +1,10 @@
 //! Access to the platform's hardware key store.
 //!
-//! The crate does exactly one thing: it lets the storage wrap and unwrap thirty-two
-//! bytes with a key that lives in the device's secure module and is never
-//! exported. There is no wrapper format, no files, no mutexes and no state of any kind
-//! here: all of that belongs to `apeiron-store`, which is tested in full on the
-//! development machine.
+//! The crate does exactly one thing: it lets the storage run an HMAC chain on a key that
+//! lives in the device's secure module and is never exported — the hardware half of the
+//! PIN (R-011, [`HardwareKey`]). There is no wrapper format, no files, no attempt counter,
+//! no mutexes and no state of any kind here: all of that belongs to `apeiron-store`,
+//! which is tested in full on the development machine.
 //!
 //! # Why this is a separate crate
 //!
@@ -25,10 +25,12 @@
 //! goes away, and Gradle checks the resulting code on every build, instead of
 //! the failure being discovered on the phone.
 
-use zeroize::Zeroizing;
+mod hardware;
 
 #[cfg(target_os = "android")]
 mod android;
+
+pub use hardware::{BootClock, HardwareKey};
 
 #[cfg(target_os = "android")]
 pub use android::{storage_dir, AndroidVault};
@@ -154,37 +156,4 @@ pub struct KeyStatus {
     /// and it is the most interesting line of the report on a device where StrongBox exists
     /// but misbehaves.
     pub note: String,
-}
-
-/// The hardware key that wraps the database key.
-///
-/// The port is declared here and not in `apeiron-store` for one reason: otherwise
-/// the android crate would have to depend on the storage and drag along a build of
-/// SQLite from source, for the sake of five JNI calls.
-///
-/// Tens of bytes go through [`KeyWrapper::wrap`], not megabytes, and this
-/// limit is checked on the Kotlin side. StrongBox is tens of times slower than TEE:
-/// a megabyte takes on the order of fifteen seconds to encrypt through it, and the
-/// application would freeze before the owner's eyes.
-pub trait KeyWrapper {
-    /// Makes sure the key is in place and reports the hardware level.
-    ///
-    /// `allow_create`: whether to create the key if it is missing. Passing `true`
-    /// is allowed **only** when the wrapper does not exist yet: otherwise a missing key
-    /// means not "first launch" but "key gone", and creating a new one
-    /// would destroy the data irrecoverably.
-    fn ensure_key(&self, allow_create: bool) -> Result<KeyStatus, PlatformError>;
-
-    /// Seals short data. Returns `nonce ‖ ciphertext`.
-    fn wrap(&self, plain: &[u8]) -> Result<Vec<u8>, PlatformError>;
-
-    /// Opens what [`KeyWrapper::wrap`] returned.
-    fn unwrap(&self, iv_and_ct: &[u8]) -> Result<Zeroizing<Vec<u8>>, PlatformError>;
-
-    /// Erases the key. After this the storage cannot be recovered, and that is the point
-    /// (R-005, cryptographic erasure: the key is destroyed, not the data).
-    fn destroy(&self) -> Result<(), PlatformError>;
-
-    /// The platform report. Contains no secrets.
-    fn diagnostics(&self) -> Result<String, PlatformError>;
 }

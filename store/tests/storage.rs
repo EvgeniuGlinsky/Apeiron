@@ -18,16 +18,35 @@ use std::path::Path;
 
 use apeiron_core::vodozemac::olm::{Account, OlmMessage};
 use apeiron_core::{Chat, Identity, PrekeyBundle, Sigchain};
-use apeiron_platform::KeyWrapper;
 use apeiron_store::testing::{Behaviour, TestVault};
-use apeiron_store::{wrapper::WRAPPER_FILE, Storage, StorageError, DATABASE_FILE};
+use apeiron_store::wrapper::{presence, WRAPPER_FILE};
+use apeiron_store::{KdfParams, Opening, Presence, Storage, StorageError, DATABASE_FILE};
+
+const PIN: &[u8] = b"24681357";
+const MARK: [u8; 8] = [1; 8];
 
 fn temp() -> tempfile::TempDir {
     tempfile::tempdir().expect("the directory is created")
 }
 
+/// Creates the storage with [`PIN`] on first use, unlocks it afterwards.
 fn open(dir: &Path, vault: &TestVault) -> Storage {
-    Storage::open(dir, vault).expect("the storage opens")
+    match presence(dir).expect("the directory is readable") {
+        Presence::Absent => Storage::create(dir, vault, PIN, KdfParams::fast_for_tests(), MARK)
+            .expect("the storage is created"),
+        _ => match Storage::unlock(dir, vault, PIN, MARK).expect("the storage unlocks") {
+            Opening::Opened(store) => *store,
+            _ => panic!("the right PIN was refused"),
+        },
+    }
+}
+
+/// Unlocks with [`PIN`] and reports whether the vault actually opened.
+fn opened(dir: &Path, vault: &TestVault) -> bool {
+    matches!(
+        Storage::unlock(dir, vault, PIN, MARK),
+        Ok(Opening::Opened(_))
+    )
 }
 
 /// A ready, verified prekey bundle.
@@ -194,7 +213,9 @@ fn a_missing_key_with_the_wrapper_present_is_never_a_fresh_start() {
 
     vault.forget_key();
 
-    let err = Storage::open(dir.path(), &vault).expect_err("it opened, though there is no key");
+    let err = Storage::unlock(dir.path(), &vault, PIN, MARK)
+        .err()
+        .expect("it opened, though there is no key");
     assert!(
         matches!(err, StorageError::KeyGone),
         "instead of \"key gone\" got: {err}"
@@ -222,7 +243,9 @@ fn transient_failure_never_maps_to_gone() {
 
     for behaviour in [Behaviour::Transient, Behaviour::Internal] {
         vault.set_behaviour(behaviour);
-        let err = Storage::open(dir.path(), &vault).expect_err("it opened despite a failure");
+        let err = Storage::unlock(dir.path(), &vault, PIN, MARK)
+            .err()
+            .expect("it opened despite a failure");
         assert!(
             !matches!(err, StorageError::KeyGone),
             "{behaviour:?} passed off as key loss: {err}"
@@ -253,11 +276,15 @@ fn a_flipped_byte_in_the_wrapper_is_rejected() {
     raw[last] ^= 0xff;
     std::fs::write(&path, &raw).unwrap();
 
-    let err = Storage::open(dir.path(), &vault).expect_err("a substituted wrapper passed");
-    assert!(
-        !matches!(err, StorageError::KeyGone),
-        "file corruption passed off as key loss, while the data is intact"
-    );
+    // A damaged sealed part cannot be told from a wrong PIN — both fail authentication —
+    // and it must not be taken for key loss either: the data is intact.
+    match Storage::unlock(dir.path(), &vault, PIN, MARK) {
+        Ok(Opening::Opened(_)) => panic!("a substituted wrapper passed"),
+        Err(StorageError::KeyGone) => {
+            panic!("file corruption passed off as key loss, while the data is intact")
+        }
+        _ => {}
+    }
 }
 
 #[test]
@@ -269,18 +296,16 @@ fn a_tampered_wrapper_header_is_rejected() {
     }
 
     // The protection level byte lies in the clear: the eighth one. By tweaking it an adversary
-    // would change the label on the screen without touching anything else. The header is repeated
-    // inside the sealed part, and here this is caught.
+    // would change the label on the screen without touching anything else. The whole header
+    // is authenticated data of the sealed key, and here this is caught.
     let path = dir.path().join(WRAPPER_FILE);
     let mut raw = std::fs::read(&path).unwrap();
-    // It was 2 (StrongBox); set 0 (software): exactly the substitution an
-    // adversary would want to make, so the screen lies in the reassuring direction.
-    assert_eq!(raw[7], 2, "the fake declares StrongBox");
-    raw[7] = 0;
+    assert_eq!(raw[7], 1, "the fake declares TEE");
+    raw[7] = 2;
     std::fs::write(&path, &raw).unwrap();
 
     assert!(
-        Storage::open(dir.path(), &vault).is_err(),
+        !opened(dir.path(), &vault),
         "a tweaked protection level passed as the real one"
     );
 }
@@ -290,7 +315,7 @@ fn a_foreign_file_is_not_taken_for_a_wrapper() {
     let dir = temp();
     let vault = TestVault::empty();
     std::fs::write(dir.path().join(WRAPPER_FILE), b"not apeiron at all").unwrap();
-    assert!(Storage::open(dir.path(), &vault).is_err());
+    assert!(Storage::unlock(dir.path(), &vault, PIN, MARK).is_err());
 }
 
 /// The list of peers must not be readable from the database file without the key.
@@ -367,7 +392,9 @@ fn wipe_makes_the_old_ciphertext_unreadable() {
     // Put the copy back in place: without the key it is useless.
     std::fs::write(dir.path().join(DATABASE_FILE), &copy).unwrap();
     std::fs::write(dir.path().join(WRAPPER_FILE), &wrapper_copy).unwrap();
-    let err = Storage::open(dir.path(), &vault).expect_err("the copy opened after erasure");
+    let err = Storage::unlock(dir.path(), &vault, PIN, MARK)
+        .err()
+        .expect("the copy opened after erasure");
     assert!(matches!(err, StorageError::KeyGone));
 }
 
@@ -406,7 +433,9 @@ fn a_database_from_a_newer_schema_is_refused() {
         .unwrap();
     drop(conn);
 
-    let err = Storage::open(dir.path(), &vault).expect_err("a newer database was read");
+    let err = Storage::unlock(dir.path(), &vault, PIN, MARK)
+        .err()
+        .expect("a newer database was read");
     assert!(
         matches!(
             err,
@@ -457,17 +486,6 @@ fn a_record_moved_to_another_row_is_rejected() {
         store.contacts().is_err(),
         "swapped records were read as their own"
     );
-}
-
-#[test]
-fn the_vault_refuses_oversized_payloads() {
-    // The limit on the KEK input is not nitpicking: StrongBox is tens of times slower than TEE,
-    // and a megabyte takes on the order of fifteen seconds to encrypt through it.
-    let vault = TestVault::empty();
-    vault.ensure_key(true).unwrap();
-    assert!(vault.wrap(&[0u8; 65]).is_err());
-    assert!(vault.wrap(&[]).is_err());
-    assert!(vault.wrap(&[0u8; 34]).is_ok());
 }
 
 // ─── Self-check ──────────────────────────────────────────────────────────────

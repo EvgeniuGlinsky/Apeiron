@@ -30,7 +30,9 @@
 //! by contact goes by an opaque tag (`apeiron_core::SecretKey::tag`), not
 //! by the public key.
 
+mod fsutil;
 pub mod keys;
+pub mod pin;
 pub mod record;
 pub mod repo;
 pub mod selfcheck;
@@ -41,11 +43,12 @@ pub mod testing;
 
 use std::path::{Path, PathBuf};
 
-use apeiron_platform::{KeyWrapper, PlatformError, SecurityLevel};
+use apeiron_platform::{HardwareKey, PlatformError, SecurityLevel};
 use rusqlite::Connection;
 
 pub use keys::Keys;
 pub use record::{Table, SCHEMA_VERSION};
+pub use wrapper::{KdfParams, Presence, Timing, MAX_PIN_DIGITS, MIN_PIN_DIGITS};
 
 /// The database file name.
 pub const DATABASE_FILE: &str = "apeiron.db";
@@ -66,6 +69,30 @@ pub enum StorageError {
          Переписку расшифровать нельзя ничем. Единственный выход — начать заново."
     )]
     KeyGone,
+
+    /// The secure hardware holds a key, but not the one this vault was made with: the key
+    /// check value in the header does not match. The same outcome as "key gone", reached
+    /// by a fourth, deterministic condition, and kept apart from a wrong PIN so that the
+    /// owner does not collect delays for a PIN that was right.
+    #[error(
+        "КЛЮЧ В ЗАЩИЩЁННОМ МОДУЛЕ НЕ ТОТ, КОТОРЫМ СДЕЛАНО ХРАНИЛИЩЕ. \
+         Переписку расшифровать нельзя ничем. Единственный выход — начать заново."
+    )]
+    KeyMismatch,
+
+    /// Data of a build before the PIN. This build does not open it (`docs/storage.md`).
+    #[error(
+        "данные тестовой сборки до появления пина: эта сборка их не открывает, начните заново"
+    )]
+    Legacy,
+
+    /// No vault yet: a PIN has to be set first.
+    #[error("хранилища ещё нет: задайте пин")]
+    NoVault,
+
+    /// Not a PIN this vault could have: wrong length or not only digits.
+    #[error("пин — от 6 до 16 цифр")]
+    BadPin,
 
     #[error(transparent)]
     Platform(PlatformError),
@@ -111,7 +138,7 @@ impl StorageError {
     /// three explicit conditions on the platform side. Everything else is a reason to retry,
     /// not to erase the conversations.
     pub fn is_retryable(&self) -> bool {
-        !matches!(self, Self::KeyGone)
+        !matches!(self, Self::KeyGone | Self::KeyMismatch | Self::Legacy)
     }
 }
 
@@ -127,6 +154,8 @@ pub struct Storage {
     level: SecurityLevel,
     level_at_creation: SecurityLevel,
     created_now: bool,
+    timing: Timing,
+    rounds: u32,
     dir: PathBuf,
 }
 
@@ -140,11 +169,56 @@ impl std::fmt::Debug for Storage {
     }
 }
 
+/// The outcome of an unlock attempt that reached a decision.
+pub enum Opening {
+    Opened(Box<Storage>),
+    /// The PIN is wrong: `failures` in a row, `wait_ms` before the next attempt.
+    WrongPin {
+        failures: u32,
+        wait_ms: u64,
+    },
+    /// Too many failures: wait. Nothing was tried.
+    Delayed {
+        wait_ms: u64,
+    },
+}
+
 impl Storage {
-    /// Opens the storage, creating it on first launch.
-    pub fn open<W: KeyWrapper>(dir: &Path, vault: &W) -> Result<Self, StorageError> {
+    /// Creates the storage with a new PIN. Allowed only while there is no wrapper file.
+    ///
+    /// `writer` is a random mark of the calling process, written next to the attempt
+    /// counter for the self-check.
+    pub fn create<H: HardwareKey>(
+        dir: &Path,
+        hw: &H,
+        pin: &[u8],
+        params: KdfParams,
+        writer: [u8; 8],
+    ) -> Result<Self, StorageError> {
         std::fs::create_dir_all(dir)?;
-        let opened = wrapper::load_or_create(dir, vault)?;
+        let opened = wrapper::create(dir, hw, pin, params, writer)?;
+        Self::from_opened(dir, opened)
+    }
+
+    /// Opens the storage with `pin`, counting the attempt (see [`wrapper::unlock`]).
+    pub fn unlock<H: HardwareKey>(
+        dir: &Path,
+        hw: &H,
+        pin: &[u8],
+        writer: [u8; 8],
+    ) -> Result<Opening, StorageError> {
+        Ok(match wrapper::unlock(dir, hw, pin, writer)? {
+            wrapper::Unlock::Opened(opened) => {
+                Opening::Opened(Box::new(Self::from_opened(dir, opened)?))
+            }
+            wrapper::Unlock::WrongPin { failures, wait_ms } => {
+                Opening::WrongPin { failures, wait_ms }
+            }
+            wrapper::Unlock::Delayed { wait_ms } => Opening::Delayed { wait_ms },
+        })
+    }
+
+    fn from_opened(dir: &Path, opened: wrapper::OpenedVault) -> Result<Self, StorageError> {
         let keys = Keys::derive(&opened.dek);
 
         let conn = Connection::open(dir.join(DATABASE_FILE))?;
@@ -157,6 +231,8 @@ impl Storage {
             level: opened.level,
             level_at_creation: opened.level_at_creation,
             created_now: opened.created_now,
+            timing: opened.timing,
+            rounds: opened.rounds,
             dir: dir.to_path_buf(),
         };
 
@@ -183,6 +259,16 @@ impl Storage {
     /// Whether the wrapper was created just now, i.e. whether this is the first launch.
     pub fn created_now(&self) -> bool {
         self.created_now
+    }
+
+    /// How long the derivation took when this storage was opened.
+    pub fn timing(&self) -> Timing {
+        self.timing
+    }
+
+    /// Rounds of the hardware chain in this vault.
+    pub fn rounds(&self) -> u32 {
+        self.rounds
     }
 
     pub(crate) fn conn(&self) -> &Connection {
@@ -214,10 +300,16 @@ impl Storage {
     /// no wrapper, and that state reads as "key present, no data" and
     /// is harder to sort out than the reverse.
     ///
-    /// The key is destroyed, not the data. This is stronger than hiding: there is nothing to
-    /// demand, because there is nothing to decrypt with, even if a copy of the database exists.
-    pub fn wipe<W: KeyWrapper>(dir: &Path, vault: &W) -> Result<(), StorageError> {
-        vault.destroy().map_err(StorageError::from)?;
+    /// Held under the same lock as creating and unlocking: a wipe racing a creation could
+    /// otherwise leave a fresh wrapper sealed under a key that has just been destroyed.
+    ///
+    /// The key is destroyed, not the data. An honest limit (R-005 in the threat log):
+    /// Android does not let an app ask for rollback-resistant keys, so a copy of the
+    /// keystore's own files taken earlier still holds the key blob. Destroying the alias
+    /// makes the data unreadable from now on, not retroactively.
+    pub fn wipe<H: HardwareKey>(dir: &Path, hw: &H) -> Result<(), StorageError> {
+        let _guard = wrapper::open_lock()?;
+        hw.destroy().map_err(StorageError::from)?;
         wrapper::remove(dir)?;
 
         let db = dir.join(DATABASE_FILE);

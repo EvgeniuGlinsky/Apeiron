@@ -23,7 +23,7 @@ use jni::refs::Global;
 use jni::{jni_sig, jni_str, Env, JavaVM};
 use zeroize::{Zeroize, Zeroizing};
 
-use crate::{KeyStatus, KeyWrapper, PlatformError, SecurityLevel};
+use crate::{BootClock, HardwareKey, KeyStatus, PlatformError, SecurityLevel};
 
 /// The statuses Kotlin replies with. The first byte of every reply.
 const STATUS_OK: u8 = 0;
@@ -144,7 +144,7 @@ pub struct AndroidVault;
 fn decode(reply: &[u8]) -> Result<&[u8], PlatformError> {
     let (status, rest) = reply
         .split_first()
-        .ok_or_else(|| PlatformError::Internal("пустой ответ от Vault".to_string()))?;
+        .ok_or_else(|| PlatformError::Internal("empty reply from Vault".to_string()))?;
     let text = || String::from_utf8_lossy(rest).into_owned();
     match *status {
         STATUS_OK => Ok(rest),
@@ -152,19 +152,19 @@ fn decode(reply: &[u8]) -> Result<&[u8], PlatformError> {
         STATUS_GONE => Err(PlatformError::Gone),
         STATUS_INTERNAL => Err(PlatformError::Internal(text())),
         other => Err(PlatformError::Internal(format!(
-            "Vault вернул неизвестное состояние {other}"
+            "Vault returned an unknown status {other}"
         ))),
     }
 }
 
-/// The argument of the only method called.
+/// The argument of the method called.
 enum Arg<'a> {
     None,
     Bool(bool),
-    Bytes(&'a [u8]),
+    BytesAndInt(&'a [u8], i32),
 }
 
-impl KeyWrapper for AndroidVault {
+impl HardwareKey for AndroidVault {
     fn ensure_key(&self, allow_create: bool) -> Result<KeyStatus, PlatformError> {
         let reply = call(
             jni_str!("ensureKey"),
@@ -172,9 +172,9 @@ impl KeyWrapper for AndroidVault {
             Arg::Bool(allow_create),
         )?;
         let body = decode(&reply)?;
-        let raw = body
-            .first()
-            .ok_or_else(|| PlatformError::Internal("ответ ensureKey без уровня".to_string()))?;
+        let raw = body.first().ok_or_else(|| {
+            PlatformError::Internal("ensureKey reply without a level".to_string())
+        })?;
         // The level comes as a signed byte: getSecurityLevel() has five values,
         // and two of them are negative.
         let level = SecurityLevel::from_raw(i32::from(*raw as i8));
@@ -182,26 +182,43 @@ impl KeyWrapper for AndroidVault {
         Ok(KeyStatus { level, note })
     }
 
-    fn wrap(&self, plain: &[u8]) -> Result<Vec<u8>, PlatformError> {
-        let reply = call(
-            jni_str!("wrap"),
-            &jni_sig!((data: jbyte[]) -> jbyte[]),
-            Arg::Bytes(plain),
-        )?;
-        Ok(decode(&reply)?.to_vec())
-    }
-
-    fn unwrap(&self, iv_and_ct: &[u8]) -> Result<Zeroizing<Vec<u8>>, PlatformError> {
+    fn hmac_chain(
+        &self,
+        input: &[u8; 32],
+        rounds: u32,
+    ) -> Result<Zeroizing<[u8; 32]>, PlatformError> {
+        let rounds = i32::try_from(rounds)
+            .map_err(|_| PlatformError::Internal(format!("{rounds} rounds do not fit a jint")))?;
         let mut reply = call(
-            jni_str!("unwrap"),
-            &jni_sig!((data: jbyte[]) -> jbyte[]),
-            Arg::Bytes(iv_and_ct),
+            jni_str!("hmacChain"),
+            &jni_sig!((input: jbyte[], rounds: jint) -> jbyte[]),
+            Arg::BytesAndInt(input, rounds),
         )?;
-        let out = decode(&reply).map(|body| Zeroizing::new(body.to_vec()));
-        // Wipes the copy made on the Rust side. The copy on the Java heap is
-        // wiped by Kotlin; in both places this narrows the window rather than closing it.
+        let out = decode(&reply).and_then(|body| {
+            let bytes: [u8; 32] = body.try_into().map_err(|_| {
+                PlatformError::Internal(format!("hmacChain returned {} bytes", body.len()))
+            })?;
+            Ok(Zeroizing::new(bytes))
+        });
+        // Wipes the copy made on the Rust side. The copy on the Java heap stays until the
+        // collector gets to it; in both places this narrows the window, not closes it.
         reply.zeroize();
         out
+    }
+
+    fn boot_clock(&self) -> Result<BootClock, PlatformError> {
+        let reply = call(jni_str!("bootClock"), &jni_sig!(() -> jbyte[]), Arg::None)?;
+        let body = decode(&reply)?;
+        let at = |range: std::ops::Range<usize>| -> Result<i64, PlatformError> {
+            body.get(range)
+                .and_then(|b| b.try_into().ok())
+                .map(i64::from_be_bytes)
+                .ok_or_else(|| PlatformError::Internal("bootClock reply too short".to_string()))
+        };
+        Ok(BootClock {
+            boot_count: at(0..8)?,
+            elapsed_ms: at(8..16)?,
+        })
     }
 
     fn destroy(&self) -> Result<(), PlatformError> {
@@ -243,11 +260,13 @@ fn call(
     vm.attach_current_thread(|env| {
         env.with_local_frame(24, |env| {
             let array = match arg {
-                Arg::Bytes(bytes) => Some(env.byte_array_from_slice(bytes)?),
+                Arg::BytesAndInt(bytes, _) => Some(env.byte_array_from_slice(bytes)?),
                 _ => None,
             };
             let args: Vec<JValue> = match (&array, &arg) {
-                (Some(a), _) => vec![JValue::Object(a.as_ref())],
+                (Some(a), Arg::BytesAndInt(_, n)) => {
+                    vec![JValue::Object(a.as_ref()), JValue::Int(*n)]
+                }
                 (None, Arg::Bool(v)) => vec![JValue::Bool(*v)],
                 _ => Vec::new(),
             };
