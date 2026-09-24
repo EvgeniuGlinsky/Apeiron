@@ -30,11 +30,19 @@ Measured on 24.09.2026 (desktop; one phone, Samsung A24, on Wi-Fi):
 |---|---|
 | put | every batch 24/24 (desktop), 12/12 (phone); p50 3.3–4.5 s |
 | first response | p50 0.17–0.25 s one at a time; 0.5–0.9 s with 24–48 lookups at once |
-| desktop items read by the desktop | 24/24 at 1 min … 2.75 h in both runs, **24/24 at 4 h**; 8/12 h — *to be filled in* |
+| desktop items read by the desktop | **24/24 at every point from 1 min to 8 h** in both runs (1, 5, 30, 60 min, 2.5, 4, 8 h); first response p50 0.17–0.25 s, p95 ≤ 0.29 s; 12 h not read — the desktop was shut down first |
 | desktop items read by the phone | **24/24 at 3 h 49 min** |
-| phone items read by the desktop | 12/12 at 3 min; 2/4/8 h — *to be filled in* |
+| phone items read by the desktop | **12/12 at 3 min, 2 h, 4 h and 8 h**; p95 ≤ 0.37 s |
 | phone items read by the phone | 36/36 at 65–67 min |
 | wrong values under our keys | 0 |
+| re-put of a fresh set every 30 min, 10:48–21:20 | put 24/24 and read 24/24 every time |
+
+**Verdict: the threshold set before measuring is passed with a wide margin** — put ≥ 95 %
+(100 %), first response p50 ≤ 3 s and p95 ≤ 10 s (0.2 s and under 0.4 s), ≥ 90 % alive after 1 h
+(100 % after 8 h). What this does not show: one desktop and one phone, on home Wi-Fi, in one city,
+on one day. A mobile network, another country, a week of load and a provider that throttles the
+DHT were not measured. It is a go for building (R-012), not a promise to users: stage 4 measures
+on phones.
 
 ## 2. Keys and addresses
 

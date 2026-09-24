@@ -374,8 +374,13 @@ verified".
   the IP of whoever puts it and of whoever fetches it, and a P4 adversary can run such nodes
   (around 300 000 Sybil nodes were measured in Mainline, R16 of the research). A provider in a
   censoring country can throttle DHT traffic. Content stays end-to-end encrypted regardless.
-- **Verdict:** **under measurement.** Nothing is built on it until `tools/dht-probe` and the
-  self-check measurement on a phone show that envelopes survive long enough.
+- **Verdict:** **accepted** (measured 24.09.2026, `docs/transport.md` §1). The threshold set
+  before the measurement — put ≥ 95 %, first response p50 ≤ 3 s and p95 ≤ 10 s, ≥ 90 % alive
+  after an hour — is passed with a wide margin: every put 24/24 from the desktop and 12/12 from
+  the phone, first response p50 0.2 s, and **24/24 alive at 8 hours** in two independent runs;
+  the phone's items read by the desktop 12/12 at 8 hours too. Not measured: a mobile network,
+  another country, a week of load, a throttling provider. A go for building, not a promise to
+  users.
 - **Rationale.** No always-on intermediary at all is impossible for a logical reason, not a
   technical one: if the sender's phone is asleep when the receiver's wakes up, the message has to
   be somewhere in between. The research concludes that this role cannot be removed (§2.1, §10.3)
