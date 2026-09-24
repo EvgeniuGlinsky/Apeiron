@@ -54,6 +54,22 @@ Future<PlatformInt64> chatSend({
   message: message,
 );
 
+/// The history up to row `upto` has been shown: the unread count clears, and — with receipts
+/// on — the next round tells the contact. Waits for a round in flight rather than making it
+/// fail on the owner check.
+Future<bool> chatMarkRead({
+  required PlatformInt64 contact,
+  required PlatformInt64 upto,
+}) =>
+    RustLib.instance.api.crateApiChatChatMarkRead(contact: contact, upto: upto);
+
+/// Whether read receipts are sent and shown.
+Future<bool> chatReadReceipts() =>
+    RustLib.instance.api.crateApiChatChatReadReceipts();
+
+Future<void> chatSetReadReceipts({required bool enabled}) =>
+    RustLib.instance.api.crateApiChatChatSetReadReceipts(enabled: enabled);
+
 /// A round of one conversation through the DHT. Returns whether anything changed.
 Future<bool> chatRound({required PlatformInt64 contact}) =>
     RustLib.instance.api.crateApiChatChatRound(contact: contact);
@@ -62,9 +78,9 @@ Future<bool> chatRound({required PlatformInt64 contact}) =>
 /// anything changed.
 Future<bool> chatPoll() => RustLib.instance.api.crateApiChatChatPoll();
 
-/// The safety number with the contact: the same string on both sides.
-Future<String> chatSafetyNumber({required PlatformInt64 contact}) =>
-    RustLib.instance.api.crateApiChatChatSafetyNumber(contact: contact);
+/// The safety number with the contact, and the two fingerprints it is made of.
+Future<VerificationItem> chatVerification({required PlatformInt64 contact}) =>
+    RustLib.instance.api.crateApiChatChatVerification(contact: contact);
 
 /// Marks the contact as verified — only ever the owner's own act — or takes the mark back.
 Future<void> chatSetVerified({
@@ -81,16 +97,29 @@ class ContactItem {
   final ContactState state;
   final bool verified;
 
+  /// The newest entry of the history, for the list's preview.
+  final MessageItem? last;
+
+  /// The contact's messages not shown yet; 100 means "100 or more".
+  final int unread;
+
   const ContactItem({
     required this.id,
     required this.name,
     required this.state,
     required this.verified,
+    this.last,
+    required this.unread,
   });
 
   @override
   int get hashCode =>
-      id.hashCode ^ name.hashCode ^ state.hashCode ^ verified.hashCode;
+      id.hashCode ^
+      name.hashCode ^
+      state.hashCode ^
+      verified.hashCode ^
+      last.hashCode ^
+      unread.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -100,7 +129,9 @@ class ContactItem {
           id == other.id &&
           name == other.name &&
           state == other.state &&
-          verified == other.verified;
+          verified == other.verified &&
+          last == other.last &&
+          unread == other.unread;
 }
 
 enum ContactState {
@@ -191,10 +222,44 @@ enum MessageState {
   queued,
   sent,
   delivered,
+
+  /// The contact has been shown it.
+  read,
   notDelivered,
   addressTaken,
   received,
 
   /// Some of the peer's messages will never be read.
   lost,
+}
+
+/// What the verification screen shows (`apeiron_messenger::Verification`).
+class VerificationItem {
+  /// The same string on both sides.
+  final String safetyNumber;
+  final String myFingerprint;
+
+  /// The contact's fingerprint as this phone holds it.
+  final String theirFingerprint;
+
+  const VerificationItem({
+    required this.safetyNumber,
+    required this.myFingerprint,
+    required this.theirFingerprint,
+  });
+
+  @override
+  int get hashCode =>
+      safetyNumber.hashCode ^
+      myFingerprint.hashCode ^
+      theirFingerprint.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is VerificationItem &&
+          runtimeType == other.runtimeType &&
+          safetyNumber == other.safetyNumber &&
+          myFingerprint == other.myFingerprint &&
+          theirFingerprint == other.theirFingerprint;
 }

@@ -56,6 +56,9 @@ pub enum Event {
     Lost { from: u64, to: u64, why: LostWhy },
     /// The peer has every part of my message `first`.
     Delivered { first: u64 },
+    /// The peer has been shown my messages whose first index is below `to` (a read receipt).
+    /// Reported each time the mark grows; what it covers is for the caller to look up.
+    Read { to: u64 },
     /// My message `first` was given up: not delivered.
     NotDelivered { first: u64 },
     /// An address I was about to use already held something else: the schedule is reused or
@@ -152,6 +155,11 @@ pub struct Pair {
     peer_seen: bool,
     /// The reply put into an invitation's inbox, re-put until the peer is seen.
     intro: IntroState,
+    /// The peer's messages whose first index is below this have been shown to the person.
+    read_to: Option<u64>,
+    /// Whether the state tells the peer `read_to`: the owner's setting, given on every load and
+    /// not stored here.
+    receipts: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -194,7 +202,24 @@ impl Pair {
             lost_to: 0,
             peer_seen: false,
             intro: IntroState::None,
+            read_to: None,
+            receipts: false,
         })
+    }
+
+    /// Whether the state items carry the read mark. Off, a state is made the way the first
+    /// builds made it (`envelope`), so turning it off leaves nothing that says it was on.
+    pub fn set_receipts(&mut self, on: bool) {
+        self.receipts = on;
+    }
+
+    /// The peer's message `first` has been shown to the person: it and everything before it are
+    /// read. Never moves back, and never past what has arrived.
+    pub fn mark_read(&mut self, first: u64) {
+        let to = first.saturating_add(1).min(self.next_recv);
+        if self.read_to.is_none_or(|r| r < to) {
+            self.read_to = Some(to);
+        }
     }
 
     /// The reply to an invitation expiring on day `expires`, to be re-put with everything else
@@ -504,6 +529,7 @@ impl Pair {
             recv_bits,
             next_send: self.next_send,
             send_floor: self.send_floor(),
+            next_read: self.read_to.filter(|_| self.receipts),
         }
     }
 
@@ -537,6 +563,7 @@ impl Pair {
         };
         // Every field only grows in truth; an older item (yesterday's, a stale re-put) must not
         // take anything back.
+        let read_before = self.peer.next_read;
         let recv_bits = match s.next_recv.cmp(&self.peer.next_recv) {
             std::cmp::Ordering::Greater => s.recv_bits,
             std::cmp::Ordering::Equal => s.recv_bits | self.peer.recv_bits,
@@ -548,8 +575,17 @@ impl Pair {
             recv_bits,
             next_send: s.next_send.max(self.peer.next_send),
             send_floor: s.send_floor.max(self.peer.send_floor),
+            // `None < Some`: a state without the mark (the peer turned receipts off, or an older
+            // build) keeps the one already seen.
+            next_read: s
+                .next_read
+                .map(|r| r.min(self.next_send))
+                .max(self.peer.next_read),
         };
         let mut events = Vec::new();
+        if let Some(to) = self.peer.next_read.filter(|&r| Some(r) > read_before) {
+            events.push(Event::Read { to });
+        }
         if !self.peer_seen {
             self.peer_seen = true;
             // The inviter has taken the reply: it need not be re-put any more. Also after the

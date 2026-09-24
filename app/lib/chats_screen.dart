@@ -16,8 +16,14 @@ import 'theme/tokens.dart';
 import 'wordmark.dart';
 
 /// How often the list asks the DHT: every open invitation's inbox and every conversation.
-/// The open chat asks more often on its own (`ChatScreen`).
-const listPollEvery = Duration(seconds: 60);
+/// The open chat asks more often on its own (`ChatScreen`), and while another screen is on top
+/// the list does not ask at all.
+///
+/// 15 s, not the 60 s of the first outline: a message reaches the DHT in a few seconds and is
+/// found in 1–4 s, so the minute was nearly the whole of the wait. Faster costs one round of
+/// lookups per contact each time, which the network sees as the pattern of an open app (§7 of
+/// `docs/transport.md`) — which it is.
+const listPollEvery = Duration(seconds: 15);
 
 /// The home screen once the vault is open: conversations and the invitations waiting.
 class ChatsHome extends StatefulWidget {
@@ -48,6 +54,11 @@ class _ChatsHomeState extends State<ChatsHome> {
     super.initState();
     _reload();
     _pollNow();
+    _startPolling();
+  }
+
+  void _startPolling() {
+    _poll?.cancel();
     _poll = Timer.periodic(listPollEvery, (_) => _pollNow());
   }
 
@@ -86,10 +97,14 @@ class _ChatsHomeState extends State<ChatsHome> {
   }
 
   Future<void> _open(Widget screen) async {
+    _poll?.cancel();
     await Navigator.of(
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => screen));
+    if (!mounted) return;
+    _startPolling();
     await _reload();
+    unawaited(_pollNow());
   }
 
   void _newContact() {
@@ -186,6 +201,7 @@ class ChatsList extends StatelessWidget {
     required this.onOpenContact,
     required this.onOpenInvitation,
     this.error,
+    this.now,
   });
 
   final List<ContactItem> contacts;
@@ -193,6 +209,9 @@ class ChatsList extends StatelessWidget {
   final ValueChanged<ContactItem> onOpenContact;
   final ValueChanged<InvitationItem> onOpenInvitation;
   final String? error;
+
+  /// The moment the times are told against; the clock when not given (tests give it).
+  final DateTime? now;
 
   @override
   Widget build(BuildContext context) {
@@ -254,17 +273,129 @@ class ChatsList extends StatelessWidget {
                 style: t.labelLarge,
               ),
             ),
-            title: Text(c.name.isEmpty ? '—' : c.name),
-            subtitle: Text(
-              contactLine(c, l),
-              style: t.bodySmall?.copyWith(
-                color: c.verified && c.state == ContactState.live
-                    ? Ap.glacier400
-                    : Ap.fog400,
-              ),
+            title: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    c.name.isEmpty ? '—' : c.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: Ap.s4),
+                // Not verified is said wherever the contact is shown (§8).
+                Icon(
+                  c.verified ? Icons.verified_user : Icons.gpp_maybe,
+                  size: 14,
+                  color: c.verified ? Ap.glacier400 : Ap.ember400,
+                  semanticLabel: c.verified
+                      ? l.contactVerified
+                      : l.contactNotVerified,
+                ),
+              ],
             ),
+            subtitle: _Preview(contact: c),
+            trailing: _When(contact: c, now: now ?? DateTime.now()),
             onTap: () => onOpenContact(c),
           ),
+      ],
+    );
+  }
+}
+
+/// Under the name: the newest entry of a live conversation, or where the contact stands.
+class _Preview extends StatelessWidget {
+  const _Preview({required this.contact});
+
+  final ContactItem contact;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final l = AppLocalizations.of(context);
+    final c = contact;
+    final last = c.last;
+    if (last == null || c.state != ContactState.live) {
+      return Text(
+        contactLine(c, l),
+        style: t.bodySmall?.copyWith(
+          color: c.verified && c.state == ContactState.live
+              ? Ap.glacier400
+              : Ap.fog400,
+        ),
+      );
+    }
+    final line = last.text.replaceAll(RegExp(r'\s+'), ' ');
+    final text = last.state == MessageState.lost
+        ? l.msgLost
+        : last.mine
+        ? l.previewMine(line)
+        : line;
+    return Row(
+      children: [
+        if (last.mine) ...[
+          StatusIcon(state: last.state, size: 13),
+          const SizedBox(width: Ap.s4),
+        ],
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: t.bodySmall?.copyWith(
+              color: c.unread > 0 ? Ap.bone100 : Ap.fog400,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// On the right: when the newest entry was, and how many are unread.
+class _When extends StatelessWidget {
+  const _When({required this.contact, required this.now});
+
+  final ContactItem contact;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final last = contact.last;
+    final unread = contact.unread;
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (last != null)
+          Text(
+            listTime(last.at, now),
+            style: t.bodySmall?.copyWith(
+              fontSize: 11,
+              color: unread > 0 ? Ap.bone100 : Ap.fog400,
+            ),
+          ),
+        if (unread > 0) ...[
+          const SizedBox(height: Ap.s4),
+          Container(
+            constraints: const BoxConstraints(minWidth: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(
+              color: Ap.bone100,
+              borderRadius: BorderRadius.circular(2),
+            ),
+            child: Text(
+              unread > 99 ? '99+' : '$unread',
+              textAlign: TextAlign.center,
+              style: t.labelSmall?.copyWith(
+                color: Ap.basalt900,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }

@@ -34,6 +34,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw);
 
   @protected
+  MessageItem dco_decode_box_autoadd_message_item(dynamic raw);
+
+  @protected
   PublicIdentityView dco_decode_box_autoadd_public_identity_view(dynamic raw);
 
   @protected
@@ -82,6 +85,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw);
 
   @protected
+  MessageItem? dco_decode_opt_box_autoadd_message_item(dynamic raw);
+
+  @protected
   PublicIdentityView? dco_decode_opt_box_autoadd_public_identity_view(
     dynamic raw,
   );
@@ -108,6 +114,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   VaultStatus dco_decode_vault_status(dynamic raw);
 
   @protected
+  VerificationItem dco_decode_verification_item(dynamic raw);
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
@@ -115,6 +124,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer);
+
+  @protected
+  MessageItem sse_decode_box_autoadd_message_item(SseDeserializer deserializer);
 
   @protected
   PublicIdentityView sse_decode_box_autoadd_public_identity_view(
@@ -169,6 +181,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer);
 
   @protected
+  MessageItem? sse_decode_opt_box_autoadd_message_item(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   PublicIdentityView? sse_decode_opt_box_autoadd_public_identity_view(
     SseDeserializer deserializer,
   );
@@ -197,6 +214,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   VaultStatus sse_decode_vault_status(SseDeserializer deserializer);
 
   @protected
+  VerificationItem sse_decode_verification_item(SseDeserializer deserializer);
+
+  @protected
   void sse_encode_String(String self, SseSerializer serializer);
 
   @protected
@@ -205,6 +225,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_i_64(
     PlatformInt64 self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_message_item(
+    MessageItem self,
     SseSerializer serializer,
   );
 
@@ -281,6 +307,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_opt_box_autoadd_message_item(
+    MessageItem? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_public_identity_view(
     PublicIdentityView? self,
     SseSerializer serializer,
@@ -309,6 +341,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_vault_status(VaultStatus self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_verification_item(
+    VerificationItem self,
+    SseSerializer serializer,
+  );
 }
 
 // Section: wire_class

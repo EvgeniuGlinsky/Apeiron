@@ -5,6 +5,7 @@ import 'check_screen.dart';
 import 'identity_view.dart';
 import 'l10n/app_localizations.dart';
 import 'lock_policy.dart';
+import 'src/rust/api/chat.dart';
 import 'src/rust/api/identity.dart';
 import 'src/rust/api/pin.dart';
 import 'theme/tokens.dart';
@@ -26,6 +27,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   PinPadPrefs? _prefs;
+  bool? _receipts;
 
   @override
   void initState() {
@@ -35,7 +37,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _load() async {
     final prefs = await pinPadPrefs();
-    if (mounted) setState(() => _prefs = prefs);
+    final receipts = await chatReadReceipts().catchError((Object _) => true);
+    if (mounted) {
+      setState(() {
+        _prefs = prefs;
+        _receipts = receipts;
+      });
+    }
+  }
+
+  Future<void> _setReceipts(bool on) async {
+    await chatSetReadReceipts(enabled: on);
+    await _load();
   }
 
   Future<void> _scrambled(bool on) async {
@@ -82,6 +95,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               trailing: const Icon(Icons.chevron_right, color: Ap.fog400),
               onTap: () => _push(const ChangePinScreen()),
+            ),
+            const Divider(color: Ap.stone700),
+            SwitchListTile(
+              value: _receipts ?? true,
+              onChanged: _receipts == null ? null : _setReceipts,
+              title: Text(l.settingsReadReceipts),
+              subtitle: Text(l.settingsReadReceiptsNote, style: t.bodySmall),
             ),
             const Divider(color: Ap.stone700),
             ListTile(

@@ -27,6 +27,10 @@ pub struct ContactItem {
     pub name: String,
     pub state: ContactState,
     pub verified: bool,
+    /// The newest entry of the history, for the list's preview.
+    pub last: Option<MessageItem>,
+    /// The contact's messages not shown yet; 100 means "100 or more".
+    pub unread: u32,
 }
 
 pub struct InvitationItem {
@@ -42,6 +46,8 @@ pub enum MessageState {
     Queued,
     Sent,
     Delivered,
+    /// The contact has been shown it.
+    Read,
     NotDelivered,
     AddressTaken,
     Received,
@@ -64,6 +70,8 @@ fn text(e: MessengerError) -> String {
 
 fn contact_item(view: messenger::ContactView) -> ContactItem {
     ContactItem {
+        last: view.last.map(|(id, m)| message_item(id, m)),
+        unread: view.unread,
         id: view.contact.id,
         name: view.contact.name,
         state: match view.status {
@@ -94,6 +102,7 @@ fn message_item(id: i64, m: MessageRecord) -> MessageItem {
                 Status::Queued => MessageState::Queued,
                 Status::Sent => MessageState::Sent,
                 Status::Delivered => MessageState::Delivered,
+                Status::Read => MessageState::Read,
                 Status::NotDelivered => MessageState::NotDelivered,
                 Status::AddressTaken => MessageState::AddressTaken,
             },
@@ -188,6 +197,29 @@ pub fn chat_send(contact: i64, message: String) -> Result<i64, String> {
         .map_err(text)
 }
 
+/// The history up to row `upto` has been shown: the unread count clears, and — with receipts
+/// on — the next round tells the contact. Waits for a round in flight rather than making it
+/// fail on the owner check.
+#[flutter_rust_bridge::frb]
+pub fn chat_mark_read(contact: i64, upto: i64) -> Result<bool, String> {
+    let _one = one_round_at_a_time()?;
+    let me = identity()?;
+    load(&me, contact)
+        .and_then(|mut c| c.mark_read(&BridgeStore, upto))
+        .map_err(text)
+}
+
+/// Whether read receipts are sent and shown.
+#[flutter_rust_bridge::frb]
+pub fn chat_read_receipts() -> Result<bool, String> {
+    messenger::read_receipts(&BridgeStore).map_err(text)
+}
+
+#[flutter_rust_bridge::frb]
+pub fn chat_set_read_receipts(enabled: bool) -> Result<(), String> {
+    messenger::set_read_receipts(&BridgeStore, enabled).map_err(text)
+}
+
 /// A round of one conversation through the DHT. Returns whether anything changed.
 #[flutter_rust_bridge::frb]
 pub fn chat_round(contact: i64) -> Result<bool, String> {
@@ -214,16 +246,25 @@ pub fn chat_poll() -> Result<bool, String> {
     Ok(!updates.is_empty())
 }
 
-/// The safety number with the contact: the same string on both sides.
+/// What the verification screen shows (`apeiron_messenger::Verification`).
+pub struct VerificationItem {
+    /// The same string on both sides.
+    pub safety_number: String,
+    pub my_fingerprint: String,
+    /// The contact's fingerprint as this phone holds it.
+    pub their_fingerprint: String,
+}
+
+/// The safety number with the contact, and the two fingerprints it is made of.
 #[flutter_rust_bridge::frb]
-pub fn chat_safety_number(contact: i64) -> Result<String, String> {
-    crate::api::vault::with_open(|s, me| {
-        s.contact(contact)
-            .map_err(|e| e.to_string())?
-            .map(|c| me.public().safety_number(&c.peer))
-            .ok_or_else(|| "no such contact".to_string())
-    })?
-    .ok_or_else(|| "the vault is locked".to_string())?
+pub fn chat_verification(contact: i64) -> Result<VerificationItem, String> {
+    let me = identity()?;
+    let v = messenger::verification(&BridgeStore, &me, contact).map_err(text)?;
+    Ok(VerificationItem {
+        safety_number: v.safety_number,
+        my_fingerprint: v.my_fingerprint,
+        their_fingerprint: v.their_fingerprint,
+    })
 }
 
 /// Marks the contact as verified — only ever the owner's own act — or takes the mark back.

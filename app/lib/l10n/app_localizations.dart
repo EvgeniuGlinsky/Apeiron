@@ -131,13 +131,13 @@ abstract class AppLocalizations {
   /// No description provided for @fingerprintTitle.
   ///
   /// In en, this message translates to:
-  /// **'FINGERPRINT'**
+  /// **'YOUR FINGERPRINT'**
   String get fingerprintTitle;
 
   /// No description provided for @fingerprintBody.
   ///
   /// In en, this message translates to:
-  /// **'This is read aloud to the person you talk to. A difference in even one digit means someone is between you.'**
+  /// **'It identifies you. It is not what you compare with someone: for that, open the chat and tap Verify — the safety number there is one and the same for the two of you.'**
   String get fingerprintBody;
 
   /// No description provided for @notVerified.
@@ -959,7 +959,7 @@ abstract class AppLocalizations {
   /// No description provided for @verifyBody.
   ///
   /// In en, this message translates to:
-  /// **'Compare these digits with {name} — in person or by voice, not through this chat. If even one differs, someone is between you.'**
+  /// **'One number for the two of you: {name} sees exactly these digits on this screen. It is not your fingerprint from Settings.'**
   String verifyBody(String name);
 
   /// No description provided for @verifyConfirm.
@@ -979,6 +979,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'VERIFIED BY YOU'**
   String get verifiedByYou;
+
+  /// No description provided for @verifyStep1.
+  ///
+  /// In en, this message translates to:
+  /// **'Call {name} — by voice, not through the channel the invitation went through.'**
+  String verifyStep1(String name);
+
+  /// No description provided for @verifyStep2.
+  ///
+  /// In en, this message translates to:
+  /// **'Both open this screen. You read the first row aloud, {name} reads the second.'**
+  String verifyStep2(String name);
+
+  /// No description provided for @verifyStep3.
+  ///
+  /// In en, this message translates to:
+  /// **'Every digit the same — they match. Even one differs — they do not.'**
+  String get verifyStep3;
+
+  /// No description provided for @verifyMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'THEY DO NOT MATCH'**
+  String get verifyMismatch;
+
+  /// No description provided for @mismatchTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'THE NUMBERS DO NOT MATCH'**
+  String get mismatchTitle;
+
+  /// No description provided for @mismatchBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Until this is settled, write nothing you would not say to a stranger: someone may be between you. Find out whose key is not the one the other holds — compare the two fingerprints below with what each of you sees in Settings → My identity.'**
+  String get mismatchBody;
+
+  /// No description provided for @mismatchTheirs.
+  ///
+  /// In en, this message translates to:
+  /// **'The fingerprint of {name}, as this phone holds it. {name} must see the same in their settings:'**
+  String mismatchTheirs(String name);
+
+  /// No description provided for @mismatchMine.
+  ///
+  /// In en, this message translates to:
+  /// **'Your fingerprint. {name} must hold the same for you:'**
+  String mismatchMine(String name);
+
+  /// No description provided for @mismatchVerdict.
+  ///
+  /// In en, this message translates to:
+  /// **'A fingerprint differs — a key was replaced: do not trust this conversation. Both are the same and the numbers still differ — that is a fault of the app: send screenshots of both screens.'**
+  String get mismatchVerdict;
+
+  /// No description provided for @mismatchBack.
+  ///
+  /// In en, this message translates to:
+  /// **'BACK TO THE NUMBER'**
+  String get mismatchBack;
+
+  /// No description provided for @msgRead.
+  ///
+  /// In en, this message translates to:
+  /// **'read'**
+  String get msgRead;
+
+  /// No description provided for @previewMine.
+  ///
+  /// In en, this message translates to:
+  /// **'You: {text}'**
+  String previewMine(String text);
+
+  /// No description provided for @settingsReadReceipts.
+  ///
+  /// In en, this message translates to:
+  /// **'Read receipts'**
+  String get settingsReadReceipts;
+
+  /// No description provided for @settingsReadReceiptsNote.
+  ///
+  /// In en, this message translates to:
+  /// **'The person you write to learns when you were shown their message, and you learn the same about yours. Off, neither is sent nor shown. The network learns little new: an open chat already shows in how often the app asks.'**
+  String get settingsReadReceiptsNote;
 }
 
 class _AppLocalizationsDelegate

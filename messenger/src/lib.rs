@@ -21,7 +21,10 @@ pub mod conversation;
 pub mod invitations;
 pub mod record;
 
-pub use conversation::{contacts, history, round_all, ContactStatus, ContactView, Conversation};
+pub use conversation::{
+    contacts, history, read_receipts, round_all, set_read_receipts, verification, ContactStatus,
+    ContactView, Conversation, Verification,
+};
 pub use invitations::{
     accept_invitation, cancel_invitation, create_invitation, invitations, poll_invitations,
     InvitationView,

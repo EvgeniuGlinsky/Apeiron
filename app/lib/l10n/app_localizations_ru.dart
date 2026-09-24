@@ -25,11 +25,11 @@ class AppLocalizationsRu extends AppLocalizations {
   String get createIdentity => 'СОЗДАТЬ ЛИЧНОСТЬ';
 
   @override
-  String get fingerprintTitle => 'ОТПЕЧАТОК';
+  String get fingerprintTitle => 'ВАШ ОТПЕЧАТОК';
 
   @override
   String get fingerprintBody =>
-      'Это читают вслух собеседнику. Расхождение хотя бы в одной цифре означает, что между вами кто-то есть.';
+      'По нему узнают вас. С собеседником сверяют не его: откройте чат → «Сверить», там число сверки — одно и то же у вас обоих.';
 
   @override
   String get notVerified => 'НЕ СВЕРЕНО НИ С КЕМ';
@@ -513,7 +513,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String verifyBody(String name) {
-    return 'Сверьте эти цифры с собеседником ($name) — лично или голосом, не через этот чат. Если отличается хоть одна, между вами кто-то есть.';
+    return 'Одно число на двоих: $name видит на этом экране ровно эти цифры. Это не ваш отпечаток из настроек.';
   }
 
   @override
@@ -524,4 +524,60 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get verifiedByYou => 'СВЕРЕНО ВАМИ';
+
+  @override
+  String verifyStep1(String name) {
+    return 'Позвоните $name — голосом, не через тот канал, по которому шло приглашение.';
+  }
+
+  @override
+  String verifyStep2(String name) {
+    return 'Откройте этот экран оба. Вы читаете вслух первую строку, $name — вторую.';
+  }
+
+  @override
+  String get verifyStep3 =>
+      'Все цифры одинаковы — совпало. Отличается хоть одна — не совпало.';
+
+  @override
+  String get verifyMismatch => 'НЕ СОВПАЛО';
+
+  @override
+  String get mismatchTitle => 'ЧИСЛА НЕ СОВПАЛИ';
+
+  @override
+  String get mismatchBody =>
+      'Пока это не выяснено, не пишите ничего, что не сказали бы постороннему: между вами может быть кто-то. Узнайте, чей ключ не тот, что у другого, — сравните два отпечатка ниже с тем, что каждый из вас видит в «Настройки → Моя личность».';
+
+  @override
+  String mismatchTheirs(String name) {
+    return 'Отпечаток $name, как он записан у вас. У $name в настройках должен быть такой же:';
+  }
+
+  @override
+  String mismatchMine(String name) {
+    return 'Ваш отпечаток. У $name он должен быть записан таким же:';
+  }
+
+  @override
+  String get mismatchVerdict =>
+      'Отпечаток отличается — ключ подменён: этой переписке не доверять. Оба совпадают, а числа всё равно разные — это ошибка приложения: пришлите снимки обоих экранов.';
+
+  @override
+  String get mismatchBack => 'К ЧИСЛУ СВЕРКИ';
+
+  @override
+  String get msgRead => 'прочитано';
+
+  @override
+  String previewMine(String text) {
+    return 'Вы: $text';
+  }
+
+  @override
+  String get settingsReadReceipts => 'Отметки о прочтении';
+
+  @override
+  String get settingsReadReceiptsNote =>
+      'Собеседник узнаёт, когда вам показали его сообщение, а вы — то же о своих. Выключено — ни то, ни другое не отправляется и не показывается. Сети это нового почти ничего не говорит: открытый чат и так виден по частоте запросов.';
 }

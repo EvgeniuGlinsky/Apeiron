@@ -13,7 +13,8 @@ use apeiron_core::vodozemac::olm::Account;
 use apeiron_core::Identity;
 use apeiron_messenger::{
     accept_invitation, contacts, create_invitation, history, invitations, poll_invitations,
-    ContactStatus, Conversation, MessageKind, MessengerError, Status, StoreAccess, Update,
+    set_read_receipts, verification, ContactStatus, Conversation, MessageKind, MessengerError,
+    Status, StoreAccess, Update,
 };
 use apeiron_store::testing::TestVault;
 use apeiron_store::{KdfParams, Opening, Storage};
@@ -333,4 +334,77 @@ fn crossed_invitations_meet_on_one_session() {
     }
     assert_eq!(low.status_of(low_contact, "до тебя"), Status::Delivered);
     assert_eq!(high.status_of(high_contact, "и до тебя"), Status::Delivered);
+    same_number_on_both_sides(&low, low_contact, &high, high_contact);
+}
+
+/// Both sides see one safety number, and each holds the other's real fingerprint: what the
+/// verification screen shows, through the path it takes.
+fn same_number_on_both_sides(a: &Person, a_side: i64, b: &Person, b_side: i64) {
+    let on_a = verification(&a.store, &a.id, a_side).unwrap();
+    let on_b = verification(&b.store, &b.id, b_side).unwrap();
+    assert_eq!(on_a.safety_number, on_b.safety_number);
+    assert_eq!(on_a.their_fingerprint, on_b.my_fingerprint);
+    assert_eq!(on_b.their_fingerprint, on_a.my_fingerprint);
+    assert_ne!(on_a.safety_number, on_a.my_fingerprint);
+}
+
+#[test]
+fn the_safety_number_is_one_on_both_sides() {
+    let dht = FakeDht::new();
+    let a = person();
+    let b = person();
+    let (a_side, b_side) = introduce(&a, &b, &dht);
+    same_number_on_both_sides(&a, a_side, &b, b_side);
+}
+
+/// The list counts the peer's entries after what was shown, and shows the newest; the chat,
+/// once shown, clears the count.
+#[test]
+fn unread_counts_until_the_chat_is_shown() {
+    let dht = FakeDht::new();
+    let a = person();
+    let b = person();
+    let (a_side, b_side) = introduce(&a, &b, &dht);
+    a.round(a_side, &dht, T0 + 3);
+    b.round(b_side, &dht, T0 + 4);
+    for text in ["раз", "два"] {
+        b.conversation(b_side).send(&b.store, text, T0 + 5).unwrap();
+    }
+    b.round(b_side, &dht, T0 + 6);
+    a.round(a_side, &dht, T0 + 7);
+
+    let seen = &contacts(&a.store, &a.id).unwrap()[0];
+    assert_eq!(seen.unread, 3, "the first text and two more");
+    let (newest, last) = seen.last.as_ref().unwrap();
+    assert_eq!(last.text.as_str(), "два");
+    assert!(a.conversation(a_side).mark_read(&a.store, *newest).unwrap());
+    assert_eq!(contacts(&a.store, &a.id).unwrap()[0].unread, 0);
+}
+
+/// B is shown A's message and A sees it read — only while both send receipts: off on either
+/// side, it stays delivered.
+#[test]
+fn a_read_receipt_reaches_the_sender_only_when_both_send_them() {
+    let dht = FakeDht::new();
+    let a = person();
+    let b = person();
+    let (a_side, b_side) = introduce(&a, &b, &dht);
+    a.round(a_side, &dht, T0 + 3);
+    b.round(b_side, &dht, T0 + 4);
+    let read_by_b = |text: &str, t: u64| {
+        a.conversation(a_side).send(&a.store, text, t).unwrap();
+        a.round(a_side, &dht, t + 1);
+        b.round(b_side, &dht, t + 2);
+        let newest = history(&b.store, b_side, None, 1).unwrap()[0].0;
+        b.conversation(b_side).mark_read(&b.store, newest).unwrap();
+        b.round(b_side, &dht, t + 3);
+        a.round(a_side, &dht, t + 4);
+        a.status_of(a_side, text)
+    };
+    assert_eq!(read_by_b("прочти", T0 + 10), Status::Read);
+    set_read_receipts(&b.store, false).unwrap();
+    assert_eq!(read_by_b("и это", T0 + 20), Status::Delivered);
+    set_read_receipts(&b.store, true).unwrap();
+    set_read_receipts(&a.store, false).unwrap();
+    assert_eq!(read_by_b("и третье", T0 + 30), Status::Delivered);
 }

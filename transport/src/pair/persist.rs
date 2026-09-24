@@ -19,7 +19,9 @@ use crate::envelope::{Part, State};
 use crate::item::SignedItem;
 use crate::TransportError;
 
-const FORMAT: u8 = 1;
+/// 2 added the read marks: the peer's in its state and my own after it, and mine in the current
+/// state item. A format 1 record reads with neither (`a_pair_stored_by_format_1_still_restores`).
+const FORMAT: u8 = 2;
 
 struct Writer(Zeroizing<Vec<u8>>);
 
@@ -61,6 +63,7 @@ impl Writer {
         for v in [s.next_recv, s.recv_bits, s.next_send, s.send_floor] {
             self.u64(v);
         }
+        self.when(s.next_read);
     }
     fn item(&mut self, i: &SignedItem) -> Result<(), TransportError> {
         self.bytes(&i.to_bytes())
@@ -69,6 +72,7 @@ impl Writer {
 
 struct Reader<'a> {
     buf: &'a [u8],
+    format: u8,
 }
 
 fn corrupt(what: &'static str) -> TransportError {
@@ -135,6 +139,7 @@ impl<'a> Reader<'a> {
             recv_bits: self.u64()?,
             next_send: self.u64()?,
             send_floor: self.u64()?,
+            next_read: if self.format >= 2 { self.when()? } else { None },
         })
     }
     fn item(&mut self) -> Result<SignedItem, TransportError> {
@@ -153,6 +158,7 @@ impl Pair {
         w.u64(self.lost_to);
         w.u8(u8::from(self.peer_seen));
         w.state(&self.peer);
+        w.when(self.read_to);
 
         w.count(self.state_seq.len())?;
         for (&day, &seq) in &self.state_seq {
@@ -231,8 +237,12 @@ impl Pair {
     ) -> Result<Self, TransportError> {
         let secret = me.pair_secret(peer)?;
         let mine = me.public();
-        let mut r = Reader { buf: bytes };
-        if r.u8()? != FORMAT {
+        let mut r = Reader {
+            buf: bytes,
+            format: 0,
+        };
+        r.format = r.u8()?;
+        if !(1..=FORMAT).contains(&r.format) {
             return Err(corrupt("unknown format"));
         }
         // Keys derived for another session would silently read and write someone else's
@@ -245,6 +255,7 @@ impl Pair {
         let lost_to = r.u64()?;
         let peer_seen = r.flag()?;
         let peer_state = r.state()?;
+        let read_to = if r.format >= 2 { r.when()? } else { None };
 
         let mut state_seq = BTreeMap::new();
         for _ in 0..r.count()? {
@@ -340,6 +351,50 @@ impl Pair {
             lost_to,
             peer_seen,
             intro,
+            read_to,
+            receipts: false,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
+
+    use super::*;
+
+    /// A pair as format 1 stored it — the phones hold such records — laid out by hand: it
+    /// restores with no read marks, and format 2 keeps both marks across a save.
+    #[test]
+    fn a_pair_stored_by_format_1_still_restores() {
+        let me = Identity::generate().unwrap();
+        let peer = Identity::generate().unwrap().public();
+        let mut v1 = vec![1u8];
+        v1.extend_from_slice(&1u32.to_be_bytes());
+        v1.push(b's');
+        for n in [5u64, 3, 0] {
+            v1.extend_from_slice(&n.to_be_bytes()); // next_send, next_recv, lost_to
+        }
+        v1.push(1); // peer seen
+        for n in [2u64, 0, 3, 0] {
+            v1.extend_from_slice(&n.to_be_bytes()); // the peer's state
+        }
+        v1.extend_from_slice(&0u32.to_be_bytes()); // no state seq
+        v1.push(0); // no current state
+        v1.extend_from_slice(&0u32.to_be_bytes()); // empty outbox
+        v1.extend_from_slice(&0u32.to_be_bytes()); // nothing inbound
+        v1.push(0); // nothing assembling
+        v1.push(0); // no reply
+        v1.extend_from_slice(&0x0a0eu16.to_be_bytes());
+
+        let mut pair = Pair::restore(&me, &peer, "s", &v1).unwrap();
+        assert_eq!((pair.next_send, pair.next_recv), (5, 3));
+        assert_eq!(pair.peer.next_recv, 2);
+        assert_eq!((pair.peer.next_read, pair.read_to), (None, None));
+
+        pair.mark_read(1);
+        pair.peer.next_read = Some(2);
+        let back = Pair::restore(&me, &peer, "s", &pair.to_bytes().unwrap()).unwrap();
+        assert_eq!((back.peer.next_read, back.read_to), (Some(2), Some(2)));
     }
 }

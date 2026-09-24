@@ -25,11 +25,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get createIdentity => 'CREATE IDENTITY';
 
   @override
-  String get fingerprintTitle => 'FINGERPRINT';
+  String get fingerprintTitle => 'YOUR FINGERPRINT';
 
   @override
   String get fingerprintBody =>
-      'This is read aloud to the person you talk to. A difference in even one digit means someone is between you.';
+      'It identifies you. It is not what you compare with someone: for that, open the chat and tap Verify — the safety number there is one and the same for the two of you.';
 
   @override
   String get notVerified => 'NOT VERIFIED WITH ANYONE';
@@ -513,7 +513,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String verifyBody(String name) {
-    return 'Compare these digits with $name — in person or by voice, not through this chat. If even one differs, someone is between you.';
+    return 'One number for the two of you: $name sees exactly these digits on this screen. It is not your fingerprint from Settings.';
   }
 
   @override
@@ -524,4 +524,60 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get verifiedByYou => 'VERIFIED BY YOU';
+
+  @override
+  String verifyStep1(String name) {
+    return 'Call $name — by voice, not through the channel the invitation went through.';
+  }
+
+  @override
+  String verifyStep2(String name) {
+    return 'Both open this screen. You read the first row aloud, $name reads the second.';
+  }
+
+  @override
+  String get verifyStep3 =>
+      'Every digit the same — they match. Even one differs — they do not.';
+
+  @override
+  String get verifyMismatch => 'THEY DO NOT MATCH';
+
+  @override
+  String get mismatchTitle => 'THE NUMBERS DO NOT MATCH';
+
+  @override
+  String get mismatchBody =>
+      'Until this is settled, write nothing you would not say to a stranger: someone may be between you. Find out whose key is not the one the other holds — compare the two fingerprints below with what each of you sees in Settings → My identity.';
+
+  @override
+  String mismatchTheirs(String name) {
+    return 'The fingerprint of $name, as this phone holds it. $name must see the same in their settings:';
+  }
+
+  @override
+  String mismatchMine(String name) {
+    return 'Your fingerprint. $name must hold the same for you:';
+  }
+
+  @override
+  String get mismatchVerdict =>
+      'A fingerprint differs — a key was replaced: do not trust this conversation. Both are the same and the numbers still differ — that is a fault of the app: send screenshots of both screens.';
+
+  @override
+  String get mismatchBack => 'BACK TO THE NUMBER';
+
+  @override
+  String get msgRead => 'read';
+
+  @override
+  String previewMine(String text) {
+    return 'You: $text';
+  }
+
+  @override
+  String get settingsReadReceipts => 'Read receipts';
+
+  @override
+  String get settingsReadReceiptsNote =>
+      'The person you write to learns when you were shown their message, and you learn the same about yours. Off, neither is sent nor shown. The network learns little new: an open chat already shows in how often the app asks.';
 }

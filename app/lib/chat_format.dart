@@ -13,4 +13,14 @@ String clockTime(int unixSeconds) {
   return '${_two(d.hour)}:${_two(d.minute)}';
 }
 
+/// When the list's newest entry was: the time today, the day this year, the date before that.
+String listTime(int unixSeconds, DateTime now) {
+  final d = DateTime.fromMillisecondsSinceEpoch(unixSeconds * 1000);
+  if (d.year == now.year && d.month == now.month && d.day == now.day) {
+    return clockTime(unixSeconds);
+  }
+  final day = '${_two(d.day)}.${_two(d.month)}';
+  return d.year == now.year ? day : '$day.${d.year}';
+}
+
 String _two(int n) => n.toString().padLeft(2, '0');

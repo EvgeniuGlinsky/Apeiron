@@ -30,7 +30,13 @@ pub const MAX_OLM_BYTES: usize = INNER_BYTES - HEADER_BYTES - PART_HEADER_BYTES;
 /// has minutes, not hours.
 pub const MAX_PARTS: u8 = 32;
 
+/// A state as the first builds made it: four counters, no read mark.
 const STATE_BYTES: usize = 32;
+
+/// A state with the read mark after the four counters. The length tells the two apart, so a
+/// state of an older build still reads, and one whose owner does not send read receipts is
+/// made the old way — nothing in it says the setting exists.
+const STATE_WITH_READ_BYTES: usize = 40;
 
 /// One part of a message.
 ///
@@ -57,6 +63,9 @@ pub struct State {
     pub next_send: u64,
     /// The lowest index this side still re-puts; below it, it has given up.
     pub send_floor: u64,
+    /// The peer's messages whose first index is below this have been shown to the person — the
+    /// read receipt. `None` when this side does not send them.
+    pub next_read: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -96,9 +105,12 @@ impl Body {
                 (KIND_PART, b)
             }
             Body::State(s) => {
-                let mut b = Vec::with_capacity(STATE_BYTES);
+                let mut b = Vec::with_capacity(STATE_WITH_READ_BYTES);
                 for v in [s.next_recv, s.recv_bits, s.next_send, s.send_floor] {
                     b.extend_from_slice(&v.to_be_bytes());
+                }
+                if let Some(read) = s.next_read {
+                    b.extend_from_slice(&read.to_be_bytes());
                 }
                 (KIND_STATE, b)
             }
@@ -154,7 +166,7 @@ impl Body {
                 }))
             }
             KIND_STATE => {
-                if body.len() != STATE_BYTES {
+                if body.len() != STATE_BYTES && body.len() != STATE_WITH_READ_BYTES {
                     return Err(EnvelopeError::Malformed("state length"));
                 }
                 let (words, _) = body.as_chunks::<8>();
@@ -166,11 +178,17 @@ impl Body {
                 if send_floor > next_send {
                     return Err(EnvelopeError::Malformed("floor above the sent count"));
                 }
+                let next_read = words.get(4).map(|w| u64::from_be_bytes(*w));
+                // Only what has arrived can have been shown.
+                if next_read.is_some_and(|r| r > next_recv) {
+                    return Err(EnvelopeError::Malformed("read beyond what arrived"));
+                }
                 Ok(Body::State(State {
                     next_recv,
                     recv_bits,
                     next_send,
                     send_floor,
+                    next_read,
                 }))
             }
             other => Err(EnvelopeError::Kind(other)),
@@ -206,6 +224,7 @@ mod tests {
             recv_bits: 0b1011,
             next_send: 12,
             send_floor: 3,
+            next_read: Some(4),
         });
         for body in [part(1), part(MAX_OLM_BYTES), state] {
             let inner = body.encode().unwrap();
@@ -253,6 +272,47 @@ mod tests {
         );
     }
 
+    /// Bytes laid out by hand as the first builds wrote a state — the phones hold such items and
+    /// put them — read as a state without a read mark; the mark after them reads too, and one
+    /// beyond what has arrived is refused.
+    #[test]
+    fn a_state_of_the_first_builds_still_reads() {
+        let inner = |words: &[u64]| {
+            let mut v = vec![1u8, 2, 0, u8::try_from(words.len() * 8).unwrap()];
+            for w in words {
+                v.extend_from_slice(&w.to_be_bytes());
+            }
+            v.resize(INNER_BYTES, 0);
+            v
+        };
+        let old = State {
+            next_recv: 7,
+            recv_bits: 0b1011,
+            next_send: 12,
+            send_floor: 3,
+            next_read: None,
+        };
+        assert_eq!(
+            Body::decode(&inner(&[7, 0b1011, 12, 3])),
+            Ok(Body::State(old))
+        );
+        assert_eq!(
+            Body::State(old).encode().unwrap(),
+            inner(&[7, 0b1011, 12, 3])
+        );
+        assert_eq!(
+            Body::decode(&inner(&[7, 0b1011, 12, 3, 7])),
+            Ok(Body::State(State {
+                next_read: Some(7),
+                ..old
+            }))
+        );
+        assert!(matches!(
+            Body::decode(&inner(&[7, 0b1011, 12, 3, 8])),
+            Err(EnvelopeError::Malformed(_))
+        ));
+    }
+
     #[test]
     fn a_state_with_the_floor_above_what_was_sent_is_refused() {
         let s = Body::State(State {
@@ -260,6 +320,7 @@ mod tests {
             recv_bits: 0,
             next_send: 2,
             send_floor: 3,
+            next_read: None,
         });
         assert!(matches!(
             Body::decode(&s.encode().unwrap()),

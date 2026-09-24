@@ -1,5 +1,6 @@
-/// The conversations list: an empty state that says what to do, and a contact's line that says
-/// where it stands — never "verified" unless the owner verified it.
+/// The conversations list: an empty state that says what to do, a contact's line that says
+/// where it stands — never "verified" unless the owner verified it — and a live one's newest
+/// entry with its time and the unread count.
 library;
 
 import 'package:apeiron/chat_format.dart';
@@ -42,12 +43,28 @@ void main() {
                 name: 'Bob',
                 state: ContactState.live,
                 verified: false,
+                unread: 0,
               ),
               ContactItem(
                 id: 2,
                 name: 'Carol',
                 state: ContactState.waiting,
                 verified: false,
+                unread: 0,
+              ),
+              ContactItem(
+                id: 4,
+                name: 'Erin',
+                state: ContactState.live,
+                verified: true,
+                last: MessageItem(
+                  id: 9,
+                  mine: true,
+                  state: MessageState.read,
+                  at: 1790251200,
+                  text: 'see\nyou',
+                ),
+                unread: 120,
               ),
             ],
             invitations: const [
@@ -60,10 +77,17 @@ void main() {
             ],
             onOpenContact: (_) {},
             onOpenInvitation: (_) {},
+            now: DateTime(2027),
           ),
         ),
       );
       expect(find.text(l.chatsEmptyTitle), findsNothing);
+      // A preview on one line, mine marked as such, its time, and a count that does not grow
+      // out of the row.
+      expect(find.text(l.previewMine('see you')), findsOneWidget);
+      expect(find.text('99+'), findsOneWidget);
+      expect(find.text(listTime(1790251200, DateTime(2027))), findsOneWidget);
+      expect(listTime(1790251200, DateTime(2027)), '24.09.2026');
       expect(find.text(l.contactNotVerified), findsOneWidget);
       expect(find.text(l.contactWaiting), findsOneWidget);
       expect(find.text(l.invitationUntil(dayDate(20727))), findsOneWidget);

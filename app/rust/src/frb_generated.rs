@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1737476983;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -513474073;
 
 // Section: executor
 
@@ -252,6 +252,40 @@ fn wire__crate__api__chat__chat_invitations_impl(
         },
     )
 }
+fn wire__crate__api__chat__chat_mark_read_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "chat_mark_read",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_contact = <i64>::sse_decode(&mut deserializer);
+            let api_upto = <i64>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::chat::chat_mark_read(api_contact, api_upto)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__chat__chat_poll_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -278,6 +312,38 @@ fn wire__crate__api__chat__chat_poll_impl(
             move |context| {
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::chat::chat_poll()?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__chat__chat_read_receipts_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "chat_read_receipts",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::chat::chat_read_receipts()?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -311,39 +377,6 @@ fn wire__crate__api__chat__chat_round_impl(
             move |context| {
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::chat::chat_round(api_contact)?;
-                    std::result::Result::Ok(output_ok)
-                })())
-            }
-        },
-    )
-}
-fn wire__crate__api__chat__chat_safety_number_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "chat_safety_number",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_contact = <i64>::sse_decode(&mut deserializer);
-            deserializer.end();
-            move |context| {
-                transform_result_sse::<_, String>((move || {
-                    let output_ok = crate::api::chat::chat_safety_number(api_contact)?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -384,6 +417,39 @@ fn wire__crate__api__chat__chat_send_impl(
         },
     )
 }
+fn wire__crate__api__chat__chat_set_read_receipts_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "chat_set_read_receipts",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_enabled = <bool>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::chat::chat_set_read_receipts(api_enabled)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__chat__chat_set_verified_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -412,6 +478,39 @@ fn wire__crate__api__chat__chat_set_verified_impl(
             move |context| {
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::chat::chat_set_verified(api_contact, api_verified)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__chat__chat_verification_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "chat_verification",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_contact = <i64>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::chat::chat_verification(api_contact)?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -1329,11 +1428,15 @@ impl SseDecode for crate::api::chat::ContactItem {
         let mut var_name = <String>::sse_decode(deserializer);
         let mut var_state = <crate::api::chat::ContactState>::sse_decode(deserializer);
         let mut var_verified = <bool>::sse_decode(deserializer);
+        let mut var_last = <Option<crate::api::chat::MessageItem>>::sse_decode(deserializer);
+        let mut var_unread = <u32>::sse_decode(deserializer);
         return crate::api::chat::ContactItem {
             id: var_id,
             name: var_name,
             state: var_state,
             verified: var_verified,
+            last: var_last,
+            unread: var_unread,
         };
     }
 }
@@ -1481,10 +1584,11 @@ impl SseDecode for crate::api::chat::MessageState {
             0 => crate::api::chat::MessageState::Queued,
             1 => crate::api::chat::MessageState::Sent,
             2 => crate::api::chat::MessageState::Delivered,
-            3 => crate::api::chat::MessageState::NotDelivered,
-            4 => crate::api::chat::MessageState::AddressTaken,
-            5 => crate::api::chat::MessageState::Received,
-            6 => crate::api::chat::MessageState::Lost,
+            3 => crate::api::chat::MessageState::Read,
+            4 => crate::api::chat::MessageState::NotDelivered,
+            5 => crate::api::chat::MessageState::AddressTaken,
+            6 => crate::api::chat::MessageState::Received,
+            7 => crate::api::chat::MessageState::Lost,
             _ => unreachable!("Invalid variant for MessageState: {}", inner),
         };
     }
@@ -1495,6 +1599,17 @@ impl SseDecode for Option<i64> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<i64>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::api::chat::MessageItem> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::chat::MessageItem>::sse_decode(deserializer));
         } else {
             return None;
         }
@@ -1608,6 +1723,20 @@ impl SseDecode for crate::api::vault::VaultStatus {
     }
 }
 
+impl SseDecode for crate::api::chat::VerificationItem {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_safetyNumber = <String>::sse_decode(deserializer);
+        let mut var_myFingerprint = <String>::sse_decode(deserializer);
+        let mut var_theirFingerprint = <String>::sse_decode(deserializer);
+        return crate::api::chat::VerificationItem {
+            safety_number: var_safetyNumber,
+            my_fingerprint: var_myFingerprint,
+            their_fingerprint: var_theirFingerprint,
+        };
+    }
+}
+
 fn pde_ffi_dispatcher_primary_impl(
     func_id: i32,
     port: flutter_rust_bridge::for_generated::MessagePort,
@@ -1623,42 +1752,47 @@ fn pde_ffi_dispatcher_primary_impl(
         4 => wire__crate__api__chat__chat_create_invitation_impl(port, ptr, rust_vec_len, data_len),
         5 => wire__crate__api__chat__chat_history_impl(port, ptr, rust_vec_len, data_len),
         6 => wire__crate__api__chat__chat_invitations_impl(port, ptr, rust_vec_len, data_len),
-        7 => wire__crate__api__chat__chat_poll_impl(port, ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__chat__chat_round_impl(port, ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__chat__chat_safety_number_impl(port, ptr, rust_vec_len, data_len),
-        10 => wire__crate__api__chat__chat_send_impl(port, ptr, rust_vec_len, data_len),
-        11 => wire__crate__api__chat__chat_set_verified_impl(port, ptr, rust_vec_len, data_len),
-        12 => wire__crate__api__identity__current_identity_impl(port, ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__probe__dht_probe_clear_log_impl(port, ptr, rust_vec_len, data_len),
-        14 => wire__crate__api__probe__dht_probe_get_own_impl(port, ptr, rust_vec_len, data_len),
-        15 => wire__crate__api__probe__dht_probe_get_public_impl(port, ptr, rust_vec_len, data_len),
-        16 => wire__crate__api__probe__dht_probe_log_impl(port, ptr, rust_vec_len, data_len),
-        17 => wire__crate__api__probe__dht_probe_put_impl(port, ptr, rust_vec_len, data_len),
-        18 => wire__crate__api__identity__generate_identity_impl(port, ptr, rust_vec_len, data_len),
-        19 => wire__crate__api__identity__lock_identity_impl(port, ptr, rust_vec_len, data_len),
-        20 => wire__crate__api__vault__lock_vault_impl(port, ptr, rust_vec_len, data_len),
-        21 => wire__crate__api__vault__pin_change_confirm_impl(port, ptr, rust_vec_len, data_len),
-        22 => wire__crate__api__vault__pin_change_current_impl(port, ptr, rust_vec_len, data_len),
-        23 => wire__crate__api__pin__pin_pad_begin_impl(port, ptr, rust_vec_len, data_len),
-        24 => wire__crate__api__pin__pin_pad_clear_impl(port, ptr, rust_vec_len, data_len),
-        25 => wire__crate__api__pin__pin_pad_erase_impl(port, ptr, rust_vec_len, data_len),
-        26 => wire__crate__api__pin__pin_pad_prefs_impl(port, ptr, rust_vec_len, data_len),
-        27 => wire__crate__api__pin__pin_pad_press_impl(port, ptr, rust_vec_len, data_len),
-        28 => wire__crate__api__vault__pin_setup_confirm_impl(port, ptr, rust_vec_len, data_len),
-        29 => wire__crate__api__vault__pin_setup_first_impl(port, ptr, rust_vec_len, data_len),
-        30 => wire__crate__api__vault__platform_diagnostics_impl(port, ptr, rust_vec_len, data_len),
-        31 => {
+        7 => wire__crate__api__chat__chat_mark_read_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__chat__chat_poll_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__chat__chat_read_receipts_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__chat__chat_round_impl(port, ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__chat__chat_send_impl(port, ptr, rust_vec_len, data_len),
+        12 => {
+            wire__crate__api__chat__chat_set_read_receipts_impl(port, ptr, rust_vec_len, data_len)
+        }
+        13 => wire__crate__api__chat__chat_set_verified_impl(port, ptr, rust_vec_len, data_len),
+        14 => wire__crate__api__chat__chat_verification_impl(port, ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__identity__current_identity_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__probe__dht_probe_clear_log_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__api__probe__dht_probe_get_own_impl(port, ptr, rust_vec_len, data_len),
+        18 => wire__crate__api__probe__dht_probe_get_public_impl(port, ptr, rust_vec_len, data_len),
+        19 => wire__crate__api__probe__dht_probe_log_impl(port, ptr, rust_vec_len, data_len),
+        20 => wire__crate__api__probe__dht_probe_put_impl(port, ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__identity__generate_identity_impl(port, ptr, rust_vec_len, data_len),
+        22 => wire__crate__api__identity__lock_identity_impl(port, ptr, rust_vec_len, data_len),
+        23 => wire__crate__api__vault__lock_vault_impl(port, ptr, rust_vec_len, data_len),
+        24 => wire__crate__api__vault__pin_change_confirm_impl(port, ptr, rust_vec_len, data_len),
+        25 => wire__crate__api__vault__pin_change_current_impl(port, ptr, rust_vec_len, data_len),
+        26 => wire__crate__api__pin__pin_pad_begin_impl(port, ptr, rust_vec_len, data_len),
+        27 => wire__crate__api__pin__pin_pad_clear_impl(port, ptr, rust_vec_len, data_len),
+        28 => wire__crate__api__pin__pin_pad_erase_impl(port, ptr, rust_vec_len, data_len),
+        29 => wire__crate__api__pin__pin_pad_prefs_impl(port, ptr, rust_vec_len, data_len),
+        30 => wire__crate__api__pin__pin_pad_press_impl(port, ptr, rust_vec_len, data_len),
+        31 => wire__crate__api__vault__pin_setup_confirm_impl(port, ptr, rust_vec_len, data_len),
+        32 => wire__crate__api__vault__pin_setup_first_impl(port, ptr, rust_vec_len, data_len),
+        33 => wire__crate__api__vault__platform_diagnostics_impl(port, ptr, rust_vec_len, data_len),
+        34 => {
             wire__crate__api__identity__public_identity_hex_impl(port, ptr, rust_vec_len, data_len)
         }
-        32 => wire__crate__api__vault__reset_legacy_impl(port, ptr, rust_vec_len, data_len),
-        33 => {
+        35 => wire__crate__api__vault__reset_legacy_impl(port, ptr, rust_vec_len, data_len),
+        36 => {
             wire__crate__api__identity__safety_number_with_impl(port, ptr, rust_vec_len, data_len)
         }
-        34 => wire__crate__api__vault__self_check_impl(port, ptr, rust_vec_len, data_len),
-        35 => wire__crate__api__pin__set_pin_pad_prefs_impl(port, ptr, rust_vec_len, data_len),
-        36 => wire__crate__api__vault__unlock_with_pin_impl(port, ptr, rust_vec_len, data_len),
-        37 => wire__crate__api__vault__vault_status_impl(port, ptr, rust_vec_len, data_len),
-        38 => wire__crate__api__vault__wipe_everything_impl(port, ptr, rust_vec_len, data_len),
+        37 => wire__crate__api__vault__self_check_impl(port, ptr, rust_vec_len, data_len),
+        38 => wire__crate__api__pin__set_pin_pad_prefs_impl(port, ptr, rust_vec_len, data_len),
+        39 => wire__crate__api__vault__unlock_with_pin_impl(port, ptr, rust_vec_len, data_len),
+        40 => wire__crate__api__vault__vault_status_impl(port, ptr, rust_vec_len, data_len),
+        41 => wire__crate__api__vault__wipe_everything_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1704,6 +1838,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::chat::ContactItem {
             self.name.into_into_dart().into_dart(),
             self.state.into_into_dart().into_dart(),
             self.verified.into_into_dart().into_dart(),
+            self.last.into_into_dart().into_dart(),
+            self.unread.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1791,10 +1927,11 @@ impl flutter_rust_bridge::IntoDart for crate::api::chat::MessageState {
             Self::Queued => 0.into_dart(),
             Self::Sent => 1.into_dart(),
             Self::Delivered => 2.into_dart(),
-            Self::NotDelivered => 3.into_dart(),
-            Self::AddressTaken => 4.into_dart(),
-            Self::Received => 5.into_dart(),
-            Self::Lost => 6.into_dart(),
+            Self::Read => 3.into_dart(),
+            Self::NotDelivered => 4.into_dart(),
+            Self::AddressTaken => 5.into_dart(),
+            Self::Received => 6.into_dart(),
+            Self::Lost => 7.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -1906,6 +2043,28 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::vault::VaultStatus>
         self
     }
 }
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::chat::VerificationItem {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.safety_number.into_into_dart().into_dart(),
+            self.my_fingerprint.into_into_dart().into_dart(),
+            self.their_fingerprint.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::chat::VerificationItem
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::chat::VerificationItem>
+    for crate::api::chat::VerificationItem
+{
+    fn into_into_dart(self) -> crate::api::chat::VerificationItem {
+        self
+    }
+}
 
 impl SseEncode for String {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -1937,6 +2096,8 @@ impl SseEncode for crate::api::chat::ContactItem {
         <String>::sse_encode(self.name, serializer);
         <crate::api::chat::ContactState>::sse_encode(self.state, serializer);
         <bool>::sse_encode(self.verified, serializer);
+        <Option<crate::api::chat::MessageItem>>::sse_encode(self.last, serializer);
+        <u32>::sse_encode(self.unread, serializer);
     }
 }
 
@@ -2062,10 +2223,11 @@ impl SseEncode for crate::api::chat::MessageState {
                 crate::api::chat::MessageState::Queued => 0,
                 crate::api::chat::MessageState::Sent => 1,
                 crate::api::chat::MessageState::Delivered => 2,
-                crate::api::chat::MessageState::NotDelivered => 3,
-                crate::api::chat::MessageState::AddressTaken => 4,
-                crate::api::chat::MessageState::Received => 5,
-                crate::api::chat::MessageState::Lost => 6,
+                crate::api::chat::MessageState::Read => 3,
+                crate::api::chat::MessageState::NotDelivered => 4,
+                crate::api::chat::MessageState::AddressTaken => 5,
+                crate::api::chat::MessageState::Received => 6,
+                crate::api::chat::MessageState::Lost => 7,
                 _ => {
                     unimplemented!("");
                 }
@@ -2081,6 +2243,16 @@ impl SseEncode for Option<i64> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <i64>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::api::chat::MessageItem> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::chat::MessageItem>::sse_encode(value, serializer);
         }
     }
 }
@@ -2169,6 +2341,15 @@ impl SseEncode for crate::api::vault::VaultStatus {
         <u32>::sse_encode(self.failures, serializer);
         <u32>::sse_encode(self.wait_seconds, serializer);
         <u32>::sse_encode(self.unlock_ms, serializer);
+    }
+}
+
+impl SseEncode for crate::api::chat::VerificationItem {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.safety_number, serializer);
+        <String>::sse_encode(self.my_fingerprint, serializer);
+        <String>::sse_encode(self.their_fingerprint, serializer);
     }
 }
 

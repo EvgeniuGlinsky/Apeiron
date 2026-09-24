@@ -34,6 +34,9 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _sending = false;
   String? _error;
 
+  /// The newest row already reported as shown.
+  int _readUpTo = 0;
+
   @override
   void initState() {
     super.initState();
@@ -64,9 +67,23 @@ class _ChatScreenState extends State<ChatScreen> {
           orElse: () => _contact,
         );
       });
+      _markRead();
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     }
+  }
+
+  /// What this screen shows has been seen: the list's count clears, and the contact learns it
+  /// with the next round if receipts are on.
+  void _markRead() {
+    final newest = _messages.isEmpty ? 0 : _messages.first.id;
+    if (newest <= _readUpTo) return;
+    _readUpTo = newest;
+    chatMarkRead(contact: _contact.id, upto: newest).catchError((_) {
+      // The vault locked meanwhile: the next time the chat is shown marks it.
+      _readUpTo = 0;
+      return false;
+    });
   }
 
   Future<void> _roundNow() async {
@@ -226,17 +243,7 @@ class MessageBubble extends StatelessWidget {
         ),
       );
     }
-    final status = switch (m.state) {
-      MessageState.queued => l.msgQueued,
-      MessageState.sent => l.msgSent,
-      MessageState.delivered => l.msgDelivered,
-      MessageState.notDelivered => l.msgNotDelivered,
-      MessageState.addressTaken => l.msgAddressTaken,
-      _ => '',
-    };
-    final failed =
-        m.state == MessageState.notDelivered ||
-        m.state == MessageState.addressTaken;
+    final failed = isFailed(m.state);
     return Align(
       alignment: m.mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -258,16 +265,65 @@ class MessageBubble extends StatelessWidget {
               ),
             ),
             const SizedBox(height: Ap.s4),
-            Text(
-              [clockTime(m.at), if (status.isNotEmpty) status].join(' · '),
-              style: t.bodySmall?.copyWith(
-                fontSize: 11,
-                color: failed ? Ap.rust500 : Ap.fog400,
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  clockTime(m.at),
+                  style: t.bodySmall?.copyWith(
+                    fontSize: 11,
+                    color: failed ? Ap.rust500 : Ap.fog400,
+                  ),
+                ),
+                if (m.mine) ...[
+                  const SizedBox(width: Ap.s4),
+                  StatusIcon(state: m.state),
+                ],
+              ],
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+bool isFailed(MessageState s) =>
+    s == MessageState.notDelivered || s == MessageState.addressTaken;
+
+/// Where my message stands, as a mark: a clock, one grey tick (on the network), two grey
+/// (on their phone), two in glacier blue (they were shown it), red (not delivered). The words
+/// stay in the tooltip and for screen readers.
+class StatusIcon extends StatelessWidget {
+  const StatusIcon({super.key, required this.state, this.size = 14});
+
+  final MessageState state;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final (icon, color, words) = switch (state) {
+      MessageState.queued => (Icons.schedule, Ap.fog400, l.msgQueued),
+      MessageState.sent => (Icons.check, Ap.fog400, l.msgSent),
+      MessageState.delivered => (Icons.done_all, Ap.fog400, l.msgDelivered),
+      MessageState.read => (Icons.done_all, Ap.glacier400, l.msgRead),
+      MessageState.notDelivered => (
+        Icons.error_outline,
+        Ap.rust500,
+        l.msgNotDelivered,
+      ),
+      MessageState.addressTaken => (
+        Icons.error_outline,
+        Ap.rust500,
+        l.msgAddressTaken,
+      ),
+      MessageState.received || MessageState.lost => (null, Ap.fog400, ''),
+    };
+    if (icon == null) return const SizedBox.shrink();
+    return Tooltip(
+      message: words,
+      child: Icon(icon, size: size, color: color, semanticLabel: words),
     );
   }
 }

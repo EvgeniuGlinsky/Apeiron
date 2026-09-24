@@ -7,32 +7,45 @@ import 'lock_policy.dart';
 import 'src/rust/api/identity.dart';
 import 'theme/tokens.dart';
 
-/// Thirty digits in a rigid 3 × 2 grid, with the copper accent that nothing else in the app
-/// uses: the fingerprint, and the safety number with a contact. People must look at it.
+/// Thirty digits in a rigid 3 × 2 grid.
 ///
 /// A rigid grid, not Wrap: the split must be the same on every screen. When verifying by
 /// voice, a shifting layout is a source of errors, and an error here means a missed man in the
 /// middle.
+///
+/// The copper accent, which nothing else in the app uses, belongs to the **safety number**
+/// alone. The owner's fingerprint once wore it too, under a line saying it was read aloud — and
+/// on two phones people compared one person's fingerprint with the other's safety number, which
+/// can never match. A fingerprint is drawn plain ([DigitGrid.plain]).
 class DigitGrid extends StatelessWidget {
-  const DigitGrid({super.key, required this.digits});
+  const DigitGrid({super.key, required this.digits}) : safetyNumber = true;
+
+  const DigitGrid.plain({super.key, required this.digits})
+    : safetyNumber = false;
 
   /// Groups separated by spaces, as the core returns them.
   final String digits;
 
+  final bool safetyNumber;
+
   @override
   Widget build(BuildContext context) {
     final groups = digits.split(' ');
+    final edge = safetyNumber ? Ap.ember400 : Ap.stone700;
     return Container(
-      decoration: const BoxDecoration(
-        color: Ap.basalt800,
+      decoration: BoxDecoration(
+        color: safetyNumber ? Ap.basalt800 : Ap.basalt900,
         border: Border(
-          left: BorderSide(color: Ap.ember400, width: 3),
-          top: BorderSide(color: Ap.stone700),
-          right: BorderSide(color: Ap.stone700),
-          bottom: BorderSide(color: Ap.stone700),
+          left: BorderSide(color: edge, width: safetyNumber ? 3 : 1),
+          top: const BorderSide(color: Ap.stone700),
+          right: const BorderSide(color: Ap.stone700),
+          bottom: const BorderSide(color: Ap.stone700),
         ),
       ),
-      padding: const EdgeInsets.symmetric(vertical: Ap.s28, horizontal: Ap.s16),
+      padding: EdgeInsets.symmetric(
+        vertical: safetyNumber ? Ap.s28 : Ap.s16,
+        horizontal: Ap.s16,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -47,11 +60,13 @@ class DigitGrid extends StatelessWidget {
                       fit: BoxFit.scaleDown,
                       child: Text(
                         g,
-                        style: Ap.mono(
-                          size: 26,
-                          spacing: 3.4,
-                          weight: FontWeight.w600,
-                        ),
+                        style: safetyNumber
+                            ? Ap.mono(
+                                size: 26,
+                                spacing: 3.4,
+                                weight: FontWeight.w600,
+                              )
+                            : Ap.mono(size: 18, spacing: 2, color: Ap.fog400),
                       ),
                     ),
                   ),
@@ -81,7 +96,7 @@ class IdentityView extends StatelessWidget {
         const SizedBox(height: Ap.s8),
         Text(l.fingerprintBody, style: t.bodySmall),
         const SizedBox(height: Ap.s16),
-        DigitGrid(digits: identity.fingerprint),
+        DigitGrid.plain(digits: identity.fingerprint),
         const SizedBox(height: Ap.s28),
         KeyRow(label: l.keySigning, value: identity.signingKeyHex),
         const SizedBox(height: Ap.s16),

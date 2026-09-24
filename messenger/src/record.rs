@@ -6,7 +6,8 @@
 //! - **Message** (`messages` table): `format (1) ‖ kind (1) ‖ status (1) ‖ index flag (1)
 //!   [‖ index (8)] ‖ at (8) ‖ [to (8), for a loss] ‖ text`.
 //! - **Conversation** (`pair_state` table): `format (1) ‖ origin (1) ‖ intro message flag (1)
-//!   [‖ id (8)] ‖ pending count (4) ‖ (first index (8) ‖ message id (8))* ‖ the pair's bytes`.
+//!   [‖ id (8)] ‖ read mark (8, from format 2) ‖ pending count (4) ‖ (first index (8) ‖
+//!   message id (8))* ‖ the pair's bytes`.
 //! - **Invitation** (`invitations` table): `format (1) ‖ created (8) ‖ invitation (261) ‖
 //!   name`.
 
@@ -18,14 +19,20 @@ use zeroize::Zeroizing;
 
 use crate::MessengerError;
 
-const FORMAT: u8 = 1;
+/// Each record kind has its own version: a new field in one must not make the others unreadable.
+const MESSAGE_FORMAT: u8 = 1;
+/// 2 added the read mark. A format 1 record reads with the mark at 0: everything the peer wrote
+/// before the update counts as unread until the chat is opened once.
+const CONVERSATION_FORMAT: u8 = 2;
+const INVITATION_FORMAT: u8 = 1;
 
 fn corrupt(what: &'static str) -> MessengerError {
     MessengerError::Corrupt(what)
 }
 
 /// Where one of my messages stands. Only ever moves forward: after a crash `Sent` may be
-/// reported again, and `Delivered` may come without `Sent` before it.
+/// reported again, and `Delivered` may come without `Sent` before it. The numbers are what the
+/// record holds, not an order: `Read` came last and ranks above `Delivered`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
     /// Written, not yet on the network.
@@ -38,6 +45,8 @@ pub enum Status {
     NotDelivered = 3,
     /// An address it was to use already held something else (`docs/transport.md` §2).
     AddressTaken = 4,
+    /// The peer has been shown it: their read receipt.
+    Read = 5,
 }
 
 impl Status {
@@ -48,16 +57,26 @@ impl Status {
             2 => Self::Delivered,
             3 => Self::NotDelivered,
             4 => Self::AddressTaken,
+            5 => Self::Read,
             _ => return Err(corrupt("message status")),
         })
     }
 
-    /// Whether nothing will change it any more.
-    pub fn is_final(self) -> bool {
-        matches!(
-            self,
-            Self::Delivered | Self::NotDelivered | Self::AddressTaken
-        )
+    /// Whether `to` is a step forward from here. What arrived cannot turn into "not delivered",
+    /// only into "read"; "read", "not delivered" and "address taken" are where it ends.
+    fn may_become(self, to: Self) -> bool {
+        let rank = |s: Self| match s {
+            Self::Queued => 0,
+            Self::Sent => 1,
+            Self::Delivered => 2,
+            Self::Read => 3,
+            Self::NotDelivered | Self::AddressTaken => 4,
+        };
+        match self {
+            Self::Queued | Self::Sent => rank(to) > rank(self),
+            Self::Delivered => to == Self::Read,
+            Self::Read | Self::NotDelivered | Self::AddressTaken => false,
+        }
     }
 }
 
@@ -116,7 +135,7 @@ impl MessageRecord {
     /// step back, changes nothing.
     pub fn advance(&mut self, to: Status) -> bool {
         match &mut self.kind {
-            MessageKind::Mine(now) if !now.is_final() && (to as u8 > *now as u8) => {
+            MessageKind::Mine(now) if now.may_become(to) => {
                 *now = to;
                 true
             }
@@ -126,7 +145,7 @@ impl MessageRecord {
 
     pub fn encode(&self) -> Zeroizing<Vec<u8>> {
         let mut out = Zeroizing::new(Vec::with_capacity(28 + self.text.len()));
-        out.push(FORMAT);
+        out.push(MESSAGE_FORMAT);
         let (kind, status) = match &self.kind {
             MessageKind::Mine(s) => (1, *s as u8),
             MessageKind::Theirs => (2, 0),
@@ -157,7 +176,7 @@ impl MessageRecord {
 
     pub fn decode(bytes: &[u8]) -> Result<Self, MessengerError> {
         let mut r = Reader(bytes);
-        if r.u8()? != FORMAT {
+        if r.u8()? != MESSAGE_FORMAT {
             return Err(corrupt("message format"));
         }
         let kind = r.u8()?;
@@ -206,6 +225,9 @@ pub struct ConversationRecord {
     pub origin: Origin,
     /// My first text of an introduction, while its fate is open.
     pub intro_message: Option<i64>,
+    /// The history up to this row has been shown to the person; the peer's entries after it are
+    /// unread. 0 — nothing shown yet.
+    pub read_mark: i64,
     /// My messages not yet delivered: first index → message row.
     pub pending: BTreeMap<u64, i64>,
     pub pair: Zeroizing<Vec<u8>>,
@@ -214,9 +236,9 @@ pub struct ConversationRecord {
 impl ConversationRecord {
     pub fn encode(&self) -> Zeroizing<Vec<u8>> {
         let mut out = Zeroizing::new(Vec::with_capacity(
-            16 + 16 * self.pending.len() + self.pair.len(),
+            24 + 16 * self.pending.len() + self.pair.len(),
         ));
-        out.push(FORMAT);
+        out.push(CONVERSATION_FORMAT);
         out.push(self.origin as u8);
         match self.intro_message {
             Some(id) => {
@@ -225,6 +247,7 @@ impl ConversationRecord {
             }
             None => out.push(0),
         }
+        out.extend_from_slice(&self.read_mark.to_be_bytes());
         let count = u32::try_from(self.pending.len()).unwrap_or(u32::MAX);
         out.extend_from_slice(&count.to_be_bytes());
         for (first, id) in &self.pending {
@@ -237,7 +260,8 @@ impl ConversationRecord {
 
     pub fn decode(bytes: &[u8]) -> Result<Self, MessengerError> {
         let mut r = Reader(bytes);
-        if r.u8()? != FORMAT {
+        let format = r.u8()?;
+        if !(1..=CONVERSATION_FORMAT).contains(&format) {
             return Err(corrupt("conversation format"));
         }
         let origin = match r.u8()? {
@@ -250,6 +274,7 @@ impl ConversationRecord {
             1 => Some(r.i64()?),
             _ => return Err(corrupt("intro message flag")),
         };
+        let read_mark = if format >= 2 { r.i64()? } else { 0 };
         let count = usize::try_from(r.u32()?).map_err(|_| corrupt("pending count"))?;
         if count.saturating_mul(16) > r.0.len() {
             return Err(corrupt("pending beyond the data"));
@@ -261,6 +286,7 @@ impl ConversationRecord {
         Ok(Self {
             origin,
             intro_message,
+            read_mark,
             pending,
             pair: Zeroizing::new(r.0.to_vec()),
         })
@@ -280,7 +306,7 @@ impl InvitationRecord {
         let mut out = Zeroizing::new(Vec::with_capacity(
             9 + self.invitation.len() + self.name.len(),
         ));
-        out.push(FORMAT);
+        out.push(INVITATION_FORMAT);
         out.extend_from_slice(&self.created.to_be_bytes());
         out.extend_from_slice(&self.invitation);
         out.extend_from_slice(self.name.as_bytes());
@@ -289,7 +315,7 @@ impl InvitationRecord {
 
     pub fn decode(bytes: &[u8]) -> Result<Self, MessengerError> {
         let mut r = Reader(bytes);
-        if r.u8()? != FORMAT {
+        if r.u8()? != INVITATION_FORMAT {
             return Err(corrupt("invitation format"));
         }
         let created = r.u64()?;
@@ -367,17 +393,45 @@ mod tests {
         let conversation = ConversationRecord {
             origin: Origin::Accepted,
             intro_message: Some(5),
+            read_mark: 4,
             pending: BTreeMap::from([(0, 6), (3, 8)]),
             pair: Zeroizing::new(vec![1, 2, 3]),
         };
         let back = ConversationRecord::decode(&conversation.encode()).unwrap();
         assert_eq!(back.origin, Origin::Accepted);
         assert_eq!(back.intro_message, Some(5));
+        assert_eq!(back.read_mark, 4);
         assert_eq!(back.pending, conversation.pending);
         assert_eq!(*back.pair, vec![1, 2, 3]);
         let mut lying = conversation.encode().to_vec();
-        lying[11] = 200; // a pending count beyond the data
+        lying[19] = 200; // a pending count beyond the data
         assert!(ConversationRecord::decode(&lying).is_err());
+    }
+
+    /// Records as format 1 wrote them — the phones hold such — laid out by hand.
+    #[test]
+    fn records_of_format_1_still_read() {
+        let mut message = vec![1u8, 1, 2, 1];
+        message.extend_from_slice(&7u64.to_be_bytes());
+        message.extend_from_slice(&1_000u64.to_be_bytes());
+        message.extend_from_slice("да".as_bytes());
+        let m = MessageRecord::decode(&message).unwrap();
+        assert_eq!(m.kind, MessageKind::Mine(Status::Delivered));
+        assert_eq!((m.index, m.at, m.text.as_str()), (Some(7), 1_000, "да"));
+
+        let mut conversation = vec![1u8, 2, 1];
+        conversation.extend_from_slice(&5i64.to_be_bytes());
+        conversation.extend_from_slice(&1u32.to_be_bytes());
+        conversation.extend_from_slice(&3u64.to_be_bytes());
+        conversation.extend_from_slice(&8i64.to_be_bytes());
+        conversation.extend_from_slice(&[9, 9]);
+        let c = ConversationRecord::decode(&conversation).unwrap();
+        assert_eq!(
+            (c.origin, c.intro_message, c.read_mark),
+            (Origin::Accepted, Some(5), 0)
+        );
+        assert_eq!(c.pending, BTreeMap::from([(3, 8)]));
+        assert_eq!(*c.pair, vec![9, 9]);
     }
 
     #[test]
@@ -385,7 +439,12 @@ mod tests {
         let mut m = MessageRecord::mine(Some(0), 0, "x");
         assert!(m.advance(Status::Delivered));
         assert!(!m.advance(Status::Sent), "went back");
-        assert!(!m.advance(Status::NotDelivered), "left a final status");
+        assert!(
+            !m.advance(Status::NotDelivered),
+            "what arrived turned undelivered"
+        );
+        assert!(m.advance(Status::Read));
+        assert!(!m.advance(Status::Delivered), "left a final status");
         let mut theirs = MessageRecord::theirs(Some(0), 0, "y");
         assert!(!theirs.advance(Status::Sent));
     }

@@ -203,6 +203,7 @@ fn join(
     let record = ConversationRecord {
         origin: Origin::Invited,
         intro_message: None,
+        read_mark: 0,
         pending: Default::default(),
         pair: joined.pair.to_bytes()?,
     };
@@ -264,6 +265,7 @@ pub fn accept_invitation(
                 ConversationRecord {
                     origin: Origin::Accepted,
                     intro_message: ids.first().copied(),
+                    read_mark: 0,
                     pending: Default::default(),
                     pair,
                 }
