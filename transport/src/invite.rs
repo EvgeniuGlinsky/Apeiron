@@ -222,6 +222,9 @@ pub fn accept(
 
     let my_bundle =
         PrekeyBundle::create(me, account).map_err(|e| TransportError::Invitation(e.to_string()))?;
+    // My bundle travels for its signature over my identity and device keys; the inviter never
+    // opens a session with its one-time key, so the key is not left waiting in the account.
+    account.remove_one_time_key(my_bundle.one_time_key());
     let mut chat = Chat::initiate(account, &invitation.bundle)?;
     let OlmMessage::PreKey(first) = chat.encrypt(first_text)? else {
         return Err(TransportError::Internal(
@@ -257,7 +260,8 @@ pub fn accept(
     value.extend_from_slice(&seal(&key, REPLY_AAD, &inner)?);
     let reply = SignedItem::sign_value(&invitation.inbox()?, 1, value)?;
 
-    let pair = Pair::new(me, invitation.inviter(), &chat.session_id())?.with_intro(reply);
+    let pair = Pair::new(me, invitation.inviter(), &chat.session_id())?
+        .with_intro(reply, invitation.expires());
     Ok(Accepted { chat, pair })
 }
 

@@ -2,6 +2,13 @@
 //!
 //! The caller owns the contact: it loads the [`Pair`] and the `Chat`, runs a round, and commits
 //! both — with what the round reported — in one transaction.
+//!
+//! **A caller that stores the conversation must not use [`round`] as it is.** Its send half
+//! puts a state item acknowledging what the receive half has just decrypted, before anything
+//! is on disk: a crash in between and the peer stops re-putting messages this side never kept,
+//! and the item's `seq` is taken by a value the restored pair does not know. Such a caller runs
+//! [`receive_round`], then [`Pair::due`], commits, and only then [`put_due`]
+//! (`apeiron-messenger` does). [`round`] is for callers that keep nothing: tests, `dht-probe`.
 
 use std::collections::HashSet;
 
@@ -9,7 +16,7 @@ use apeiron_core::Chat;
 
 use crate::dht::Dht;
 use crate::item::SignedItem;
-use crate::pair::{Event, Pair};
+use crate::pair::{Due, Event, Pair};
 use crate::TransportError;
 
 /// A whole round: receive, then send. In this order, so that what arrived is acknowledged in
@@ -30,6 +37,12 @@ pub fn round(
 /// not put (`docs/transport.md` §2).
 pub fn send_round(pair: &mut Pair, dht: &impl Dht, now: u64) -> Result<Vec<Event>, TransportError> {
     let due = pair.due(now)?;
+    Ok(put_due(pair, dht, due, now))
+}
+
+/// Puts what [`Pair::due`] chose, asking first for every address used for the first time.
+/// Returns the events `due` reported and those of the puts.
+pub fn put_due(pair: &mut Pair, dht: &impl Dht, due: Due, now: u64) -> Vec<Event> {
     let mut events = due.events;
 
     // The addresses used for the first time are asked for all at once, then everything is put
@@ -61,10 +74,10 @@ pub fn send_round(pair: &mut Pair, dht: &impl Dht, now: u64) -> Result<Vec<Event
         .collect();
     for (item, result) in to_put.iter().zip(dht.put_many(&to_put)) {
         if result.is_ok() {
-            pair.mark_put(&item.key, now);
+            events.extend(pair.mark_put(&item.key, now));
         }
     }
-    Ok(events)
+    events
 }
 
 /// Asks for the peer's state, fetches what it announces, decrypts what can be decrypted.

@@ -29,6 +29,11 @@ pub const GIVE_UP_AFTER_S: u64 = 7 * 86_400;
 /// State items signed when the vault locks: today and the days after it.
 pub const STATE_DAYS_AHEAD: u32 = 7;
 
+/// Days after an invitation's expiry during which the reply is still re-put. The inviter
+/// still opens a reply on the day after the expiry (its clock may lag), so the one who
+/// accepted keeps it there until then.
+pub const INTRO_GRACE_DAYS: u32 = 1;
+
 /// Bytes of UTF-8 per part in a normal Olm message: the largest length whose V1 encoding fits
 /// into [`MAX_OLM_BYTES`] (checked by `budgets_fit_the_envelope`).
 pub const NORMAL_TEXT_BYTES: usize = 799;
@@ -56,11 +61,32 @@ pub enum Event {
     /// An address I was about to use already held something else: the schedule is reused or
     /// known to someone else. The message is not delivered.
     Squatted { first: u64 },
+    /// Every part of my message `first` has reached the DHT at least once.
+    Sent { first: u64 },
+    /// My reply to the invitation has reached the DHT at least once.
+    IntroSent,
     /// The inviter has taken my reply to its invitation: the contact is no longer "waiting".
+    /// Can come after [`Event::NotAccepted`], if the inviter opened the reply on its last day.
     Accepted,
     /// Someone answered the invitation before me — whoever else saw it, or someone it was
     /// forwarded to. This contact will not be established.
     InvitationTaken,
+    /// The invitation expired and the inviter never answered: the reply is not re-put any
+    /// more. The pair still listens, in case the inviter took it at the last moment.
+    NotAccepted,
+}
+
+/// Where the reply to an invitation stands, for the one who accepted it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IntroStatus {
+    /// No reply of mine: I made the invitation, or the inviter has already taken the reply.
+    None,
+    /// Re-put until the inviter answers.
+    Waiting,
+    /// Someone else answered first.
+    Taken,
+    /// The invitation expired unanswered.
+    Expired,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -107,6 +133,8 @@ pub struct Due {
 }
 
 pub struct Pair {
+    /// The Olm session the addresses are derived for; stored, and checked on restore.
+    session_id: String,
     to_peer: DirectionKey,
     from_peer: DirectionKey,
     next_send: u64,
@@ -123,13 +151,23 @@ pub struct Pair {
     /// that is the inviter's acknowledgement (`docs/transport.md` §8).
     peer_seen: bool,
     /// The reply put into an invitation's inbox, re-put until the peer is seen.
-    intro: Option<Intro>,
+    intro: IntroState,
 }
 
 #[derive(Debug, Clone)]
 struct Intro {
     item: SignedItem,
     put_at: Option<u64>,
+    /// The invitation's expiry day.
+    expires: u32,
+}
+
+#[derive(Debug, Clone)]
+enum IntroState {
+    None,
+    Waiting(Intro),
+    Taken,
+    Expired { expires: u32 },
 }
 
 impl Pair {
@@ -142,6 +180,7 @@ impl Pair {
         let secret = me.pair_secret(peer)?;
         let mine = me.public();
         Ok(Self {
+            session_id: session_id.to_string(),
             to_peer: DirectionKey::new(&secret, &mine, peer, session_id)?,
             from_peer: DirectionKey::new(&secret, peer, &mine, session_id)?,
             next_send: 0,
@@ -154,15 +193,17 @@ impl Pair {
             assembling: None,
             lost_to: 0,
             peer_seen: false,
-            intro: None,
+            intro: IntroState::None,
         })
     }
 
-    /// The reply to an invitation, to be re-put with everything else until the peer answers.
-    pub fn with_intro(mut self, reply: SignedItem) -> Self {
-        self.intro = Some(Intro {
+    /// The reply to an invitation expiring on day `expires`, to be re-put with everything else
+    /// until the peer answers — or until [`INTRO_GRACE_DAYS`] after the expiry.
+    pub fn with_intro(mut self, reply: SignedItem, expires: u32) -> Self {
+        self.intro = IntroState::Waiting(Intro {
             item: reply,
             put_at: None,
+            expires,
         });
         self
     }
@@ -171,6 +212,37 @@ impl Pair {
     /// whether the inviter has taken the reply — until then the contact is "waiting".
     pub fn peer_seen(&self) -> bool {
         self.peer_seen
+    }
+
+    /// The Olm session this pair belongs to.
+    pub fn session_id(&self) -> &str {
+        &self.session_id
+    }
+
+    /// Where my reply to an invitation stands.
+    pub fn intro_status(&self) -> IntroStatus {
+        match self.intro {
+            IntroState::None => IntroStatus::None,
+            IntroState::Waiting(_) => IntroStatus::Waiting,
+            IntroState::Taken => IntroStatus::Taken,
+            IntroState::Expired { .. } => IntroStatus::Expired,
+        }
+    }
+
+    /// Whether nothing will ever come of this pair: someone else took the invitation, or it
+    /// expired unanswered and the inviter stayed silent for as long as a message is re-put.
+    pub fn is_closed(&self, now: u64) -> bool {
+        match self.intro {
+            IntroState::Taken => true,
+            IntroState::Expired { expires } => {
+                let give_up_days = u32::try_from(GIVE_UP_AFTER_S / 86_400).unwrap_or(u32::MAX);
+                day_of(now)
+                    > expires
+                        .saturating_add(INTRO_GRACE_DAYS)
+                        .saturating_add(give_up_days)
+            }
+            _ => false,
+        }
     }
 
     // ─── Sending ─────────────────────────────────────────────────────────────
@@ -268,7 +340,15 @@ impl Pair {
             Some(_) => {}
         }
 
-        if let Some(intro) = &self.intro {
+        if let IntroState::Waiting(intro) = &self.intro {
+            if day_of(now) > intro.expires.saturating_add(INTRO_GRACE_DAYS) {
+                self.intro = IntroState::Expired {
+                    expires: intro.expires,
+                };
+                due.events.push(Event::NotAccepted);
+            }
+        }
+        if let IntroState::Waiting(intro) = &self.intro {
             match intro.put_at {
                 None => {
                     due.first_puts.insert(intro.item.key);
@@ -283,10 +363,15 @@ impl Pair {
         Ok(due)
     }
 
-    /// The item with `key` reached the DHT at `now`.
-    pub fn mark_put(&mut self, key: &[u8; 32], now: u64) {
+    /// The item with `key` reached the DHT at `now`. Reports a message whose last part not yet
+    /// put has just been put for the first time, and the reply's first put.
+    pub fn mark_put(&mut self, key: &[u8; 32], now: u64) -> Option<Event> {
+        let mut first_put_of = None;
         for o in self.outbox.values_mut() {
             if &o.item.key == key {
+                if o.put_at.is_none() {
+                    first_put_of = Some(o.message);
+                }
                 o.put_at = Some(now);
             }
         }
@@ -295,10 +380,27 @@ impl Pair {
                 c.put_at = Some(now);
             }
         }
-        if let Some(i) = self.intro.as_mut() {
+        if let IntroState::Waiting(i) = &mut self.intro {
             if &i.item.key == key {
+                let first = i.put_at.is_none();
                 i.put_at = Some(now);
+                if first {
+                    return Some(Event::IntroSent);
+                }
             }
+        }
+        let message = first_put_of?;
+        self.outbox
+            .values()
+            .filter(|o| o.message == message)
+            .all(|o| o.put_at.is_some())
+            .then_some(Event::Sent { first: message })
+    }
+
+    fn intro_key(&self) -> Option<&[u8; 32]> {
+        match &self.intro {
+            IntroState::Waiting(i) => Some(&i.item.key),
+            _ => None,
         }
     }
 
@@ -306,16 +408,16 @@ impl Pair {
     pub fn is_pending(&self, key: &[u8; 32]) -> bool {
         self.outbox.values().any(|o| &o.item.key == key)
             || self.current.as_ref().is_some_and(|c| &c.item.key == key)
-            || self.intro.as_ref().is_some_and(|i| &i.item.key == key)
+            || self.intro_key() == Some(key)
     }
 
     /// The address `key`, about to be used for the first time, already holds something else.
     /// Its message is not put and is reported.
     pub fn squatted(&mut self, key: &[u8; 32]) -> Option<Event> {
-        if self.intro.as_ref().is_some_and(|i| &i.item.key == key) {
+        if self.intro_key() == Some(key) {
             // Someone answered this invitation first: whoever else saw its secret, or someone
             // it was forwarded to. Our reply would never land (BEP 44 keeps the first).
-            self.intro = None;
+            self.intro = IntroState::Taken;
             return Some(Event::InvitationTaken);
         }
         let message = self
@@ -343,7 +445,9 @@ impl Pair {
             )?);
         }
         out.extend(self.outbox.values().map(|o| o.item.clone()));
-        out.extend(self.intro.iter().map(|i| i.item.clone()));
+        if let IntroState::Waiting(i) = &self.intro {
+            out.push(i.item.clone());
+        }
         Ok(out)
     }
 
@@ -448,8 +552,13 @@ impl Pair {
         let mut events = Vec::new();
         if !self.peer_seen {
             self.peer_seen = true;
-            // The inviter has taken the reply: it need not be re-put any more.
-            if self.intro.take().is_some() {
+            // The inviter has taken the reply: it need not be re-put any more. Also after the
+            // expiry: the inviter may have opened it on its last day.
+            if matches!(
+                self.intro,
+                IntroState::Waiting(_) | IntroState::Expired { .. }
+            ) {
+                self.intro = IntroState::None;
                 events.push(Event::Accepted);
             }
         }

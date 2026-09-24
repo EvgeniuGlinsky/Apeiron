@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["core", "store", "platform", "relay", "transport", "tools/dht-probe", "app/rust"]
+members = ["core", "store", "platform", "relay", "transport", "messenger", "tools/dht-probe", "app/rust"]
 
 [workspace.package]
 version = "0.1.0"
@@ -30,7 +30,12 @@ hex = "0.4"
 # must not be updated "on its own" — an update must be a deliberate action
 # involving reading the changelog. The rationale for the choice and a review of known
 # findings against vodozemac are decision R-009 in docs/threat-log.md.
-vodozemac = "=0.11.0"
+#
+# `low-level-api` is on for one function only, `Account::remove_one_time_key`: an invitation
+# that expired and the one-time key of a bundle nobody will use are removed from the account
+# (`docs/transport.md` §8). The feature only adds items — it also compiles the `hazmat` module,
+# which nothing here uses — and changes no pickled field.
+vodozemac = { version = "=0.11.0", features = ["low-level-api"] }
 
 # Key derivation and AEAD for local storage. Both are widely accepted implementations
 # of the corresponding RFCs; we do not write our own primitives (§18 of the research).

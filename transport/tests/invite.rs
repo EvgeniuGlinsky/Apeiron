@@ -14,7 +14,7 @@ use apeiron_transport::dht::{Dht, FakeDht};
 use apeiron_transport::engine::round;
 use apeiron_transport::envelope::ITEM_BYTES;
 use apeiron_transport::invite::{accept, open_reply, Invitation, MAX_FIRST_TEXT_BYTES};
-use apeiron_transport::pair::Event;
+use apeiron_transport::pair::{Event, IntroStatus};
 use apeiron_transport::TransportError;
 
 const T0: u64 = 1_790_251_200;
@@ -197,6 +197,44 @@ fn a_taken_inbox_is_reported() {
         dht.stored(&invitation.inbox_key().unwrap()).unwrap().value,
         vec![9; ITEM_BYTES]
     );
+}
+
+/// After the expiry and a day of grace the reply is no longer re-put and the contact is "not
+/// accepted" — but the pair keeps listening: the inviter may have opened the reply on its last
+/// day, and its state then still makes the contact accepted.
+#[test]
+fn an_unanswered_reply_is_given_up_but_a_late_answer_still_counts() {
+    let dht = FakeDht::new();
+    let mut a = person();
+    let mut b = person();
+    let invitation = Invitation::create(&a.id, &mut a.account, today()).unwrap();
+    let mut accepted = accept(&b.id, &mut b.account, &invitation, "hi", today()).unwrap();
+    let events = round(&mut accepted.pair, &mut accepted.chat, &dht, T0).unwrap();
+    assert!(events.contains(&Event::IntroSent), "{events:?}");
+
+    // A opens the reply on the last day it may, but its state does not get out yet.
+    let last_day = T0 + 86_400 * u64::from(invitation.expires() + 1 - today());
+    let value = dht.stored(&invitation.inbox_key().unwrap()).unwrap().value;
+    let joined = open_reply(&a.id, &mut a.account, &invitation, &value).unwrap();
+
+    let later = last_day + 86_400;
+    let inbox = invitation.inbox_key().unwrap();
+    dht.expire(&inbox);
+    let events = round(&mut accepted.pair, &mut accepted.chat, &dht, later).unwrap();
+    assert!(events.contains(&Event::NotAccepted), "{events:?}");
+    assert_eq!(accepted.pair.intro_status(), IntroStatus::Expired);
+    assert!(!accepted.pair.is_closed(later));
+    assert!(
+        dht.stored(&inbox).is_none(),
+        "the reply was put after the grace day"
+    );
+
+    // A's state finally appears.
+    let (mut a_chat, mut a_pair) = (joined.chat, joined.pair);
+    round(&mut a_pair, &mut a_chat, &dht, later + 7_200).unwrap();
+    let events = round(&mut accepted.pair, &mut accepted.chat, &dht, later + 7_300).unwrap();
+    assert!(events.contains(&Event::Accepted), "{events:?}");
+    assert_eq!(accepted.pair.intro_status(), IntroStatus::None);
 }
 
 /// §8: whoever read the invitation can find the reply, but not open it — and so does not

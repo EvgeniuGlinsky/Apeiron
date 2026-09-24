@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 use apeiron_core::{Identity, PublicIdentity};
 use zeroize::Zeroizing;
 
-use super::{Assembly, CurrentState, Intro, Outgoing, Pair};
+use super::{Assembly, CurrentState, Intro, IntroState, Outgoing, Pair};
 use crate::address::DirectionKey;
 use crate::envelope::{Part, State};
 use crate::item::SignedItem;
@@ -147,6 +147,7 @@ impl Pair {
     pub fn to_bytes(&self) -> Result<Zeroizing<Vec<u8>>, TransportError> {
         let mut w = Writer(Zeroizing::new(Vec::new()));
         w.u8(FORMAT);
+        w.bytes(self.session_id.as_bytes())?;
         w.u64(self.next_send);
         w.u64(self.next_recv);
         w.u64(self.lost_to);
@@ -203,12 +204,18 @@ impl Pair {
         }
 
         match &self.intro {
-            Some(i) => {
+            IntroState::None => w.u8(0),
+            IntroState::Waiting(i) => {
                 w.u8(1);
                 w.item(&i.item)?;
                 w.when(i.put_at);
+                w.u32(i.expires);
             }
-            None => w.u8(0),
+            IntroState::Taken => w.u8(2),
+            IntroState::Expired { expires } => {
+                w.u8(3);
+                w.u32(*expires);
+            }
         }
         w.u16(0x0a0e); // end mark: a cut record does not end here by chance
         Ok(w.0)
@@ -227,6 +234,11 @@ impl Pair {
         let mut r = Reader { buf: bytes };
         if r.u8()? != FORMAT {
             return Err(corrupt("unknown format"));
+        }
+        // Keys derived for another session would silently read and write someone else's
+        // addresses: the state belongs to the session it was stored with, or to none.
+        if r.bytes()? != session_id.as_bytes() {
+            return Err(corrupt("the state of another session"));
         }
         let next_send = r.u64()?;
         let next_recv = r.u64()?;
@@ -298,19 +310,23 @@ impl Pair {
             None
         };
 
-        let intro = if r.flag()? {
-            Some(Intro {
+        let intro = match r.u8()? {
+            0 => IntroState::None,
+            1 => IntroState::Waiting(Intro {
                 item: r.item()?,
                 put_at: r.when()?,
-            })
-        } else {
-            None
+                expires: r.u32()?,
+            }),
+            2 => IntroState::Taken,
+            3 => IntroState::Expired { expires: r.u32()? },
+            _ => return Err(corrupt("reply state")),
         };
         if r.u16()? != 0x0a0e || !r.buf.is_empty() {
             return Err(corrupt("does not end where it should"));
         }
 
         Ok(Self {
+            session_id: session_id.to_string(),
             to_peer: DirectionKey::new(&secret, &mine, peer, session_id)?,
             from_peer: DirectionKey::new(&secret, peer, &mine, session_id)?,
             next_send,

@@ -100,6 +100,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "apeiron-messenger"
+version = "0.1.0"
+dependencies = [
+ "apeiron-core",
+ "apeiron-store",
+ "apeiron-transport",
+ "tempfile",
+ "thiserror",
+ "zeroize",
+]
+
+[[package]]
 name = "apeiron-platform"
 version = "0.1.0"
 dependencies = [

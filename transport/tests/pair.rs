@@ -517,4 +517,9 @@ fn a_damaged_pair_state_is_refused() {
     let mut other_format = bytes.to_vec();
     other_format[0] = 9;
     assert!(Pair::restore(&a.id, &b.id.public(), &sid, &other_format).is_err());
+    // Restored for another session, it would derive that session's addresses silently.
+    assert!(matches!(
+        Pair::restore(&a.id, &b.id.public(), "another session", &bytes),
+        Err(TransportError::Corrupt(_))
+    ));
 }
