@@ -1,113 +1,114 @@
 # Apeiron
 
-Децентрализованный мессенджер. ἄπειρον — «беспредельное» у Анаксимандра: первоначало, которое
-само не является ни одной вещью в мире, но объемлет всё. Сеть, которая существует, пока её несут
-участники, и не находится нигде конкретно.
+A decentralized messenger. ἄπειρον — "the boundless" in Anaximander: the first principle that is
+itself none of the things in the world, yet encompasses everything. A network that exists as long
+as its participants carry it, and is located nowhere in particular.
 
-## Что это обещает и чего не обещает
+## What it promises and what it does not
 
-**Обещает:**
+**Promises:**
 
-- Содержимое переписки защищено полностью.
-- Нет оператора, которого можно принудить, отключить или обязать выдать данные. Это единственный
-  настоящий мотив проекта, и он реален.
+- The content of conversations is fully protected.
+- There is no operator that can be coerced, shut down or compelled to hand over data. This is the
+  project's only genuine motive, and it is real.
 
-**Не обещает:**
+**Does not promise:**
 
-- Приватность метаданных. Кто с кем и когда — видно. Для мессенджера реального времени без
-  покрывающего трафика нижняя граница преимущества наблюдателя δ ≥ 0,999999. Это теорема
-  (Das и др., IEEE S&P 2018), а не недоработка.
-- Защиту от скомпрометированного устройства. Против Pegasus-класса не помогает ничто, что живёт
-  внутри приложения: противник читает экран до шифрования.
-- Сохранность при утрате устройства лучше, чем у централизованных решений, — пока не сделан
-  этап 6.
+- Metadata privacy. Who talks to whom and when is visible. For a real-time messenger without
+  cover traffic, the lower bound on the observer's advantage is δ ≥ 0.999999. This is a theorem
+  (Das et al., IEEE S&P 2018), not an oversight.
+- Protection against a compromised device. Against Pegasus-class attacks, nothing that lives
+  inside the app helps: the adversary reads the screen before encryption.
+- Better survival of data after device loss than centralized solutions offer — not until stage 6
+  is done.
 
-Запрещённые формулировки для интерфейса и материалов — в [`docs/threat-log.md`](docs/threat-log.md).
+Forbidden wordings for the interface and materials are in [`docs/threat-log.md`](docs/threat-log.md).
 
-## Структура
+## Structure
 
 ```
-core/     ядро: криптография и протокол. Без FFI, без unsafe, тестируется отдельно
-store/    локальное хранилище под AEAD: иерархия ключей, схема, запечатывание записей
-platform/ доступ к аппаратному хранилищу ключей устройства. Один вызов JNI, только Android
-relay/    слепой ретранслятор (этап 3, пока заглушка)
-app/      Flutter-клиент
-  rust/   тонкий мост к ядру через flutter_rust_bridge
-docs/     решения и спецификации
+core/     core: cryptography and protocol. No FFI, no unsafe, tested separately
+store/    local storage under AEAD: key hierarchy, schema, record sealing
+platform/ access to the device's hardware key store. One JNI call, Android only
+relay/    blind relay (stage 3, a stub for now)
+app/      Flutter client
+  rust/   thin bridge to the core via flutter_rust_bridge
+docs/     decisions and specifications
 ```
 
-## Документы
+## Documents
 
-| Файл | О чём |
+| File | About |
 |---|---|
-| [`docs/threat-log.md`](docs/threat-log.md) | Противники П1–П8 и журнал решений по защите |
-| [`docs/crypto.md`](docs/crypto.md) | Криптоядро: из чего собрано, что проверяется, чего криптография не делает |
-| [`docs/build-guards.md`](docs/build-guards.md) | Предохранители сборки: почему однажды вышел негодный APK и что теперь не даёт это повторить |
-| [`docs/design.md`](docs/design.md) | Система оформления |
-| [`docs/research-verification.md`](docs/research-verification.md) | Проверка исследования, на котором стоит план |
+| [`docs/threat-log.md`](docs/threat-log.md) | Adversaries P1–P8 and the log of protection decisions |
+| [`docs/crypto.md`](docs/crypto.md) | Crypto core: what it is built from, what is checked, what cryptography does not do |
+| [`docs/build-guards.md`](docs/build-guards.md) | Build guards: why an unusable APK was once produced and what now prevents a repeat |
+| [`docs/design.md`](docs/design.md) | Design system |
+| [`docs/research-verification.md`](docs/research-verification.md) | Verification of the research the plan rests on |
 
-Исходное исследование (58 страниц, 34 источника, воспроизводимые расчёты) в репозиторий
-не входит — оно хранится у автора. Проверка его несущих утверждений лежит в
-[`docs/research-verification.md`](docs/research-verification.md): там указано, что именно
-и как сверялось, чтобы выводы можно было оспорить, не имея самого документа.
+The original research (58 pages, 34 sources, reproducible calculations) is not part of the
+repository — the author keeps it. Verification of its load-bearing claims is in
+[`docs/research-verification.md`](docs/research-verification.md): it states exactly what was
+checked and how, so that the conclusions can be challenged without having the document itself.
 
-## Сборка
+## Building
 
-Требуется Rust stable, Flutter, Android SDK с NDK, JDK 21.
+Requires Rust stable, Flutter, Android SDK with NDK, JDK 21.
 
 ```bash
-# ядро и ретранслятор
+# core and relay
 cargo test --workspace
 
-# клиент
+# client
 cd app
 flutter test
 flutter build apk --debug --target-platform android-arm64
 flutter build windows --debug
 ```
 
-После правки публичного API в `app/rust/src/api/` нужно перегенерировать привязки:
+After changing the public API in `app/rust/src/api/`, the bindings must be regenerated:
 
 ```bash
 cd app && flutter_rust_bridge_codegen generate
 ```
 
-Варианты знака выкладываются на один лист для сравнения:
+Variants of the mark are laid out on a single sheet for comparison:
 
 ```bash
 cd app && flutter test test/mark_sheet.dart   # → build/mark/contact-sheet.png
 ```
 
-## Грабли
+## Pitfalls
 
-**`flutter build windows` падает с `MSB8066 ... код -1`.** MSBuild прячет настоящую ошибку.
-Причина обычно в том, что предкомпилированный инструмент cargokit остался битым — например,
-процесс `dart` был убит во время сборки. Лечится удалением его кэша:
+**`flutter build windows` fails with `MSB8066 ... code -1`.** MSBuild hides the real error.
+The cause is usually that cargokit's precompiled tool was left broken — for example, the `dart`
+process was killed during the build. The fix is to delete its cache:
 
 ```bash
 rm app/build/windows/x64/plugins/rust_lib_apeiron/cargokit_build/tool/bin/build_tool_runner.dill
 rm app/build/windows/x64/plugins/rust_lib_apeiron/cargokit_build/tool/.dart_tool/package_info.prev
 ```
 
-Чтобы увидеть настоящую причину, а не `код -1`: `flutter build windows --debug -v`.
+To see the real cause rather than `code -1`: `flutter build windows --debug -v`.
 
-**Python падает с `UnicodeEncodeError` на скриптах с кириллицей.** Консоль Windows в cp1252.
-Запускать с `PYTHONIOENCODING=utf-8` — это дефект среды, а не скриптов.
+**Python fails with `UnicodeEncodeError` on scripts containing Cyrillic.** The Windows console is
+in cp1252. Run with `PYTHONIOENCODING=utf-8` — this is a defect of the environment, not of the
+scripts.
 
-## Правила, нарушать которые нельзя
+## Rules that must not be broken
 
-Выведены из §18 исследования, подробности и обоснования — в документах выше.
+Derived from §18 of the research; details and rationale are in the documents above.
 
-- Не писать собственные криптографические примитивы и режимы шифрования.
-- Не применять шифрование без аутентификации.
-- Не кодировать кодом стирания до шифрования.
-- Не использовать разделение секрета Шамира для больших данных — только для ключей.
-- Не полагаться на гарантированное фоновое исполнение на мобильной платформе.
-- Не обещать приватность метаданных, не заплатив за неё задержкой или трафиком.
-- Открытый текст и ключи не покидают Rust: в Dart затирание памяти невозможно.
-- Шрифты бундлятся в assets. `google_fonts` скачивает их с серверов Google при первом
-  запуске — для этого приложения это утечка факта установки.
+- Do not write our own cryptographic primitives or encryption modes.
+- Do not use encryption without authentication.
+- Do not apply erasure coding before encryption.
+- Do not use Shamir's secret sharing for bulk data — only for keys.
+- Do not rely on guaranteed background execution on a mobile platform.
+- Do not promise metadata privacy without paying for it in latency or traffic.
+- Plaintext and keys do not leave Rust: wiping memory in Dart is impossible.
+- Fonts are bundled in assets. `google_fonts` downloads them from Google's servers on first
+  launch — for this app that leaks the fact of installation.
 
-## Лицензия
+## License
 
 AGPL-3.0-or-later.

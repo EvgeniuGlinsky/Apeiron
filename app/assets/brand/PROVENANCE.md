@@ -1,47 +1,48 @@
-# Происхождение фирменных изображений
+# Provenance of brand images
 
-Здесь записано, откуда взят каждый сторонний файл и на каких условиях. Для CC0 атрибуция
-юридически не требуется — запись ведётся всё равно, потому что происхождение ресурсов в проекте,
-который обещает проверяемость, должно быть проверяемым тоже.
+This records where each third-party file came from and under what terms. For CC0, attribution is
+not legally required — the record is kept anyway, because in a project that promises
+verifiability, the provenance of its assets must be verifiable too.
 
 ## `raven-corvus-corax-cc0.svg`
 
 | | |
 |---|---|
-| **Что** | Силуэт ворона (*Corvus corax*) в полёте |
-| **Источник** | PhyloPic, изображение `b6585013-ed25-4c6a-8ed9-82c4786951fc` |
-| **Ссылка** | https://www.phylopic.org/images/b6585013-ed25-4c6a-8ed9-82c4786951fc |
-| **Автор** | Andy Wilson |
-| **Лицензия** | **CC0 1.0 Universal** — передача в общественное достояние |
-| **Атрибуция** | не требуется |
-| **Share-alike** | нет |
-| **Коммерческое использование** | разрешено |
-| **Проверено** | 23.09.2026 |
+| **What** | Silhouette of a raven (*Corvus corax*) in flight |
+| **Source** | PhyloPic, image `b6585013-ed25-4c6a-8ed9-82c4786951fc` |
+| **Link** | https://www.phylopic.org/images/b6585013-ed25-4c6a-8ed9-82c4786951fc |
+| **Author** | Andy Wilson |
+| **License** | **CC0 1.0 Universal** — dedication to the public domain |
+| **Attribution** | not required |
+| **Share-alike** | no |
+| **Commercial use** | allowed |
+| **Checked** | 2026-09-23 |
 
-### Зачем брали готовое
+### Why we took a ready-made one
 
-Силуэт рисовался вручную шесть итераций — набором контрольных точек безье вслепую. Каждая
-версия была лучше предыдущей, но реалистичной птицы так не получить: у слепого подбора координат
-низкий потолок. Готовый вектор под CC0 решает это честно и сразу.
+The silhouette was drawn by hand over six iterations — by blindly placing sets of Bézier control
+points. Each version was better than the previous one, but a realistic bird cannot be obtained this
+way: blind coordinate fitting has a low ceiling. A ready-made CC0 vector solves this honestly and
+at once.
 
-### Почему его нельзя оставлять как есть
+### Why it cannot be left as is
 
-CC0 означает, что **тот же силуэт может взять кто угодно**. Как основа он отличен, как марка —
-нет: фирменный знак обязан быть отличим. Поэтому исходник хранится здесь неизменным (для
-воспроизводимости и для сверки), а в приложение должна идти переработанная производная.
-CC0 производные разрешает без ограничений.
+CC0 means that **anyone can take the same silhouette**. As a basis it is excellent; as the brand
+mark it is not: a brand mark must be distinctive. So the source is kept here unchanged (for
+reproducibility and for comparison), and what goes into the app must be a reworked derivative.
+CC0 permits derivatives without restriction.
 
-**Сейчас переработки ещё нет.** В приложении силуэт только отражён по горизонтали и развёрнут
-на −45°; пропорции и посадка крыльев исходные. Это открытая задача, а не сделанное: до неё
-марка юридически чиста, но не отличима.
+**There is no rework yet.** In the app the silhouette is only flipped horizontally and rotated by
+−45°; the proportions and the set of the wings are original. This is an open task, not something
+done: until then the brand mark is legally clean, but not distinctive.
 
-### Что проверялось перед использованием
+### What was checked before use
 
-Лицензия сверена на странице самого изображения, а не на странице категории: на PhyloPic у разных
-авторов условия разные, и в одной подборке соседствуют CC0, CC BY и CC BY-SA. Вариант с
-share-alike для логотипа не годится — он заставил бы открыть марку на тех же условиях, то есть
-разрешить её использование кому угодно.
+The license was checked on the page of the image itself, not on the category page: on PhyloPic
+different authors have different terms, and CC0, CC BY and CC BY-SA sit side by side in the same
+collection. A share-alike variant is unsuitable for a logo — it would force the brand mark to be
+released under the same terms, that is, would permit anyone to use it.
 
-Отвергнутый кандидат: `Odin's ravens right.svg` с Викисклада (автор Liftarn, общественное
-достояние). Лицензия чистая, но на рисунке два ворона на ветке — композицию перетягивает ветка,
-и «отправки» изображение не сообщает.
+Rejected candidate: `Odin's ravens right.svg` from Wikimedia Commons (author Liftarn, public
+domain). The license is clean, but the drawing shows two ravens on a branch — the branch dominates
+the composition, and the image does not convey "sending".

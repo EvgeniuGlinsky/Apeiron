@@ -1,277 +1,287 @@
-# Apeiron — система оформления
+# Apeiron — design system
 
-## Имя
+## Name
 
-**Apeiron**, ἄπειρον — «беспредельное» у Анаксимандра. Первоначало, которое само не является ни
-одной вещью в мире, но объемлет всё и правит всем. Третья сущность: в мире и вне него.
+**Apeiron**, ἄπειρον — "the boundless" in Anaximander. The first principle that is itself none of
+the things in the world, yet encompasses everything and governs everything. A third entity: in the
+world and outside it.
 
-Для продукта это буквально: сеть, которая существует, пока её несут участники, и не находится
-нигде конкретно. «Мы тут и нигде».
-
----
-
-## Правило, из которого следует всё остальное
-
-Скандинавская сдержанность даёт **воздух и дисциплину**. Руническая геометрия даёт **штрих**.
-Руны резали по дереву и камню, поэтому в них нет кривых — только прямые и углы.
-
-> **Единственное жёсткое правило графики: 0°, 45°, 90°. Никаких скруглений. Торцы срезаны плоско.**
-
-Жёсткое правило — то, что превращает набор элементов в систему. Престиж здесь берётся из
-дисциплины, а не из позолоты.
+For the product this is literal: a network that exists as long as its participants carry it, and is
+located nowhere in particular. "We are here and nowhere."
 
 ---
 
-## Про руны: что мы не делаем и почему
+## The rule from which everything else follows
 
-Скандинавская символика частично присвоена ультраправыми движениями. Сдвоенная ᛋ (совило),
-ᛟ (отала) в определённом начертании, солнечное колесо и ряд других знаков читаются однозначно
-независимо от намерений автора.
+Scandinavian restraint provides **air and discipline**. Runic geometry provides **the stroke**.
+Runes were carved in wood and stone, so they have no curves — only straight lines and angles.
 
-Для продукта, адресованного журналистам и правозащитникам, приехать с таким знаком — это конец
-репутации на старте, и никакие объяснения потом не работают.
+> **The only hard rule of the graphics: 0°, 45°, 90°. No rounding. Stroke ends cut flat.**
 
-**Решение:** берём геометрию рун, но **не используем ни одной исторической руны** ни в знаке, ни
-в шрифте, ни в иконках, ни в оформлении. Эстетика сохраняется полностью, риск исчезает целиком.
+A hard rule is what turns a set of elements into a system. Prestige here comes from discipline,
+not from gilding.
 
 ---
 
-## Знак
+## About runes: what we do not do and why
 
-Апейрон — то, что **не имеет границы**. Значит знак обязан быть **незамкнутым**.
+Scandinavian symbolism has been partly appropriated by far-right movements. The double ᛋ (sowilo),
+ᛟ (othala) in a certain form, the sun wheel and a number of other signs read unambiguously,
+regardless of the author's intentions.
 
-- Вертикальный ствол, от него ветви под 45°.
-- Разомкнут сверху и снизу: линии уходят за пределы поля знака, а не заканчиваются в нём.
-- **Никаких колец, кругов и замкнутых контуров** — они прямо противоречат имени.
-- Строится на сетке 24×24, штрих 2 единицы, оптическая коррекция только на диагоналях.
+For a product addressed to journalists and human rights defenders, showing up with such a sign is
+the end of its reputation at launch, and no explanations work afterwards.
 
-Знак не должен читаться как конкретная руна. Проверка: если носитель языка видит в нём букву —
-переделываем.
+**Decision:** we take the geometry of runes, but **use no historical rune at all** — not in the
+mark, the typeface, the icons or the styling. The aesthetic is kept in full, the risk disappears
+entirely.
 
 ---
 
-## Палитра
+## Mark
 
-Холодная, приглушённая. Два акцента, не больше.
+Apeiron is that which **has no boundary**. So the mark must be **open**.
 
-### Тёмная тема — основная
+- A vertical stem, with branches coming off it at 45°.
+- Open at the top and bottom: the lines run beyond the mark's field rather than ending within it.
+- **No rings, circles or closed contours** — they directly contradict the name.
+- Built on a 24×24 grid, stroke of 2 units, optical correction on the diagonals only.
 
-| Роль | Токен | Значение |
+The mark must not read as a specific rune. Test: if a native speaker sees a letter in it, we redo
+it.
+
+---
+
+## Palette
+
+Cold, muted. Two accents, no more.
+
+### Dark theme — primary
+
+| Role | Token | Value |
 |---|---|---|
-| Фон | `basalt-950` | `#0B0E11` |
-| Поверхность | `basalt-900` | `#12161A` |
-| Поднятая поверхность | `basalt-800` | `#1A2026` |
-| Границы | `stone-700` | `#2A333B` |
-| Разделители | `stone-600` | `#3A444D` |
-| Второстепенный текст | `fog-400` | `#8A97A3` |
-| Основной текст | `bone-100` | `#E8E6E1` |
-| **Акцент** | `glacier-400` | `#8FB3C9` |
-| **Состояния проверки** | `ember-400` | `#C77B52` |
-| Тревога | `rust-500` | `#B4543A` |
+| Background | `basalt-950` | `#0B0E11` |
+| Surface | `basalt-900` | `#12161A` |
+| Raised surface | `basalt-800` | `#1A2026` |
+| Borders | `stone-700` | `#2A333B` |
+| Dividers | `stone-600` | `#3A444D` |
+| Secondary text | `fog-400` | `#8A97A3` |
+| Primary text | `bone-100` | `#E8E6E1` |
+| **Accent** | `glacier-400` | `#8FB3C9` |
+| **Verification states** | `ember-400` | `#C77B52` |
+| Alert | `rust-500` | `#B4543A` |
 
-### Светлая тема — зеркало
+### Light theme — a mirror
 
-| Роль | Токен | Значение |
+| Role | Token | Value |
 |---|---|---|
-| Фон | `bone-50` | `#F4F2ED` |
-| Поверхность | `bone-100` | `#E8E6E1` |
-| Основной текст | `basalt-900` | `#12161A` |
-| Второстепенный текст | `stone-600` | `#3A444D` |
-| Акцент | `glacier-600` | `#4A7290` |
+| Background | `bone-50` | `#F4F2ED` |
+| Surface | `bone-100` | `#E8E6E1` |
+| Primary text | `basalt-900` | `#12161A` |
+| Secondary text | `stone-600` | `#3A444D` |
+| Accent | `glacier-600` | `#4A7290` |
 
-### Обоснования
+### Rationale
 
-- Основной текст — **не чистый белый**, а костяной `#E8E6E1`. Чистый белый на тёмном режет глаз
-  и выглядит дёшево; тёплая кость — скандинавский приём, читается как берёза и кость.
-- Акцент **ледниковый голубой**, ненасыщенный. Насыщенные акценты удешевляют.
-- **Медь** `ember-400` — не золото. Бронза настоящий материал этой культуры, и она читается
-  дороже золота именно потому, что тише. Резервируется под состояния сверки ключей: сверка
-  должна выглядеть иначе, чем всё остальное в приложении.
-- Красный `rust-500` приглушён до ржавчины — тревога не должна кричать, она должна быть заметна.
+- The primary text is **not pure white** but bone `#E8E6E1`. Pure white on dark hurts the eyes and
+  looks cheap; warm bone is a Scandinavian technique, reading as birch and bone.
+- The accent is a **glacier blue**, desaturated. Saturated accents cheapen.
+- **Copper** `ember-400` — not gold. Bronze is a genuine material of this culture, and it reads as
+  more expensive than gold precisely because it is quieter. Reserved for key verification states:
+  verification must look different from everything else in the app.
+- The red `rust-500` is muted down to rust — an alert should not scream, it should be noticeable.
 
 ---
 
-## Типографика
+## Typography
 
-| Роль | Гарнитура | Зачем |
+| Role | Typeface | Why |
 |---|---|---|
-| Интерфейс, текст | **Inter** | Нейтральна, безупречная разборчивость, полная кириллица |
-| Заголовки, крупное | **Syne** | Геометрична и угловата, даёт нужный характер без карикатуры |
-| Отпечатки, ключи, коды | **JetBrains Mono** | Различает `0`/`O` и `1`/`l`/`I` — здесь это вопрос безопасности |
+| Interface, text | **Inter** | Neutral, impeccable legibility, full Cyrillic |
+| Headings, large type | **Syne** | Geometric and angular, gives the right character without caricature |
+| Fingerprints, keys, codes | **JetBrains Mono** | Distinguishes `0`/`O` and `1`/`l`/`I` — here this is a security matter |
 
-Правила:
+Rules:
 
-- Шкала: 12 / 14 / 16 / 20 / 28 / 40. Промежуточных размеров нет.
-- Межстрочный: 1,5 для текста, 1,2 для заголовков.
-- Разрядка `+0,02em` в заголовках, `+0,08em` в мелких прописных подписях.
-- Прописные — только в подписях длиной до трёх слов.
-
----
-
-## Сетка и воздух
-
-- Базовая единица **4**, шаг компоновки **8**.
-- Поля экрана: 20 на телефоне, 32 и больше на десктопе.
-- Между смысловыми блоками — не меньше 28.
-- Ширина строки текста — не больше 68 символов.
-
-Воздух здесь не украшение: разрежённая компоновка — единственное, что делает плотный технический
-интерфейс похожим на дорогой.
+- Scale: 12 / 14 / 16 / 20 / 28 / 40. No intermediate sizes.
+- Line height: 1.5 for text, 1.2 for headings.
+- Letter spacing `+0.02em` in headings, `+0.08em` in small uppercase labels.
+- Uppercase only in labels of up to three words.
 
 ---
 
-## Иконки
+## Grid and air
 
-- Сетка 24×24, штрих **2**, торцы плоские.
-- **Только 0°, 45°, 90°.** Ни одного скругления, ни одной дуги.
-- Пустая иконка предпочтительнее залитой.
+- Base unit **4**, layout step **8**.
+- Screen margins: 20 on a phone, 32 or more on desktop.
+- Between semantic blocks — no less than 28.
+- Text line length — no more than 68 characters.
 
----
-
-## Движение
-
-- Длительности: 120 мс (реакция), 220 мс (переход), 400 мс (появление экрана).
-- Кривая `cubic-bezier(0.2, 0, 0, 1)`.
-- **Никаких пружин и отскоков.** Спокойствие читается как уверенность, а прыгающий интерфейс —
-  как дешёвый.
+Air here is not decoration: a sparse layout is the only thing that makes a dense technical
+interface look expensive.
 
 ---
 
-## Экран сверки отпечатка: где оформление делает работу безопасности
+## Icons
 
-Это единственный экран, где эстетика имеет прямое отношение к защите, и потому он оформляется
-отдельно от всего остального.
-
-Тридцать цифр шестью группами по пять — то, что люди читают вслух собеседнику. Без этой сверки
-стойкий шифр полностью побеждается активным посредником (демонстрация: `s07_ratchet.py`, раздел F).
-
-Требования:
-
-- Цифры набираются **JetBrains Mono, 28**, разрядка `+0,12em`, группы разделены большими
-  интервалами. Набор должен читаться как **высеченная надпись**, а не как техническая строка.
-- Фон группы — `basalt-800`, тонкая рамка `stone-700`, углы **не скруглены**.
-- Акцент экрана — **медный** `ember-400`, а не ледниковый. Сверка не похожа ни на что другое в
-  приложении, и это намеренно.
-- Состояние «не сверено» показывается всегда и явно. Молчание здесь недопустимо.
-- Расхождение — `rust-500`, полноэкранно, с прямым текстом: между вами кто-то есть.
-
-Смысл приёма: на красивое смотрят внимательно. Внимательный взгляд на этом экране — это ровно то,
-что ловит посредника. Оформление здесь не украшает функцию, а исполняет её.
+- 24×24 grid, stroke **2**, flat ends.
+- **Only 0°, 45°, 90°.** Not a single rounding, not a single arc.
+- An outline icon is preferable to a filled one.
 
 ---
 
-## Честность интерфейса
+## Motion
 
-Прямое следствие §16.7 исследования. Оформление не должно создавать уверенности, которой у
-системы нет.
-
-- Состояние сборки архива показывается как есть: «получено 5 из 8». Прятать задержку за
-  бесконечным спиннером запрещено — это порождает ощущение поломки и скрывает правду о системе.
-- Индикатор «метаданные не скрыты» присутствует постоянно, а не в настройках третьего уровня.
-- Запрещённые формулировки — в `threat-log.md`, раздел в конце.
-
-Дорогой вид и честность здесь не противоречат друг другу: доверие — это и есть то, за что платят.
+- Durations: 120 ms (response), 220 ms (transition), 400 ms (screen appearance).
+- Curve `cubic-bezier(0.2, 0, 0, 1)`.
+- **No springs and no bounces.** Calm reads as confidence, and a jumpy interface reads as cheap.
 
 ---
 
-## Логотип-надпись и иконка
+## Fingerprint verification screen: where design does security work
 
-### Надпись APEIRON
+This is the only screen where aesthetics bear directly on protection, and so it is designed
+separately from everything else.
 
-Латиница, прорисованная по правилам рунической резьбы: **ни одной кривой, равная толщина,
-плоские торцы, горизонтали сведены к минимуму**. Слово остаётся мгновенно читаемым, но получает
-облик надписи на камне.
+Thirty digits in six groups of five — what people read aloud to the other person. Without this
+verification, a strong cipher is completely defeated by an active man-in-the-middle (demonstration:
+`s07_ratchet.py`, section F).
 
-Последнее правило не стилистическое. Руны резали поперёк волокна дерева: горизонтальный рез шёл
-вдоль волокна, расщеплял заготовку и был почти не виден. Горизонталь оставлена только в `E`, где
-без неё буква перестаёт читаться.
+Requirements:
 
-Строгое «только 0°, 45°, 90°» здесь ослаблено намеренно: при нём `O` обязана быть шириной
-в собственную высоту, а `E` нерисуема вовсе. Ограничение резьбы точнее и мягче.
+- The digits are set in **JetBrains Mono, 28**, letter spacing `+0.12em`, with large gaps between
+  the groups. The setting must read as a **carved inscription**, not as a technical string.
+- Group background — `basalt-800`, a thin `stone-700` border, corners **not rounded**.
+- The screen's accent is **copper** `ember-400`, not glacier. Verification looks like nothing else
+  in the app, and that is deliberate.
+- The "not verified" state is always shown, explicitly. Silence here is unacceptable.
+- A mismatch — `rust-500`, full-screen, with plain words: someone is between you.
 
-Толщина штриха — **1/9 высоты буквы**. Это предел: при 1/6 внутренние просветы `P`, `R` и `O`
-заплывают.
+The point of the technique: people look closely at what is beautiful. A close look at this screen
+is exactly what catches the man-in-the-middle. Here the design does not decorate the function, it
+performs it.
 
-Реализация — `app/lib/wordmark.dart`, контактный лист — `flutter test test/wordmark_sheet.dart`.
+---
 
-### Иконка: ворон
+## Interface honesty
 
-Хугин и Мунин — вороны Одина, облетающие мир и возвращающиеся рассказать увиденное. Гонцы
-в прямом смысле. Имена переводятся как **«мысль»** и **«память»**, что совпадает с расслоением
-системы: доставка отвечает за «сейчас», архив — за сохранённое.
+A direct consequence of §16.7 of the research. The design must not create confidence that the
+system does not have.
 
-**Здесь кривые разрешены.** Единственное исключение из правила системы: надпись и интерфейсные
-иконки остаются на прямых с плоскими торцами, а птица живая. Перо прямым не бывает,
-и прямолинейные версии читались гребёнкой.
+- The archive assembly state is shown as it is: "received 5 of 8". Hiding the delay behind an
+  endless spinner is forbidden — it creates a sense of breakage and hides the truth about the
+  system.
+- The "metadata not hidden" indicator is always present, not buried in third-level settings.
+- Forbidden wordings — in `threat-log.md`, the section at the end.
 
-Силуэт взят готовым, а не нарисован: шесть итераций ручного подбора контрольных точек безье дали
-птицу, но не реалистичную. Источник и обоснование — `app/assets/brand/PROVENANCE.md`.
+An expensive look and honesty do not contradict each other here: trust is exactly what people pay
+for.
 
-Параметры:
-* **разворот −45°** — выбран по контактному листу из ряда 0 / −20 / −32 / −45. Поднятый клюв
-  читается набором высоты, опущенный — снижением;
-* **отражение по горизонтали** — исходник летит влево, а при письме слева направо отправка
-  читается движением вправо;
-* **доля птицы в иконке 0,70** — меньше 0,55 иконка выглядит пустой, больше 0,75 силуэт упирается
-  в края.
+---
 
-Подложка — **басальт**. Тёмная иконка среди пёстрых на домашнем экране выигрывает. Отвергнуты:
-медь (самый низкий контраст), ледник (слишком похож на Telegram), кость (белая иконка на части
-лаунчеров читается как «не загрузилась»).
+## Wordmark and icon
 
-Контактный лист — `flutter test test/raven_sheet.dart`.
+### The APEIRON wordmark
 
-### Иконка запуска Android
+Latin letters drawn by the rules of runic carving: **not a single curve, uniform thickness, flat
+ends, horizontals reduced to a minimum**. The word stays instantly readable but takes on the look
+of an inscription in stone.
 
-Иконка **не растеризуется**. Android понимает тот же синтаксис `pathData`, что и SVG, поэтому
-в ресурсы уходят те же координаты, пересчитанные один раз: флип вывода potrace, отражение,
-разворот −45°, вписывание. Два прошлых подхода — генератор поверх `flutter_test` и
-headless-браузер — ломались именно на растеризации и давали неверный масштаб.
+The last rule is not a stylistic one. Runes were carved across the wood grain: a horizontal cut ran
+along the grain, split the blank and was barely visible. A horizontal is kept only in `E`, which
+without it stops reading as a letter.
 
-Считает это `app/tool/gen_android_icon.dart` (обычный `dart run`, без Flutter), геометрию —
-`app/lib/path_data.dart`, числа марки — `app/lib/brand/mark_geometry.dart`. Тот же
-`path_data.dart` лежит под `svg_path.dart`, которым рисует приложение: разбор и преобразования
-один на всех, разъехаться иконке и экрану не на чем.
+The strict "only 0°, 45°, 90°" is deliberately relaxed here: under it `O` would have to be as wide
+as its own height, and `E` could not be drawn at all. The carving constraint is more precise and
+gentler.
 
-Что кладётся:
+The stroke thickness is **1/9 of the letter height**. That is the limit: at 1/6 the counters of
+`P`, `R` and `O` fill in.
 
-| Слой | Файл | Для кого |
+Implementation — `app/lib/wordmark.dart`, contact sheet — `flutter test test/wordmark_sheet.dart`.
+
+### Icon: the raven
+
+Huginn and Muninn are Odin's ravens, who fly over the world and return to tell what they saw.
+Messengers in the literal sense. Their names translate as **"thought"** and **"memory"**, which
+matches the layering of the system: delivery is responsible for "now", the archive for what is
+kept.
+
+**Curves are allowed here.** This is the only exception to the system's rule: the wordmark and the
+interface icons stay on straight lines with flat ends, but the bird is alive. A feather is never
+straight, and straight-line versions read as a comb.
+
+The silhouette was taken ready-made, not drawn: six iterations of hand-picking Bézier control
+points produced a bird, but not a realistic one. Source and rationale —
+`app/assets/brand/PROVENANCE.md`.
+
+Parameters:
+* **rotation of −45°** — chosen on a contact sheet from the series 0 / −20 / −32 / −45. A raised
+  beak reads as gaining altitude, a lowered one as descending;
+* **horizontal flip** — the source flies to the left, and with left-to-right writing, sending reads
+  as movement to the right;
+* **bird's share of the icon 0.70** — below 0.55 the icon looks empty, above 0.75 the silhouette
+  runs into the edges.
+
+The backplate is **basalt**. A dark icon among colorful ones on the home screen stands out.
+Rejected: copper (lowest contrast), glacier (too similar to Telegram), bone (a white icon on some
+launchers reads as "failed to load").
+
+Contact sheet — `flutter test test/raven_sheet.dart`.
+
+### Android launcher icon
+
+The icon is **not rasterized**. Android understands the same `pathData` syntax as SVG, so the
+resources get the same coordinates, recomputed once: flipping the potrace output, mirroring, the
+−45° rotation, fitting. Two earlier approaches — a generator on top of `flutter_test` and a
+headless browser — broke precisely on rasterization and produced the wrong scale.
+
+This is computed by `app/tool/gen_android_icon.dart` (a plain `dart run`, no Flutter), the geometry
+by `app/lib/path_data.dart`, the mark's numbers by `app/lib/brand/mark_geometry.dart`. The same
+`path_data.dart` underlies `svg_path.dart`, which the app draws with: the parsing and the
+transformations are shared by everyone, so there is nothing for the icon and the screen to diverge
+on.
+
+What goes in:
+
+| Layer | File | For whom |
 |---|---|---|
-| адаптивная иконка | `mipmap-anydpi-v26/ic_launcher.xml` | Android 8 и новее |
-| передний слой | `drawable/ic_launcher_foreground.xml` | там же |
-| монохромный слой | `drawable/ic_launcher_monochrome.xml` | тематические иконки, Android 13+ |
-| подложка | `values/ic_launcher_background.xml` — басальт | там же |
-| иконка целиком | `mipmap-anydpi/ic_launcher.xml` | Android 7, где масок ещё нет |
+| adaptive icon | `mipmap-anydpi-v26/ic_launcher.xml` | Android 8 and newer |
+| foreground layer | `drawable/ic_launcher_foreground.xml` | same |
+| monochrome layer | `drawable/ic_launcher_monochrome.xml` | themed icons, Android 13+ |
+| backplate | `values/ic_launcher_background.xml` — basalt | same |
+| the whole icon | `mipmap-anydpi/ic_launcher.xml` | Android 7, which has no masks yet |
 
-Плотностных PNG нет вовсе: квалификатор `anydpi` старше нижней границы проекта (Android 7).
-Штатные PNG Flutter удалены — тест следит, чтобы не вернулись.
+There are no density PNGs at all: the `anydpi` qualifier is older than the project's lower bound
+(Android 7). Flutter's stock PNGs have been removed — a test makes sure they do not come back.
 
-Размеры. Поле адаптивной иконки 108 dp, система показывает центральные 72 — это и есть подложка,
-роль которой в приложении играет круг. Птица занимает те же 0,70 от неё. Android обещает показать
-при любой маске круг 66 dp; тест меряет **по самому обводу, а не по рамке контура** (рамка
-считается по контрольным точкам и всегда шире краски) и требует, чтобы краска не выходила за 33 dp
-от центра.
+Sizes. The adaptive icon canvas is 108 dp, of which the system shows the central 72 — that is the
+backplate, whose role in the app is played by the circle. The bird takes the same 0.70 of it.
+Android promises to show a 66 dp circle under any mask; the test measures **along the outline
+itself, not the contour's bounding box** (the bounding box is computed from control points and is
+always wider than the paint) and requires the paint not to extend beyond 33 dp from the center.
 
-Проверка — `flutter test test/android_icon_test.dart`: ресурсы в репозитории сверяются с выводом
-генератора, цвета — с токенами, а контур из `pathData` — с тем самым `Path`, который рисует
-`ApeironRaven`, по длинам подконтуров и точкам вдоль обвода. Растеризации в тесте нет: `toImage()`
-внутри `testWidgets` не даёт процессу завершиться, а сравнение по точкам строже пиксельного —
-оно не зависит от сглаживания.
+Check — `flutter test test/android_icon_test.dart`: the resources in the repository are compared
+with the generator's output, the colors with the tokens, and the contour from `pathData` with the
+very `Path` that `ApeironRaven` draws, by subpath lengths and by points along the outline. There is
+no rasterization in the test: `toImage()` inside `testWidgets` keeps the process from exiting, and
+point comparison is stricter than pixel comparison — it does not depend on anti-aliasing.
 
-Контактный лист — `flutter test test/android_icon_sheet.dart`: та же иконка под масками круга,
-суперэллипса, скруглённого квадрата и квадрата, в рабочих размерах вплоть до 28 px, и тематическая
-в обеих системных темах.
+Contact sheet — `flutter test test/android_icon_sheet.dart`: the same icon under circle,
+squircle, rounded-square and square masks, at working sizes down to 28 px, and the themed icon in
+both system themes.
 
-Заодно заставка запуска переведена с белой (штатной у Flutter) на басальт: белая вспышка перед
-тёмным приложением видна и это дефект.
+Along the way, the launch splash screen was switched from white (Flutter's default) to basalt: a
+white flash before a dark app is visible, and that is a defect.
 
-### Отвергнутые направления
+### Rejected directions
 
-История в гите, здесь — итог, чтобы не заходить на второй круг:
+The history is in git; here is the outcome, so as not to go around a second time:
 
-* **абстрактный знак из стойки и ветвей** — при строгих 45° на одной стойке любые две ветви дают
-  либо латинскую «K», либо перечёркнутую стойку, либо ᛉ (алгиз, присвоенная руна). Четвёртого
-  варианта в этих ограничениях нет;
-* **огонь, сигнальный костёр** — смысл совпадал точно (цепь vitar передаёт весть без центра), но
-  зритель этого не знает и читает просто «огонь»: так же выглядит фитнес-приложение или скидки;
-* **огонь, скрещённый с репликой** — работало, но оставалось объяснением, а не образом.
+* **an abstract mark of a stem and branches** — with strict 45° on a single stem, any two branches
+  give either a Latin "K", a crossed-out stem, or ᛉ (algiz, an appropriated rune). There is no
+  fourth option within these constraints;
+* **fire, a signal beacon** — the meaning matched exactly (a chain of vitar passes news along
+  without a center), but the viewer does not know this and simply reads "fire": a fitness app or a
+  discount looks the same;
+* **fire crossed with a replica** — it worked, but remained an explanation rather than an image.

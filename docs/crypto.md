@@ -1,225 +1,238 @@
-# Криптоядро: что где лежит и почему именно так
+# Crypto core: what is where and why it is this way
 
-Документ о парной переписке — этап 2. Архивный слой, ретранслятор и
-восстановление доступа описаны в исследовании и плане; здесь только то, что
-уже написано и проверено.
+A document about one-to-one messaging — stage 2. The archive layer, the relay and
+access recovery are described in the research and the plan; here is only what
+has already been written and verified.
 
-Главное правило, из которого следует остальное: **своих криптографических
-примитивов нет и не будет** (§18 исследования). Мы отвечаем не за стойкость
-шифров, а за выбор реализаций, за границы между ними и за то, чтобы ошибку
-нельзя было совершить по невнимательности.
+The main rule, from which the rest follows: **we have no cryptographic
+primitives of our own, and never will** (§18 of the research). We are
+responsible not for the strength of the ciphers, but for the choice of
+implementations, the boundaries between them, and making sure a mistake cannot
+be made through inattention.
 
 ---
 
-## 1. Из чего собрано
+## 1. What it is built from
 
-| Что | Чем | Где |
+| What | With what | Where |
 |---|---|---|
-| Подпись | Ed25519 (`ed25519-dalek` 3) | `core/src/identity.rs` |
-| Согласование | X25519 (`x25519-dalek` 3) | `core/src/identity.rs` |
-| Двойной храповик | Olm (`vodozemac` 0.11) | `core/src/session.rs` |
-| Вывод ключей | HKDF-SHA256 (`hkdf` 0.13) | `core/src/aead.rs` |
-| Шифрование хранилища | XChaCha20-Poly1305 (`chacha20poly1305` 0.11) | `core/src/aead.rs` |
-| Хранение мастер-ключа | AES-256-GCM в AndroidKeyStore | `app/android/…/Vault.kt` |
-| Локальная база | SQLite (`rusqlite` 0.40, bundled) | `store/` |
-| Случайность | `getrandom` 0.4, напрямую у ОС | `core/src/random.rs` |
+| Signing | Ed25519 (`ed25519-dalek` 3) | `core/src/identity.rs` |
+| Key agreement | X25519 (`x25519-dalek` 3) | `core/src/identity.rs` |
+| Double Ratchet | Olm (`vodozemac` 0.11) | `core/src/session.rs` |
+| Key derivation | HKDF-SHA256 (`hkdf` 0.13) | `core/src/aead.rs` |
+| Storage encryption | XChaCha20-Poly1305 (`chacha20poly1305` 0.11) | `core/src/aead.rs` |
+| Master key storage | AES-256-GCM in AndroidKeyStore | `app/android/…/Vault.kt` |
+| Local database | SQLite (`rusqlite` 0.40, bundled) | `store/` |
+| Randomness | `getrandom` 0.4, directly from the OS | `core/src/random.rs` |
 
-Версии подобраны **под одно поколение**. Иначе в бинаре оказываются две
-независимые реализации X25519 и Ed25519 сразу: вдвое больше кода рядом с
-ключами, вдвое больше обязанностей по обновлению и вечный вопрос, в какую из
-них приехала заплатка. Расхождение ловит `cargo deny check`.
+The versions are chosen **for a single generation**. Otherwise the binary ends
+up with two independent implementations of X25519 and Ed25519 at once: twice as
+much code next to the keys, twice the update obligations, and the eternal
+question of which of them got the patch. `cargo deny check` catches the
+divergence.
 
-Правильность реализаций не принимается на веру: официальные векторы
-RFC 7748, RFC 5869 и RFC 8439 прогоняются против тех самых крейтов, которыми мы
-пользуемся — `core/tests/rfc_vectors.rs`. Векторы те же, что в эталоне
-`radio-mesh-demo/s07_ratchet.py`, раздел A.
-
----
-
-## 2. Личность и устройство — это разные вещи
-
-**Личность** (`Identity`) — долговременная, одна на человека: Ed25519 для
-подписи плюс X25519 для согласования. Её отпечаток читают вслух при сверке.
-
-**Устройство** — конкретный телефон со своим аккаунтом Olm (`vodozemac::Account`),
-у него свои ключи. Устройств может быть несколько, они появляются и теряются.
-
-Связывает их подпись: личность подписывает ключи устройства. Поэтому
-скомпрометированный телефон не равен скомпрометированной личности — устройство
-отзывается записью в журнале, личность остаётся.
+The correctness of the implementations is not taken on faith: the official
+vectors of RFC 7748, RFC 5869 and RFC 8439 are run against the very crates we
+use — `core/tests/rfc_vectors.rs`. The vectors are the same as in the reference
+`radio-mesh-demo/s07_ratchet.py`, section A.
 
 ---
 
-## 3. Пакет пред-ключей
+## 2. Identity and device are different things
 
-`core/src/prekey.rs`. Это то, что нужно, чтобы написать первым человеку,
-которого сейчас нет в сети.
+**Identity** (`Identity`) is long-term, one per person: Ed25519 for signing plus
+X25519 for key agreement. Its fingerprint is read aloud during verification.
 
-Формат — 224 байта, фиксированной раскладки:
+**Device** is a specific phone with its own Olm account (`vodozemac::Account`)
+and its own keys. There can be several devices; they appear and get lost.
+
+What links them is a signature: the identity signs the device's keys. Therefore
+a compromised phone is not a compromised identity — the device is revoked by an
+entry in the sigchain, and the identity remains.
+
+---
+
+## 3. Prekey bundle
+
+`core/src/prekey.rs`. This is what is needed to message first someone who is
+not online right now.
+
+The format is 224 bytes with a fixed layout:
 
 ```
-личность (64) │ ключ устройства Curve25519 (32) │ подписной ключ устройства (32)
-              │ одноразовый ключ (32) │ подпись личности (64)
+identity (64) │ device Curve25519 key (32) │ device signing key (32)
+              │ one-time key (32) │ identity signature (64)
 ```
 
-Подписывается `apeiron/prekey-bundle/v1 ‖ личность ‖ три ключа`. Личность входит
-в подпись обязательно: иначе подпись, снятую с одного пакета, можно предъявить
-в пакете с другой личностью.
+What is signed is `apeiron/prekey-bundle/v1 ‖ identity ‖ three keys`. The
+identity is necessarily part of the signature: otherwise a signature taken from
+one bundle could be presented in a bundle with a different identity.
 
-Кодирование своё, канонического вида, без `serde`. Причина не в экономии
-зависимостей: **подписывается байтовая строка**, и её вид обязан быть
-однозначным. Формат, допускающий два представления одних и тех же данных, —
-это две разные подписи под одним смыслом.
+The encoding is our own, canonical, without `serde`. The reason is not saving
+dependencies: **what is signed is a byte string**, and its form must be
+unambiguous. A format that allows two representations of the same data means
+two different signatures for the same meaning.
 
-### Забыть проверку подписи нельзя
+### Forgetting to verify the signature is impossible
 
-Разбор даёт `UnverifiedPrekeyBundle`. Построить сессию можно только из
-`PrekeyBundle`, а получить его — только вызовом `verify()`. Это не соглашение,
-которое можно нарушить: код без проверки просто не компилируется.
+Parsing yields an `UnverifiedPrekeyBundle`. A session can be built only from a
+`PrekeyBundle`, and one can be obtained only by calling `verify()`. This is not a
+convention that can be broken: code without the verification simply does not
+compile.
 
-Проверка подписи отвечает на вопрос «эти ключи принадлежат заявленной личности».
-Она **не отвечает** на вопрос «чья это личность» — см. раздел 6.
-
----
-
-## 4. Переписка и приём пачкой
-
-`core/src/session.rs`. Храповик — Olm, целиком чужой. Наше здесь одно, но
-существенное.
-
-Olm хранит не больше **40** ключей пропущенных сообщений на цепочку приёма
-(`MAX_MESSAGE_KEYS`) и отказывается от разрыва больше **2000**
-(`MAX_MESSAGE_GAP`). Для Matrix этого хватает: там сервер отдаёт сообщения
-примерно в порядке отправки.
-
-У нас не так. Архитектура прямо предполагает доставку через слепой
-ретранслятор с окном ожидания до суток: устройство было offline, потом
-включилось и забрало очередь разом, в произвольном порядке. Сто сообщений
-задом наперёд при наивной расшифровке — это шестьдесят **навсегда потерянных**.
-
-Спасает то, что **порядок читается до расшифровки**: в заголовке сообщения Olm
-открыто лежат ключ храповика и номер в цепочке. `Chat::decrypt_batch`
-раскладывает пачку по цепочкам, сортирует по номеру и расшифровывает по
-возрастанию — пропусков не возникает вовсе.
-
-Тонкость, на которой легко ошибиться: **сообщения установления сессии нельзя
-выделять в особый случай**. В Olm инициатор шлёт их до тех пор, пока не получит
-ответ, и односторонняя пачка целиком состоит из них. Номер цепочки у них лежит
-во вложенном сообщении и читается так же.
-
-Проверено на двухстах сообщениях: с разложением теряется ноль, без него —
-больше ста (`core/tests/ratchet.rs`, `batch_survives_reverse_order` и
-контрольный `naive_reverse_order_loses_messages`).
-
-Что действительно потеряно — возвращается ошибкой, а не проглатывается.
-`ChatError::is_lost_forever()` отличает «повреждено, попробуйте ещё» от
-«прочитать уже нельзя никогда»: показывать второе как первое нельзя, молчать
-о потере — тем более.
+Signature verification answers the question "do these keys belong to the
+claimed identity". It **does not answer** the question "whose identity is this"
+— see section 6.
 
 ---
 
-## 5. Журнал личности
+## 4. Messaging and batch receive
 
-`core/src/sigchain.rs`. Это и есть «блокчейн» проекта — намеренно самый скучный
-из возможных: ни сети согласия, ни майнинга, ни монеты. Одна личность ведёт
-свой журнал, каждая запись подписана и ссылается на хеш предыдущей.
+`core/src/session.rs`. The ratchet is Olm, entirely someone else's. There is
+one thing of ours here, but it is significant.
 
-Записи: рождение личности, добавление устройства, отзыв устройства.
-Подписывать может корневая личность или **действующее** устройство — иначе
-второй телефон можно было бы завести только с первого, а потеряв его, уже никак.
+Olm keeps no more than **40** skipped-message keys per receiving chain
+(`MAX_MESSAGE_KEYS`) and refuses gaps larger than **2000**
+(`MAX_MESSAGE_GAP`). For Matrix that is enough: there the server delivers
+messages roughly in sending order.
 
-Правила, которые проверяются при каждом чтении:
+Not so for us. The architecture explicitly assumes delivery through a blind
+relay with a waiting window of up to a day: a device was offline, then came
+online and picked up its queue all at once, in arbitrary order. A hundred
+messages in reverse order with naive decryption means sixty **permanently
+lost**.
 
-* первая запись — и только первая — рождение личности;
-* номера идут подряд, без пропусков;
-* ссылка на хеш предыдущей записи сходится;
-* подписавший — корень или незотозванное устройство;
-* устройство нельзя добавить дважды, в том числе **вернуть после отзыва**:
-  отзыв необратим, иначе он ничего не значит;
-* отозвать можно только известное и ещё не отозванное.
+What saves us is that **the order can be read before decryption**: the ratchet
+key and the chain index lie in the clear in the Olm message header.
+`Chat::decrypt_batch` sorts the batch into chains, orders each by index and
+decrypts in ascending order — no gaps arise at all.
 
-Ссылка на хеш нужна ровно для одного: чтобы нельзя было **изъять** запись.
-Подпись защищает каждую запись по отдельности, но набор подписанных записей
-можно предъявить не полностью — например, утаить отзыв устройства. Цепочка
-такую выборку не сходится (`a_removed_entry_is_noticed`).
+A subtlety that is easy to get wrong: **session-establishment messages must not
+be treated as a special case**. In Olm the initiator keeps sending them until it
+receives a reply, and a one-sided batch consists entirely of them. Their chain
+index lies in the nested message and is read the same way.
 
-Состояние (список устройств) достаётся **только** через `verify()`. Другого
-способа нет намеренно: список из непроверенного журнала хуже отсутствия списка.
+Verified on two hundred messages: with sorting, zero are lost; without it, more
+than a hundred (`core/tests/ratchet.rs`, `batch_survives_reverse_order` and the
+control `naive_reverse_order_loses_messages`).
 
-Проверка подписей — **строгая** (`verify_strict`). Обычная допускает
-неканоническую запись подписи, то есть несколько разных верных подписей под
-одним сообщением. Там, где подпись входит в хеш — а здесь входит, — это
-превратилось бы в две разные «одинаковые» цепочки.
-
----
-
-## 6. Чего криптография не делает
-
-Сверку. Совсем.
-
-Двойной храповик даёт стойкость, подпись пакета даёт связь ключей с личностью,
-журнал даёт историю устройств. Ни одно из этого не отвечает на вопрос, кому
-принадлежит личность. Посредник, подменивший пакеты обеих сторон, получает
-**полностью исправную** переписку с каждым из них: подписи верны, шифрование
-работает, обе стороны ничего не замечают.
-
-Это не рассуждение, а исполняемый тест
-(`mitm_succeeds_without_fingerprint_check_and_fails_with_it`): посредник читает
-открытый текст, и криптография не нарушена ни в одном месте.
-
-Единственное, что его выдаёт, — **расхождение числа сверки**, прочитанного
-вслух или сравнённого лично. Отсюда продуктовое требование: физический канал
-(QR при встрече, чтение цифр голосом) должен быть единственным способом
-добавить контакт, а не настройкой, которую можно пропустить.
+What is actually lost is returned as an error, not swallowed.
+`ChatError::is_lost_forever()` distinguishes "corrupted, try again" from "can
+never be read anymore": showing the second as the first is not allowed, and
+staying silent about the loss even less so.
 
 ---
 
-## 7. Хранилище
+## 5. Sigchain (identity log)
 
-`core/src/aead.rs` — примитивы, `store/` — всё остальное. Подробности в
-`docs/storage.md`; здесь только то, что важно знать, читая про криптографию.
+`core/src/sigchain.rs`. This is the project's "blockchain" — deliberately the
+most boring one possible: no consensus network, no mining, no coin. One identity
+keeps its own log; each entry is signed and references the hash of the previous
+one.
 
-`SecretKey` затирает себя при уничтожении, подключи выводятся по назначению
-через HKDF с обязательной меткой, `seal`/`open` — XChaCha20-Poly1305.
+Entries: identity birth, device addition, device revocation. Either the root
+identity or an **active** device may sign — otherwise a second phone could only
+be added from the first one, and after losing it, not at all.
 
-XChaCha, а не ChaCha — из-за длины одноразового числа: 192 бита против 96. При
-96 битах случайные числа опасны и их принято считать счётчиком, а счётчик
-требует надёжно сохранять состояние между запусками — на телефоне, который
-выключают в произвольный момент. 192 бита позволяют брать число случайным без
-всякого состояния.
+Rules checked on every read:
 
-**Метки назначения теперь реестр, а не строки по месту вызова**
-(`aead::purpose`). Опечатка в строке давала другой ключ, всё продолжало
-работать, и обнаружилось бы это тогда, когда данные уже записаны чужим ключом.
+* the first entry — and only the first — is identity birth;
+* sequence numbers are consecutive, with no gaps;
+* the reference to the previous entry's hash matches;
+* the signer is the root or a non-revoked device;
+* a device cannot be added twice, including **bringing it back after
+  revocation**: revocation is irreversible, otherwise it means nothing;
+* only a known and not yet revoked device can be revoked.
 
-Мастер-ключу есть где жить. Аппаратный ключ устройства (StrongBox, при
-недоступности — TEE) оборачивает ключ базы, из ключа базы выводятся подключи,
-каждая запись шифруется отдельно и привязана к своему месту: имя таблицы, номер
-строки и версия схемы входят в проверку подлинности.
+The hash reference is needed for exactly one thing: so that an entry cannot be
+**removed**. A signature protects each entry individually, but a set of signed
+entries can be presented incompletely — for example, hiding a device revocation.
+With the chain, such a selection does not add up (`a_removed_entry_is_noticed`).
 
-Две поправки к тому, как это было записано раньше, — **R-010** в
+The state (the list of devices) is obtained **only** through `verify()`. There is
+deliberately no other way: a list from an unverified log is worse than no list.
+
+Signature verification is **strict** (`verify_strict`). The ordinary one permits
+a non-canonical signature encoding, that is, several different valid signatures
+for one message. Where the signature is part of the hash — and here it is — this
+would turn into two different "identical" chains.
+
+---
+
+## 6. What cryptography does not do
+
+Verification. At all.
+
+The Double Ratchet provides security, the bundle signature ties keys to an
+identity, the sigchain provides device history. None of this answers the
+question of whom the identity belongs to. A man-in-the-middle who has
+substituted the bundles of both sides gets a **fully working** conversation with
+each of them: the signatures are valid, the encryption works, neither side
+notices anything.
+
+This is not an argument but an executable test
+(`mitm_succeeds_without_fingerprint_check_and_fails_with_it`): the
+man-in-the-middle reads the plaintext, and the cryptography is not broken
+anywhere.
+
+The only thing that gives him away is **a mismatch in the safety number**, read
+aloud or compared in person. Hence the product requirement: a physical channel
+(a QR code at a meeting, reading the digits out by voice) must be the only way to
+add a contact, not a setting that can be skipped.
+
+---
+
+## 7. Storage
+
+`core/src/aead.rs` holds the primitives, `store/` everything else. Details are in
+`docs/storage.md`; here is only what matters when reading about the
+cryptography.
+
+`SecretKey` wipes itself on drop, subkeys are derived per purpose via HKDF with
+a mandatory label, `seal`/`open` are XChaCha20-Poly1305.
+
+XChaCha rather than ChaCha because of the nonce length: 192 bits versus 96. With
+96 bits random nonces are dangerous and are customarily treated as a counter,
+and a counter requires reliably persisting state between runs — on a phone that
+gets switched off at an arbitrary moment. 192 bits allow the nonce to be random
+with no state at all.
+
+**Purpose labels are now a registry, not strings at the call site**
+(`aead::purpose`). A typo in a string produced a different key, everything kept
+working, and this would have been discovered only once data had already been
+written under the wrong key.
+
+The master key has a place to live. The device's hardware key (KEK; StrongBox,
+or TEE when that is unavailable) wraps the database key (DEK), subkeys are
+derived from the database key, and each record is encrypted separately and bound
+to its location: the table name, the row number and the schema version are part
+of authentication.
+
+Two corrections to how this was written earlier — **R-010** in
 `docs/threat-log.md`:
 
-1. **Аппаратный счётчик попыток считает системный пин, а не наш.** Значит
-   сделана только половина R-002: скопированный каталог данных бесполезен, а
-   телефон, отобранный разблокированным, — нет. Вторую половину закроет пин,
-   подмешанный в вывод ключа базы, и до тех пор так и надо говорить.
-2. **Keystore вызывается из Kotlin, а не из Rust.** Запрет из записки этапа был
-   на Dart, где затирание памяти невозможно в принципе; Kotlin — не Dart, и
-   ключ в Dart по-прежнему не попадает. Зато вся возня с дескрипторами методов
-   и разбором исключений Java пропала, а Gradle проверяет получившийся код при
-   каждой сборке.
+1. **The hardware attempt counter counts the system PIN, not ours.** So only
+   half of R-002 is done: a copied data directory is useless, but a phone seized
+   unlocked is not. The second half will be closed by a PIN mixed into the
+   derivation of the database key, and until then this is exactly how it must
+   be stated.
+2. **Keystore is called from Kotlin, not from Rust.** The prohibition in the
+   stage brief was about Dart, where wiping memory is impossible in principle;
+   Kotlin is not Dart, and the key still never reaches Dart. In exchange, all
+   the fiddling with method descriptors and parsing Java exceptions is gone, and
+   Gradle checks the resulting code on every build.
 
-Отдельно про формулировки: для симметричных ключей аттестации **не
-существует** — цепочки сертификатов у них нет, а `KeyInfo` это самоотчёт
-фреймворка в нашем же процессе. Поэтому на экране написано «система сообщает:
-StrongBox», а не «ключ в StrongBox, проверено».
+A separate note on wording: for symmetric keys, attestation **does not exist** —
+they have no certificate chain, and `KeyInfo` is a self-report by the framework
+in our own process. That is why the screen says "The system reports:
+StrongBox", not "key in StrongBox, verified".
 
-## 8. Что осталось от этапа 2
+## 8. What remains of stage 2
 
-* ~~мастер-ключ в аппаратном хранилище и локальная БД под AEAD (R-002)~~ —
-  сделано наполовину: железо есть, пина нет, см. R-010;
-* пин и перемешанный пин-пад (R-001, R-007) — он же вторая половина R-002;
-* экран чата и обязательный экран сверки;
-* перенос ядра за границу FFI так, чтобы открытый текст не попадал в Dart
-  (R-004) — сейчас в мост вынесена только личность.
+* ~~master key in the hardware store and a local DB under AEAD (R-002)~~ —
+  half done: the hardware is there, the PIN is not, see R-010;
+* PIN and a shuffled PIN pad (R-001, R-007) — which is also the second half of
+  R-002;
+* the chat screen and the mandatory verification screen;
+* moving the core behind the FFI boundary so that plaintext does not reach Dart
+  (R-004) — for now only the identity is exposed in the bridge.
