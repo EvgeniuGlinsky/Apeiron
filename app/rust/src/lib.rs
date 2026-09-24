@@ -1,4 +1,6 @@
 pub mod api;
+mod paths;
+mod pin_entry;
 
 #[cfg(not(target_os = "android"))]
 mod desktop;

@@ -9,47 +9,48 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 // These functions are ignored because they are not marked as `pub`: `view`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from`
 
-/// Создаёт новую личность и сохраняет её.
+/// Creates a new identity and saves it.
 ///
-/// Вместе с ней заводятся аккаунт устройства и журнал личности: порознь они
-/// бессмысленны. Операция необратима — смена личности рвёт все существующие
-/// переписки, — и хранилище к этому моменту обязано быть открыто.
+/// The device account and the sigchain (identity log) are created with it: apart
+/// they are meaningless. The operation is irreversible — changing the identity
+/// breaks all existing conversations — and the vault must be open by this point.
 Future<PublicIdentityView> generateIdentity() =>
     RustLib.instance.api.crateApiIdentityGenerateIdentity();
 
-/// Текущая личность, если хранилище открыто.
+/// The current identity, if the vault is open.
 Future<PublicIdentityView?> currentIdentity() =>
     RustLib.instance.api.crateApiIdentityCurrentIdentity();
 
-/// Блокировка: запирает хранилище и затирает ключи.
+/// Locking: locks the vault and wipes the keys.
 ///
-/// Вызывается при уходе приложения в фон и при гашении экрана — решение R-001.
+/// Called when the app goes to the background and when the screen turns off —
+/// decision R-001.
 Future<void> lockIdentity() =>
     RustLib.instance.api.crateApiIdentityLockIdentity();
 
-/// Число сверки с собеседником по его публичной личности.
+/// Safety number with a peer, from their public identity.
 ///
-/// Обе стороны получают одну и ту же строку. Расхождение означает, что между
-/// вами кто-то есть, и переписку начинать нельзя.
+/// Both sides get the same string. A mismatch means someone is between
+/// you, and the conversation must not be started.
 Future<String> safetyNumberWith({required String peerPublicHex}) => RustLib
     .instance
     .api
     .crateApiIdentitySafetyNumberWith(peerPublicHex: peerPublicHex);
 
-/// Публичная личность целиком, hex — то, что кодируется в QR при добавлении
-/// контакта.
+/// The whole public identity, hex — what is encoded in the QR code when adding
+/// a contact.
 Future<String> publicIdentityHex() =>
     RustLib.instance.api.crateApiIdentityPublicIdentityHex();
 
-/// То, что разрешено показывать. Секретов не содержит.
+/// What is allowed to be shown. Contains no secrets.
 class PublicIdentityView {
-  /// Тридцать цифр шестью группами — то, что читают вслух при сверке.
+  /// Thirty digits in six groups — what is read aloud during verification.
   final String fingerprint;
 
-  /// Публичный ключ подписи Ed25519, hex.
+  /// Public Ed25519 signing key, hex.
   final String signingKeyHex;
 
-  /// Публичный ключ согласования X25519, hex.
+  /// Public X25519 key-agreement key, hex.
   final String agreementKeyHex;
 
   const PublicIdentityView({

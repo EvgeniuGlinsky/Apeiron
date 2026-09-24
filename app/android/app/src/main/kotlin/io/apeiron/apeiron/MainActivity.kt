@@ -1,6 +1,7 @@
 package io.apeiron.apeiron
 
 import android.os.Bundle
+import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 
 class MainActivity : FlutterActivity() {
@@ -17,8 +18,17 @@ class MainActivity : FlutterActivity() {
      * constructor, on the other hand, is a black screen without a single line
      * of diagnostics, because the Flutter engine does not exist yet at this
      * point.
+     *
+     * `FLAG_SECURE` keeps the window out of screenshots, screen recording and
+     * the thumbnail in the recent-apps list. Without it the scrambled PIN pad
+     * (R-007) would be recorded together with the finger, and the thumbnail
+     * would show the last conversation to anyone who opens the list.
      */
     override fun onCreate(savedInstanceState: Bundle?) {
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_SECURE,
+            WindowManager.LayoutParams.FLAG_SECURE,
+        )
         Vault.register(this)
         super.onCreate(savedInstanceState)
     }

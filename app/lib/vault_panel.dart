@@ -16,6 +16,7 @@ class VaultPanel extends StatelessWidget {
     required this.status,
     this.onRetry,
     this.onFreshStart,
+    this.onResetLegacy,
   });
 
   final VaultStatus status;
@@ -25,6 +26,9 @@ class VaultPanel extends StatelessWidget {
 
   /// Start over. Offered only when the key is really gone.
   final VoidCallback? onFreshStart;
+
+  /// Clear the data of a test build before the PIN. Offered only in that state.
+  final VoidCallback? onResetLegacy;
 
   @override
   Widget build(BuildContext context) {
@@ -62,8 +66,9 @@ class VaultPanel extends StatelessWidget {
               style: t.bodySmall?.copyWith(color: Ap.bone100),
             ),
           ],
-          if (onRetry != null || (onFreshStart != null &&
-              mayOfferFreshStart(status))) ...[
+          if (onRetry != null ||
+              (onFreshStart != null && mayOfferFreshStart(status)) ||
+              (onResetLegacy != null && isLegacy(status))) ...[
             const SizedBox(height: Ap.s16),
             Row(
               children: [
@@ -73,11 +78,7 @@ class VaultPanel extends StatelessWidget {
                     // The label must match what the text next to it offers:
                     // "retry" after "unlock" reads as two different actions,
                     // although it is one.
-                    child: Text(
-                      status.state == VaultState.locked
-                          ? 'РАЗБЛОКИРОВАТЬ'
-                          : 'ПОВТОРИТЬ',
-                    ),
+                    child: const Text('ПОВТОРИТЬ'),
                   ),
                 // The "start over" button exists in exactly one state.
                 // Offering to erase everything on a transient firmware failure
@@ -89,6 +90,11 @@ class VaultPanel extends StatelessWidget {
                     child: const Text('НАЧАТЬ ЗАНОВО'),
                   ),
                 ],
+                if (onResetLegacy != null && isLegacy(status))
+                  OutlinedButton(
+                    onPressed: onResetLegacy,
+                    child: const Text('НАЧАТЬ ЗАНОВО С ПИНОМ'),
+                  ),
               ],
             ),
           ],

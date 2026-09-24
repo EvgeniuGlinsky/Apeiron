@@ -3,7 +3,7 @@
 //! Lives outside `api/` deliberately: everything there is parsed by
 //! flutter_rust_bridge, and this type has no reason to cross the FFI boundary.
 
-use apeiron_platform::{KeyStatus, KeyWrapper, PlatformError};
+use apeiron_platform::{BootClock, HardwareKey, KeyStatus, PlatformError};
 
 /// Stub for platforms without a hardware store.
 ///
@@ -19,20 +19,24 @@ fn unavailable() -> PlatformError {
     )
 }
 
-impl KeyWrapper for NoVault {
+impl HardwareKey for NoVault {
     fn ensure_key(&self, _allow_create: bool) -> Result<KeyStatus, PlatformError> {
         Err(unavailable())
     }
-    fn wrap(&self, _plain: &[u8]) -> Result<Vec<u8>, PlatformError> {
+    fn hmac_chain(
+        &self,
+        _input: &[u8; 32],
+        _rounds: u32,
+    ) -> Result<zeroize::Zeroizing<[u8; 32]>, PlatformError> {
         Err(unavailable())
     }
-    fn unwrap(&self, _blob: &[u8]) -> Result<zeroize::Zeroizing<Vec<u8>>, PlatformError> {
+    fn boot_clock(&self) -> Result<BootClock, PlatformError> {
         Err(unavailable())
     }
     fn destroy(&self) -> Result<(), PlatformError> {
         Err(unavailable())
     }
     fn diagnostics(&self) -> Result<String, PlatformError> {
-        Ok("платформа: не Android, аппаратного хранилища ключей нет\n".to_string())
+        Ok("platform: not Android, no hardware key store\n".to_string())
     }
 }

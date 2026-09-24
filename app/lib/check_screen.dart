@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'src/rust/api/probe.dart';
 import 'src/rust/api/vault.dart';
 import 'theme/tokens.dart';
 
@@ -25,6 +26,10 @@ class _CheckScreenState extends State<CheckScreen> {
   String? _diagnostics;
   String? _error;
   bool _busy = false;
+
+  /// Output of the DHT measurement (R-012), accumulated over the buttons pressed.
+  final StringBuffer _probe = StringBuffer();
+  bool _probing = false;
 
   @override
   void initState() {
@@ -53,6 +58,33 @@ class _CheckScreenState extends State<CheckScreen> {
     }
   }
 
+  /// Today in the desktop probe's format: its public items are named by day.
+  static String _today() {
+    final d = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${d.year}-${two(d.month)}-${two(d.day)}';
+  }
+
+  /// Runs one step of the DHT measurement and appends its report.
+  Future<void> _measure(Future<String> Function() step) async {
+    setState(() => _probing = true);
+    try {
+      final started = DateTime.now();
+      final text = await step();
+      final took = DateTime.now().difference(started).inSeconds;
+      _probe
+        ..writeln(text.trimRight())
+        ..writeln('(took $took s)')
+        ..writeln();
+    } catch (e) {
+      _probe
+        ..writeln('DHT probe failed: $e')
+        ..writeln();
+    } finally {
+      if (mounted) setState(() => _probing = false);
+    }
+  }
+
   /// Everything at once, as text — to send in a single message.
   String _asText() {
     final buffer = StringBuffer('Apeiron — самопроверка\n\n');
@@ -62,6 +94,10 @@ class _CheckScreenState extends State<CheckScreen> {
     }
     buffer.writeln();
     buffer.writeln(_diagnostics ?? '');
+    if (_probe.isNotEmpty) {
+      buffer.writeln();
+      buffer.write(_probe.toString());
+    }
     return buffer.toString();
   }
 
@@ -124,6 +160,70 @@ class _CheckScreenState extends State<CheckScreen> {
                     ),
                     const SizedBox(height: Ap.s16),
                     for (final c in checks) _CheckRow(line: c),
+                  ],
+                  const SizedBox(height: Ap.s28),
+                  Text('ЗАМЕР DHT', style: t.labelLarge),
+                  const SizedBox(height: Ap.s8),
+                  Text(
+                    'Можно ли доставлять сообщения без единого сервера. '
+                    'Конверты тестовые: случайные байты, ничего о вас. '
+                    'Положите, через несколько часов проверьте свои, и '
+                    'заберите конверты, которые положил ПК.',
+                    style: t.bodySmall,
+                  ),
+                  const SizedBox(height: Ap.s12),
+                  Wrap(
+                    spacing: Ap.s8,
+                    runSpacing: Ap.s8,
+                    children: [
+                      OutlinedButton(
+                        onPressed: _probing
+                            ? null
+                            : () => _measure(() => dhtProbePut(count: 12)),
+                        child: const Text('ПОЛОЖИТЬ 12'),
+                      ),
+                      OutlinedButton(
+                        onPressed: _probing
+                            ? null
+                            : () => _measure(dhtProbeGetOwn),
+                        child: const Text('ПРОВЕРИТЬ СВОИ'),
+                      ),
+                      OutlinedButton(
+                        onPressed: _probing
+                            ? null
+                            // Two sets from the desktop: one put once in the
+                            // morning (does it survive?) and one re-put every
+                            // half hour (can this phone fetch at all?).
+                            : () => _measure(() async {
+                                final aged = await dhtProbeGetPublic(
+                                  day: _today(),
+                                  count: 24,
+                                );
+                                final fresh = await dhtProbeGetPublic(
+                                  day: '${_today()}/fresh',
+                                  count: 24,
+                                );
+                                return '$aged$fresh';
+                              }),
+                        child: const Text('ЗАБРАТЬ С ПК'),
+                      ),
+                    ],
+                  ),
+                  if (_probing) ...[
+                    const SizedBox(height: Ap.s12),
+                    const LinearProgressIndicator(),
+                  ],
+                  if (_probe.isNotEmpty) ...[
+                    const SizedBox(height: Ap.s12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(Ap.s12),
+                      color: Ap.basalt800,
+                      child: Text(
+                        _probe.toString(),
+                        style: Ap.mono(size: 12, color: Ap.fog400),
+                      ),
+                    ),
                   ],
                   if (_diagnostics != null) ...[
                     const SizedBox(height: Ap.s28),

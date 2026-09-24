@@ -20,6 +20,7 @@ flutter_rust_bridge = "=2.13.0"
 apeiron-core = { path = "../../core" }
 apeiron-store = { path = "../../store" }
 apeiron-platform = { path = "../../platform" }
+apeiron-transport = { path = "../../transport" }
 hex = "0.4"
 zeroize.workspace = true
 

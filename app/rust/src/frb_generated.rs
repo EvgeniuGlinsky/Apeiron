@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 884587007;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -995903554;
 
 // Section: executor
 
@@ -73,6 +73,106 @@ fn wire__crate__api__identity__current_identity_impl(
             move |context| {
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::identity::current_identity()?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__probe__dht_probe_get_own_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "dht_probe_get_own",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Ok::<_, ()>(crate::api::probe::dht_probe_get_own())?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__probe__dht_probe_get_public_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "dht_probe_get_public",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_day = <String>::sse_decode(&mut deserializer);
+            let api_count = <u32>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok =
+                        Ok::<_, ()>(crate::api::probe::dht_probe_get_public(api_day, api_count))?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__probe__dht_probe_put_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "dht_probe_put",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_count = <u32>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Ok::<_, ()>(crate::api::probe::dht_probe_put(api_count))?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -175,6 +275,199 @@ fn wire__crate__api__vault__lock_vault_impl(
         },
     )
 }
+fn wire__crate__api__pin__pin_pad_begin_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "pin_pad_begin",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::pin::pin_pad_begin()?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__pin__pin_pad_clear_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "pin_pad_clear",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::pin::pin_pad_clear()?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__pin__pin_pad_erase_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "pin_pad_erase",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::pin::pin_pad_erase()?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__pin__pin_pad_press_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "pin_pad_press",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_position = <u8>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::pin::pin_pad_press(api_position)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__vault__pin_setup_confirm_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "pin_setup_confirm",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Ok::<_, ()>(crate::api::vault::pin_setup_confirm())?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__vault__pin_setup_first_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "pin_setup_first",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::vault::pin_setup_first()?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__vault__platform_diagnostics_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -233,6 +526,38 @@ fn wire__crate__api__identity__public_identity_hex_impl(
             move |context| {
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::identity::public_identity_hex()?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__vault__reset_legacy_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "reset_legacy",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Ok::<_, ()>(crate::api::vault::reset_legacy())?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -304,7 +629,7 @@ fn wire__crate__api__vault__self_check_impl(
         },
     )
 }
-fn wire__crate__api__vault__unlock_vault_impl(
+fn wire__crate__api__vault__unlock_with_pin_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -312,7 +637,7 @@ fn wire__crate__api__vault__unlock_vault_impl(
 ) {
     FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "unlock_vault",
+            debug_name: "unlock_with_pin",
             port: Some(port_),
             mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
         },
@@ -329,7 +654,7 @@ fn wire__crate__api__vault__unlock_vault_impl(
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, ()>((move || {
-                    let output_ok = Ok::<_, ()>(crate::api::vault::unlock_vault())?;
+                    let output_ok = Ok::<_, ()>(crate::api::vault::unlock_with_pin())?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -490,6 +815,13 @@ impl SseDecode for crate::api::identity::PublicIdentityView {
     }
 }
 
+impl SseDecode for u32 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_u32::<NativeEndian>().unwrap()
+    }
+}
+
 impl SseDecode for u8 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -509,9 +841,15 @@ impl SseDecode for crate::api::vault::VaultState {
         return match inner {
             0 => crate::api::vault::VaultState::Opened,
             1 => crate::api::vault::VaultState::Locked,
-            2 => crate::api::vault::VaultState::KeyGone,
-            3 => crate::api::vault::VaultState::Retry,
-            4 => crate::api::vault::VaultState::Unavailable,
+            2 => crate::api::vault::VaultState::PinSetupRequired,
+            3 => crate::api::vault::VaultState::PinMismatch,
+            4 => crate::api::vault::VaultState::WrongPin,
+            5 => crate::api::vault::VaultState::Delayed,
+            6 => crate::api::vault::VaultState::LegacyData,
+            7 => crate::api::vault::VaultState::KeyGone,
+            8 => crate::api::vault::VaultState::KeyMismatch,
+            9 => crate::api::vault::VaultState::Retry,
+            10 => crate::api::vault::VaultState::Unavailable,
             _ => unreachable!("Invalid variant for VaultState: {}", inner),
         };
     }
@@ -527,6 +865,9 @@ impl SseDecode for crate::api::vault::VaultStatus {
         let mut var_hardwareBacked = <bool>::sse_decode(deserializer);
         let mut var_firstRun = <bool>::sse_decode(deserializer);
         let mut var_hasIdentity = <bool>::sse_decode(deserializer);
+        let mut var_failures = <u32>::sse_decode(deserializer);
+        let mut var_waitSeconds = <u32>::sse_decode(deserializer);
+        let mut var_unlockMs = <u32>::sse_decode(deserializer);
         return crate::api::vault::VaultStatus {
             state: var_state,
             message: var_message,
@@ -535,6 +876,9 @@ impl SseDecode for crate::api::vault::VaultStatus {
             hardware_backed: var_hardwareBacked,
             first_run: var_firstRun,
             has_identity: var_hasIdentity,
+            failures: var_failures,
+            wait_seconds: var_waitSeconds,
+            unlock_ms: var_unlockMs,
         };
     }
 }
@@ -549,18 +893,30 @@ fn pde_ffi_dispatcher_primary_impl(
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
         1 => wire__crate__api__identity__current_identity_impl(port, ptr, rust_vec_len, data_len),
-        2 => wire__crate__api__identity__generate_identity_impl(port, ptr, rust_vec_len, data_len),
-        3 => wire__crate__api__identity__lock_identity_impl(port, ptr, rust_vec_len, data_len),
-        4 => wire__crate__api__vault__lock_vault_impl(port, ptr, rust_vec_len, data_len),
-        5 => wire__crate__api__vault__platform_diagnostics_impl(port, ptr, rust_vec_len, data_len),
-        6 => {
+        2 => wire__crate__api__probe__dht_probe_get_own_impl(port, ptr, rust_vec_len, data_len),
+        3 => wire__crate__api__probe__dht_probe_get_public_impl(port, ptr, rust_vec_len, data_len),
+        4 => wire__crate__api__probe__dht_probe_put_impl(port, ptr, rust_vec_len, data_len),
+        5 => wire__crate__api__identity__generate_identity_impl(port, ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__identity__lock_identity_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__vault__lock_vault_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__pin__pin_pad_begin_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__pin__pin_pad_clear_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__pin__pin_pad_erase_impl(port, ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__pin__pin_pad_press_impl(port, ptr, rust_vec_len, data_len),
+        12 => wire__crate__api__vault__pin_setup_confirm_impl(port, ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__vault__pin_setup_first_impl(port, ptr, rust_vec_len, data_len),
+        14 => wire__crate__api__vault__platform_diagnostics_impl(port, ptr, rust_vec_len, data_len),
+        15 => {
             wire__crate__api__identity__public_identity_hex_impl(port, ptr, rust_vec_len, data_len)
         }
-        7 => wire__crate__api__identity__safety_number_with_impl(port, ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__vault__self_check_impl(port, ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__vault__unlock_vault_impl(port, ptr, rust_vec_len, data_len),
-        10 => wire__crate__api__vault__vault_status_impl(port, ptr, rust_vec_len, data_len),
-        11 => wire__crate__api__vault__wipe_everything_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__vault__reset_legacy_impl(port, ptr, rust_vec_len, data_len),
+        17 => {
+            wire__crate__api__identity__safety_number_with_impl(port, ptr, rust_vec_len, data_len)
+        }
+        18 => wire__crate__api__vault__self_check_impl(port, ptr, rust_vec_len, data_len),
+        19 => wire__crate__api__vault__unlock_with_pin_impl(port, ptr, rust_vec_len, data_len),
+        20 => wire__crate__api__vault__vault_status_impl(port, ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__vault__wipe_everything_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -626,9 +982,15 @@ impl flutter_rust_bridge::IntoDart for crate::api::vault::VaultState {
         match self {
             Self::Opened => 0.into_dart(),
             Self::Locked => 1.into_dart(),
-            Self::KeyGone => 2.into_dart(),
-            Self::Retry => 3.into_dart(),
-            Self::Unavailable => 4.into_dart(),
+            Self::PinSetupRequired => 2.into_dart(),
+            Self::PinMismatch => 3.into_dart(),
+            Self::WrongPin => 4.into_dart(),
+            Self::Delayed => 5.into_dart(),
+            Self::LegacyData => 6.into_dart(),
+            Self::KeyGone => 7.into_dart(),
+            Self::KeyMismatch => 8.into_dart(),
+            Self::Retry => 9.into_dart(),
+            Self::Unavailable => 10.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -652,6 +1014,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::vault::VaultStatus {
             self.hardware_backed.into_into_dart().into_dart(),
             self.first_run.into_into_dart().into_dart(),
             self.has_identity.into_into_dart().into_dart(),
+            self.failures.into_into_dart().into_dart(),
+            self.wait_seconds.into_into_dart().into_dart(),
+            self.unlock_ms.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -737,6 +1102,13 @@ impl SseEncode for crate::api::identity::PublicIdentityView {
     }
 }
 
+impl SseEncode for u32 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_u32::<NativeEndian>(self).unwrap();
+    }
+}
+
 impl SseEncode for u8 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -756,9 +1128,15 @@ impl SseEncode for crate::api::vault::VaultState {
             match self {
                 crate::api::vault::VaultState::Opened => 0,
                 crate::api::vault::VaultState::Locked => 1,
-                crate::api::vault::VaultState::KeyGone => 2,
-                crate::api::vault::VaultState::Retry => 3,
-                crate::api::vault::VaultState::Unavailable => 4,
+                crate::api::vault::VaultState::PinSetupRequired => 2,
+                crate::api::vault::VaultState::PinMismatch => 3,
+                crate::api::vault::VaultState::WrongPin => 4,
+                crate::api::vault::VaultState::Delayed => 5,
+                crate::api::vault::VaultState::LegacyData => 6,
+                crate::api::vault::VaultState::KeyGone => 7,
+                crate::api::vault::VaultState::KeyMismatch => 8,
+                crate::api::vault::VaultState::Retry => 9,
+                crate::api::vault::VaultState::Unavailable => 10,
                 _ => {
                     unimplemented!("");
                 }
@@ -778,6 +1156,9 @@ impl SseEncode for crate::api::vault::VaultStatus {
         <bool>::sse_encode(self.hardware_backed, serializer);
         <bool>::sse_encode(self.first_run, serializer);
         <bool>::sse_encode(self.has_identity, serializer);
+        <u32>::sse_encode(self.failures, serializer);
+        <u32>::sse_encode(self.wait_seconds, serializer);
+        <u32>::sse_encode(self.unlock_ms, serializer);
     }
 }
 

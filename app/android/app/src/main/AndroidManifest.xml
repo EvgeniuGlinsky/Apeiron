@@ -1,4 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Network, from this build on (R-012). Used for now only by the DHT
+         measurement on the self-check screen: test envelopes of random bytes.
+         What it costs, said plainly: nodes of the DHT near an envelope's address
+         see the IP address of whoever puts or fetches it. There is still no
+         server of ours anywhere. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="Apeiron"
         android:name="${applicationName}"

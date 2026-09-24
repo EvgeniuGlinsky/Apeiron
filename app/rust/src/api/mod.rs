@@ -4,4 +4,6 @@
 //! Keys, plaintext and protocol state stay in Rust (R-004).
 
 pub mod identity;
+pub mod pin;
+pub mod probe;
 pub mod vault;

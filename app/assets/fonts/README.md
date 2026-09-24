@@ -10,20 +10,21 @@ For a messenger that promises no outbound requests, this tells Google that the a
 installed — from the user's IP address, before they have done anything. Unacceptable. Fonts come
 only from here, from assets.
 
-## What needs to be added
+## What is here
 
 | File | Typeface | Weight | Where it is used |
 |---|---|---|---|
-| `Inter-Regular.ttf` | Inter | 400 | body text |
-| `Inter-Medium.ttf` | Inter | 500 | labels |
-| `Inter-SemiBold.ttf` | Inter | 600 | interface headings |
-| `Syne-SemiBold.ttf` | Syne | 600 | large headings |
-| `Syne-Bold.ttf` | Syne | 700 | logo, titles |
-| `JetBrainsMono-Regular.ttf` | JetBrains Mono | 400 | keys, codes |
-| `JetBrainsMono-SemiBold.ttf` | JetBrains Mono | 600 | **fingerprint on the verification screen** |
+| `Inter-Regular.otf` | Inter | 400 | body text |
+| `Inter-Medium.otf` | Inter | 500 | labels |
+| `Inter-SemiBold.otf` | Inter | 600 | interface headings |
+| `SyneSemiBold.ttf` | Syne | 600 | large headings |
+| `SyneBold.ttf` | Syne | 700 | logo, titles |
+| `JetBrainsMonoNL-Regular.ttf` | JetBrains Mono NL | 400 | keys, codes |
+| `JetBrainsMonoNL-SemiBold.ttf` | JetBrains Mono NL | 600 | **fingerprint on the verification screen** |
 
-Variable versions (`Inter-VariableFont.ttf` and the like) also work — then there will be fewer
-files, but the declaration in `pubspec.yaml` will need adjusting.
+They are declared in `app/pubspec.yaml` and referenced from `lib/theme/tokens.dart`. The NL
+("no ligatures") cut of JetBrains Mono is deliberate: a ligature could merge two characters of a
+key into one glyph.
 
 ## Where to get them
 
@@ -40,9 +41,7 @@ this is not a matter of taste: a misread digit means the user accepted someone e
 other person's key — that is, let through the man-in-the-middle that all this cryptography is
 built against.
 
-## After adding the files
+## Replacing a file
 
-1. Declare them in `app/pubspec.yaml` under `flutter: fonts:`.
-2. In `lib/theme/tokens.dart`, replace `uiFont = null` with `'Inter'` and `displayFont = null`
-   with `'Syne'`.
-3. Run `flutter pub get` and rebuild.
+Keep the family names in `app/pubspec.yaml` and `lib/theme/tokens.dart` in step, run
+`flutter pub get` and rebuild.

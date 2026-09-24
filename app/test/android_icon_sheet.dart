@@ -291,10 +291,7 @@ class _Sheet extends StatelessWidget {
             ),
             const SizedBox(height: 26),
 
-            const Text(
-              'THEMED ICON · ANDROID 13 AND NEWER',
-              style: _label,
-            ),
+            const Text('THEMED ICON · ANDROID 13 AND NEWER', style: _label),
             const SizedBox(height: 10),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,

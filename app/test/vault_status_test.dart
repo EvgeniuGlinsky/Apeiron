@@ -16,6 +16,9 @@ VaultStatus status(
   String levelName = 'StrongBox',
   int levelRaw = 2,
   bool hardwareBacked = true,
+  int failures = 0,
+  int waitSeconds = 0,
+  int unlockMs = 0,
 }) => VaultStatus(
   state: state,
   message: message,
@@ -24,17 +27,24 @@ VaultStatus status(
   hardwareBacked: hardwareBacked,
   firstRun: false,
   hasIdentity: true,
+  failures: failures,
+  waitSeconds: waitSeconds,
+  unlockMs: unlockMs,
 );
 
 void main() {
   group('offer to start over', () {
-    test('is made only when the key is really gone', () {
-      expect(mayOfferFreshStart(status(VaultState.keyGone)), isTrue);
+    const lost = {VaultState.keyGone, VaultState.keyMismatch};
+
+    test('is made only when the key is really lost', () {
+      for (final state in lost) {
+        expect(mayOfferFreshStart(status(state)), isTrue, reason: '$state');
+      }
     });
 
     test('is not made in any other state', () {
       for (final state in VaultState.values) {
-        if (state == VaultState.keyGone) continue;
+        if (lost.contains(state)) continue;
         expect(
           mayOfferFreshStart(status(state)),
           isFalse,
@@ -45,10 +55,64 @@ void main() {
       }
     });
 
+    test('a wrong PIN never leads to erasure', () {
+      for (final state in [VaultState.wrongPin, VaultState.delayed]) {
+        expect(mayOfferFreshStart(status(state, failures: 50)), isFalse);
+      }
+    });
+
+    test('legacy data has its own, separate way out', () {
+      expect(isLegacy(status(VaultState.legacyData)), isTrue);
+      expect(mayOfferFreshStart(status(VaultState.legacyData)), isFalse);
+    });
+
     test('a transient failure says outright that the data is intact', () {
       final message = describeVault(status(VaultState.retry));
       expect(message.tone, VaultTone.warning);
       expect(message.action, contains('целы'));
+      expect(message.action, contains('не потрачена'));
+    });
+  });
+
+  group('the PIN', () {
+    test('the pad is shown exactly when a PIN is expected', () {
+      for (final state in VaultState.values) {
+        final expected = {
+          VaultState.locked,
+          VaultState.wrongPin,
+          VaultState.delayed,
+        }.contains(state);
+        expect(needsPin(status(state)), expected, reason: '$state');
+      }
+    });
+
+    test('setting a PIN warns that a forgotten one loses everything', () {
+      final m = describeVault(status(VaultState.pinSetupRequired));
+      expect(m.detail, contains('Забытый пин'));
+      expect(m.detail, contains('потеря'));
+      expect(needsPinSetup(status(VaultState.pinSetupRequired)), isTrue);
+      expect(needsPinSetup(status(VaultState.pinMismatch)), isTrue);
+    });
+
+    test('a wrong PIN tells the count and the wait', () {
+      final m = describeVault(
+        status(VaultState.wrongPin, failures: 6, waitSeconds: 30),
+      );
+      expect(m.detail, contains('6'));
+      expect(m.action, contains('30 с'));
+    });
+
+    test('waits read as people say them', () {
+      expect(waitLabel(30), '30 с');
+      expect(waitLabel(60), '1 мин');
+      expect(waitLabel(299), '5 мин');
+      expect(waitLabel(3600), '1 ч');
+    });
+
+    test('a different key is not called a wrong PIN', () {
+      final m = describeVault(status(VaultState.keyMismatch));
+      expect(m.tone, VaultTone.blocked);
+      expect(m.detail, contains('не неверный пин'));
     });
   });
 
@@ -95,13 +159,13 @@ void main() {
   });
 
   group('honesty of wording', () {
-    test('success does not promise what this task does not deliver', () {
-      // A phone taken away while unlocked will be covered by the PIN (R-001),
-      // not the hardware key. Promising it now is exactly the overstatement
-      // forbidden by the wording table in docs/threat-log.md.
+    test('success names what the PIN does not survive', () {
+      // Forbidden: promising more than is done. Guessing with root on this
+      // phone and key extraction from the hardware must be named, not hidden.
       final detail = describeVault(status(VaultState.opened)).detail;
-      expect(detail, contains('разблокированным'));
-      expect(detail, contains('пин'));
+      expect(detail, contains('root'));
+      expect(detail, contains('извлекут'));
+      expect(detail, contains('длина пина'));
     });
 
     test('a vanished key explains why recovery is impossible', () {

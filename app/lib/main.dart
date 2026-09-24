@@ -8,7 +8,9 @@ import 'check_screen.dart';
 import 'fingerprint.dart';
 import 'lock_policy.dart';
 import 'raven.dart';
+import 'pin_screen.dart';
 import 'vault_panel.dart';
+import 'vault_status.dart';
 import 'wordmark.dart';
 import 'src/rust/api/identity.dart';
 import 'src/rust/api/vault.dart';
@@ -113,13 +115,16 @@ class _IdentityScreenState extends State<IdentityScreen>
     }
   }
 
-  /// Opens the vault and reads the identity from it.
+  /// Asks where the vault stands and, if it is open, reads the identity.
   ///
-  /// Unlocking always comes first: the database key (DEK) is unwrapped by the
-  /// device's hardware keystore, and without it there is nothing to read. On a
-  /// locked phone the hardware will not do this — by design (R-001).
+  /// Nothing is opened here: opening needs the PIN (R-001), and the PIN screen
+  /// takes over when the vault is locked or has no PIN yet.
   Future<void> _refresh() => _run(() async {
-    final vault = await unlockVault();
+    await _show(await vaultStatus());
+  });
+
+  /// Shows a new vault state; reads the identity if the vault is open.
+  Future<void> _show(VaultStatus vault) async {
     final id = vault.state == VaultState.opened
         ? await currentIdentity()
         : null;
@@ -130,6 +135,11 @@ class _IdentityScreenState extends State<IdentityScreen>
       });
     }
     _noteActivity();
+  }
+
+  /// Clears data of a test build before the PIN, at the owner's request.
+  Future<void> _resetLegacy() => _run(() async {
+    await _show(await resetLegacy());
   });
 
   /// Erases everything cryptographically (R-005): the key is destroyed, not
@@ -222,13 +232,23 @@ class _IdentityScreenState extends State<IdentityScreen>
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (_error != null) _ErrorBanner(message: _error!),
-                    if (vault != null) ...[
+                    if (vault != null &&
+                        (needsPin(vault) || needsPinSetup(vault)))
+                      PinScreen(
+                        // Setting and entering are different screens; a wrong
+                        // PIN or a delay is handled inside, without a rebuild.
+                        key: ValueKey(needsPinSetup(vault)),
+                        status: vault,
+                        onDone: _show,
+                      )
+                    else if (vault != null) ...[
                       VaultPanel(
                         status: vault,
-                        onRetry: vault.state == VaultState.opened || _busy
-                            ? null
-                            : _refresh,
+                        onRetry: vault.state == VaultState.retry && !_busy
+                            ? _refresh
+                            : null,
                         onFreshStart: _busy ? null : _freshStart,
+                        onResetLegacy: _busy ? null : _resetLegacy,
                       ),
                       const SizedBox(height: Ap.s20),
                     ],
@@ -446,8 +466,8 @@ class _HonestNote extends StatelessWidget {
           Text('ЧЕГО ЕЩЁ НЕТ', style: t.labelLarge),
           const SizedBox(height: Ap.s8),
           Text(
-            'Ни переписки, ни сети, ни постоянного хранения. Это каркас: '
-            'проверка того, что Flutter дошёл до Rust, а Rust породил ключи.',
+            'Переписки пока нет. В сеть приложение ходит только ради замера '
+            'DHT на экране самопроверки: тестовые конверты без содержимого.',
             style: t.bodySmall,
           ),
         ],

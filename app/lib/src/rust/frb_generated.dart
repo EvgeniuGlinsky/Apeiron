@@ -4,6 +4,8 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'api/identity.dart';
+import 'api/pin.dart';
+import 'api/probe.dart';
 import 'api/vault.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -65,7 +67,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 884587007;
+  int get rustContentHash => -995903554;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -79,15 +81,38 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 abstract class RustLibApi extends BaseApi {
   Future<PublicIdentityView?> crateApiIdentityCurrentIdentity();
 
+  Future<String> crateApiProbeDhtProbeGetOwn();
+
+  Future<String> crateApiProbeDhtProbeGetPublic({
+    required String day,
+    required int count,
+  });
+
+  Future<String> crateApiProbeDhtProbePut({required int count});
+
   Future<PublicIdentityView> crateApiIdentityGenerateIdentity();
 
   Future<void> crateApiIdentityLockIdentity();
 
   Future<void> crateApiVaultLockVault();
 
+  Future<Uint8List> crateApiPinPinPadBegin();
+
+  Future<void> crateApiPinPinPadClear();
+
+  Future<int> crateApiPinPinPadErase();
+
+  Future<int> crateApiPinPinPadPress({required int position});
+
+  Future<VaultStatus> crateApiVaultPinSetupConfirm();
+
+  Future<int> crateApiVaultPinSetupFirst();
+
   Future<String> crateApiVaultPlatformDiagnostics();
 
   Future<String> crateApiIdentityPublicIdentityHex();
+
+  Future<VaultStatus> crateApiVaultResetLegacy();
 
   Future<String> crateApiIdentitySafetyNumberWith({
     required String peerPublicHex,
@@ -95,7 +120,7 @@ abstract class RustLibApi extends BaseApi {
 
   Future<List<CheckLine>> crateApiVaultSelfCheck();
 
-  Future<VaultStatus> crateApiVaultUnlockVault();
+  Future<VaultStatus> crateApiVaultUnlockWithPin();
 
   Future<VaultStatus> crateApiVaultVaultStatus();
 
@@ -138,7 +163,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "current_identity", argNames: []);
 
   @override
-  Future<PublicIdentityView> crateApiIdentityGenerateIdentity() {
+  Future<String> crateApiProbeDhtProbeGetOwn() {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -147,6 +172,96 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             generalizedFrbRustBinding,
             serializer,
             funcId: 2,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiProbeDhtProbeGetOwnConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiProbeDhtProbeGetOwnConstMeta =>
+      const TaskConstMeta(debugName: "dht_probe_get_own", argNames: []);
+
+  @override
+  Future<String> crateApiProbeDhtProbeGetPublic({
+    required String day,
+    required int count,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(day, serializer);
+          sse_encode_u_32(count, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 3,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiProbeDhtProbeGetPublicConstMeta,
+        argValues: [day, count],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiProbeDhtProbeGetPublicConstMeta =>
+      const TaskConstMeta(
+        debugName: "dht_probe_get_public",
+        argNames: ["day", "count"],
+      );
+
+  @override
+  Future<String> crateApiProbeDhtProbePut({required int count}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_u_32(count, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 4,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiProbeDhtProbePutConstMeta,
+        argValues: [count],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiProbeDhtProbePutConstMeta =>
+      const TaskConstMeta(debugName: "dht_probe_put", argNames: ["count"]);
+
+  @override
+  Future<PublicIdentityView> crateApiIdentityGenerateIdentity() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 5,
             port: port_,
           );
         },
@@ -173,7 +288,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 3,
+            funcId: 6,
             port: port_,
           );
         },
@@ -200,7 +315,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 4,
+            funcId: 7,
             port: port_,
           );
         },
@@ -219,6 +334,169 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "lock_vault", argNames: []);
 
   @override
+  Future<Uint8List> crateApiPinPinPadBegin() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 8,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiPinPinPadBeginConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPinPinPadBeginConstMeta =>
+      const TaskConstMeta(debugName: "pin_pad_begin", argNames: []);
+
+  @override
+  Future<void> crateApiPinPinPadClear() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 9,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiPinPinPadClearConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPinPinPadClearConstMeta =>
+      const TaskConstMeta(debugName: "pin_pad_clear", argNames: []);
+
+  @override
+  Future<int> crateApiPinPinPadErase() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 10,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_u_32,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiPinPinPadEraseConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPinPinPadEraseConstMeta =>
+      const TaskConstMeta(debugName: "pin_pad_erase", argNames: []);
+
+  @override
+  Future<int> crateApiPinPinPadPress({required int position}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_u_8(position, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 11,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_u_32,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiPinPinPadPressConstMeta,
+        argValues: [position],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPinPinPadPressConstMeta =>
+      const TaskConstMeta(debugName: "pin_pad_press", argNames: ["position"]);
+
+  @override
+  Future<VaultStatus> crateApiVaultPinSetupConfirm() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 12,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_vault_status,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiVaultPinSetupConfirmConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiVaultPinSetupConfirmConstMeta =>
+      const TaskConstMeta(debugName: "pin_setup_confirm", argNames: []);
+
+  @override
+  Future<int> crateApiVaultPinSetupFirst() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 13,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_u_32,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiVaultPinSetupFirstConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiVaultPinSetupFirstConstMeta =>
+      const TaskConstMeta(debugName: "pin_setup_first", argNames: []);
+
+  @override
   Future<String> crateApiVaultPlatformDiagnostics() {
     return handler.executeNormal(
       NormalTask(
@@ -227,7 +505,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 5,
+            funcId: 14,
             port: port_,
           );
         },
@@ -254,7 +532,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 15,
             port: port_,
           );
         },
@@ -273,6 +551,33 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "public_identity_hex", argNames: []);
 
   @override
+  Future<VaultStatus> crateApiVaultResetLegacy() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 16,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_vault_status,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiVaultResetLegacyConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiVaultResetLegacyConstMeta =>
+      const TaskConstMeta(debugName: "reset_legacy", argNames: []);
+
+  @override
   Future<String> crateApiIdentitySafetyNumberWith({
     required String peerPublicHex,
   }) {
@@ -284,7 +589,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 17,
             port: port_,
           );
         },
@@ -314,7 +619,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 8,
+            funcId: 18,
             port: port_,
           );
         },
@@ -333,7 +638,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "self_check", argNames: []);
 
   @override
-  Future<VaultStatus> crateApiVaultUnlockVault() {
+  Future<VaultStatus> crateApiVaultUnlockWithPin() {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -341,7 +646,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 19,
             port: port_,
           );
         },
@@ -349,15 +654,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_vault_status,
           decodeErrorData: null,
         ),
-        constMeta: kCrateApiVaultUnlockVaultConstMeta,
+        constMeta: kCrateApiVaultUnlockWithPinConstMeta,
         argValues: [],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateApiVaultUnlockVaultConstMeta =>
-      const TaskConstMeta(debugName: "unlock_vault", argNames: []);
+  TaskConstMeta get kCrateApiVaultUnlockWithPinConstMeta =>
+      const TaskConstMeta(debugName: "unlock_with_pin", argNames: []);
 
   @override
   Future<VaultStatus> crateApiVaultVaultStatus() {
@@ -368,7 +673,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 10,
+            funcId: 20,
             port: port_,
           );
         },
@@ -395,7 +700,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 21,
             port: port_,
           );
         },
@@ -486,6 +791,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  int dco_decode_u_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
+
+  @protected
   int dco_decode_u_8(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
@@ -507,8 +818,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   VaultStatus dco_decode_vault_status(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 7)
-      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    if (arr.length != 10)
+      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
     return VaultStatus(
       state: dco_decode_vault_state(arr[0]),
       message: dco_decode_String(arr[1]),
@@ -517,6 +828,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       hardwareBacked: dco_decode_bool(arr[4]),
       firstRun: dco_decode_bool(arr[5]),
       hasIdentity: dco_decode_bool(arr[6]),
+      failures: dco_decode_u_32(arr[7]),
+      waitSeconds: dco_decode_u_32(arr[8]),
+      unlockMs: dco_decode_u_32(arr[9]),
     );
   }
 
@@ -604,6 +918,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  int sse_decode_u_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint32();
+  }
+
+  @protected
   int sse_decode_u_8(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getUint8();
@@ -631,6 +951,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_hardwareBacked = sse_decode_bool(deserializer);
     var var_firstRun = sse_decode_bool(deserializer);
     var var_hasIdentity = sse_decode_bool(deserializer);
+    var var_failures = sse_decode_u_32(deserializer);
+    var var_waitSeconds = sse_decode_u_32(deserializer);
+    var var_unlockMs = sse_decode_u_32(deserializer);
     return VaultStatus(
       state: var_state,
       message: var_message,
@@ -639,6 +962,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       hardwareBacked: var_hardwareBacked,
       firstRun: var_firstRun,
       hasIdentity: var_hasIdentity,
+      failures: var_failures,
+      waitSeconds: var_waitSeconds,
+      unlockMs: var_unlockMs,
     );
   }
 
@@ -724,6 +1050,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_u_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint32(self);
+  }
+
+  @protected
   void sse_encode_u_8(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putUint8(self);
@@ -750,5 +1082,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self.hardwareBacked, serializer);
     sse_encode_bool(self.firstRun, serializer);
     sse_encode_bool(self.hasIdentity, serializer);
+    sse_encode_u_32(self.failures, serializer);
+    sse_encode_u_32(self.waitSeconds, serializer);
+    sse_encode_u_32(self.unlockMs, serializer);
   }
 }

@@ -6,48 +6,64 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `create_identity`, `from_session`, `state`, `storage_dir`, `with_identity`, `without_vault`
+// These functions are ignored because they are not marked as `pub`: `bare`, `create_identity`, `from_error`, `from_session`, `open_session`, `state`, `waiting`, `with_identity`, `writer`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Session`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `eq`, `fmt`
 
-/// Открывает хранилище и загружает личность.
+/// The current state, without an attempt to open anything.
 ///
-/// `Result` здесь намеренно нет: отказ железа — это положение, о котором надо
-/// рассказать, а не красный баннер с именем класса Java.
-Future<VaultStatus> unlockVault() =>
-    RustLib.instance.api.crateApiVaultUnlockVault();
-
-/// Текущее положение, без попытки открыть.
+/// For a locked vault this also says whether a delay is running, so that the screen can
+/// show a countdown instead of a pad that would only answer "wait".
 Future<VaultStatus> vaultStatus() =>
     RustLib.instance.api.crateApiVaultVaultStatus();
 
-/// Запирает: уничтожает ключ базы и всё, что из него выведено.
+/// Tries the PIN typed on the pad.
+Future<VaultStatus> unlockWithPin() =>
+    RustLib.instance.api.crateApiVaultUnlockWithPin();
+
+/// Keeps the typed digits as the first entry of a new PIN. Returns their count.
+Future<int> pinSetupFirst() =>
+    RustLib.instance.api.crateApiVaultPinSetupFirst();
+
+/// Compares the confirmation with the first entry and, if they match, creates the vault.
 ///
-/// Вызывается при уходе приложения в фон и при гашении экрана — решение R-001.
-/// Разблокировка потребует аппаратного ключа заново, а на запертом телефоне
-/// железо им работать откажется.
+/// The comparison is here, in Rust, and not in Dart: Dart never holds either entry.
+Future<VaultStatus> pinSetupConfirm() =>
+    RustLib.instance.api.crateApiVaultPinSetupConfirm();
+
+/// Clears data of a test build before the PIN, at the owner's request.
+///
+/// Refuses anything else: a PIN vault is erased only through [`wipe_everything`], and
+/// only from the states where the key is already lost.
+Future<VaultStatus> resetLegacy() =>
+    RustLib.instance.api.crateApiVaultResetLegacy();
+
+/// Locks: destroys the database key and everything derived from it, and forgets any
+/// digits on the pad.
+///
+/// Called when the app goes to the background and when the screen turns off —
+/// decision R-001.
 Future<void> lockVault() => RustLib.instance.api.crateApiVaultLockVault();
 
-/// Стирает всё криптографически (R-005): уничтожает ключ, а не данные.
+/// Erases everything cryptographically (R-005): destroys the key, not the data.
 ///
-/// Требовать нечего, потому что расшифровать нечем — даже если копию базы
-/// успели снять. Действие необратимо и вызывается только осознанно.
+/// Offered only when the key is already lost; the action is irreversible.
 Future<void> wipeEverything() =>
     RustLib.instance.api.crateApiVaultWipeEverything();
 
-/// Прогоняет самопроверку на этом устройстве.
+/// Runs the self-check on this device.
 Future<List<CheckLine>> selfCheck() =>
     RustLib.instance.api.crateApiVaultSelfCheck();
 
-/// Диагностика платформы одной строкой на каждый факт.
+/// Platform diagnostics, one line per fact.
 ///
-/// Нужна затем, что проверка на устройстве одна: установка обязана ответить на
-/// все вопросы сразу, а не на тот, который догадались задать. Отчёт
-/// показывается как есть и пересылается целиком. Секретов не содержит.
+/// Needed because there is only one on-device check: an install must answer all
+/// questions at once, not just the one someone thought to ask. The report is shown as is
+/// and forwarded in full. Contains no secrets.
 Future<String> platformDiagnostics() =>
     RustLib.instance.api.crateApiVaultPlatformDiagnostics();
 
-/// Одна строка отчёта самопроверки.
+/// One line of the self-check report.
 class CheckLine {
   final String name;
   final bool passed;
@@ -72,46 +88,73 @@ class CheckLine {
           detail == other.detail;
 }
 
-/// В каком положении хранилище.
+/// What state the vault is in.
 enum VaultState {
-  /// Открыто и готово.
+  /// Open and ready.
   opened,
 
-  /// Заперто: ключ базы затёрт, нужна разблокировка.
+  /// Locked: the database key is wiped, the PIN is needed.
   locked,
 
-  /// Ключ исчез из защищённого модуля. Расшифровать нельзя ничем.
+  /// No vault yet: a PIN has to be set.
+  pinSetupRequired,
+
+  /// The two entries of a new PIN differ; setting starts over.
+  pinMismatch,
+
+  /// The PIN was wrong. See `failures` and `wait_seconds`.
+  wrongPin,
+
+  /// Too many failures: wait `wait_seconds`. Nothing was tried.
+  delayed,
+
+  /// Data of a test build before the PIN. Cannot be opened; the owner decides to reset.
+  legacyData,
+
+  /// The key is gone from the secure module. Nothing can decrypt.
   keyGone,
 
-  /// Преходящий отказ. Данные целы, надо повторить.
+  /// The secure module holds a different key. Nothing can decrypt.
+  keyMismatch,
+
+  /// Transient failure. The data is intact, retry.
   retry,
 
-  /// Аппаратного хранилища на этой платформе нет.
+  /// There is no hardware store on this platform.
   unavailable,
 }
 
-/// Что показывать про хранилище.
+/// What to show about the vault.
 class VaultStatus {
   final VaultState state;
 
-  /// Пояснение для человека. Пустая строка, если пояснять нечего.
+  /// Explanation for a person. Empty string if there is nothing to explain.
   final String message;
 
-  /// Название уровня: StrongBox, TEE, программный, железо без уточнения.
+  /// Level name: StrongBox, TEE, software, hardware without specifics.
   final String levelName;
 
-  /// Сырое число `KeyInfo.getSecurityLevel()`. Показывается рядом, чтобы
-  /// незнакомое значение было видно, а не подменялось ближайшим знакомым.
+  /// The raw number from `KeyInfo.getSecurityLevel()`. Shown alongside so that an
+  /// unfamiliar value is visible, not replaced by the nearest familiar one.
   final int levelRaw;
 
-  /// Лежит ли ключ в железе, по сообщению системы.
+  /// Whether the key is in hardware, as reported by the system.
   final bool hardwareBacked;
 
-  /// Первый ли это запуск с этим хранилищем.
+  /// Whether the vault was created just now.
   final bool firstRun;
 
-  /// Есть ли в хранилище личность.
+  /// Whether the vault holds an identity.
   final bool hasIdentity;
+
+  /// Wrong PINs in a row.
+  final int failures;
+
+  /// Seconds to wait before the next attempt.
+  final int waitSeconds;
+
+  /// How long the last unlock took (Argon2id plus the hardware chain), in milliseconds.
+  final int unlockMs;
 
   const VaultStatus({
     required this.state,
@@ -121,6 +164,9 @@ class VaultStatus {
     required this.hardwareBacked,
     required this.firstRun,
     required this.hasIdentity,
+    required this.failures,
+    required this.waitSeconds,
+    required this.unlockMs,
   });
 
   @override
@@ -131,7 +177,10 @@ class VaultStatus {
       levelRaw.hashCode ^
       hardwareBacked.hashCode ^
       firstRun.hashCode ^
-      hasIdentity.hashCode;
+      hasIdentity.hashCode ^
+      failures.hashCode ^
+      waitSeconds.hashCode ^
+      unlockMs.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -144,5 +193,8 @@ class VaultStatus {
           levelRaw == other.levelRaw &&
           hardwareBacked == other.hardwareBacked &&
           firstRun == other.firstRun &&
-          hasIdentity == other.hasIdentity;
+          hasIdentity == other.hasIdentity &&
+          failures == other.failures &&
+          waitSeconds == other.waitSeconds &&
+          unlockMs == other.unlockMs;
 }

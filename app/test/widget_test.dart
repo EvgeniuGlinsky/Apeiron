@@ -83,11 +83,7 @@ void main() {
         ['a', 'b', 'c'],
         ['d'],
       ]);
-      expect(
-        rows.expand((r) => r).length,
-        4,
-        reason: 'no group is lost',
-      );
+      expect(rows.expand((r) => r).length, 4, reason: 'no group is lost');
     });
 
     test('empty input gives an empty result, not an exception', () {
