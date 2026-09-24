@@ -9,6 +9,7 @@ publish = false
 
 [dependencies]
 apeiron-core = { path = "../core" }
+apeiron-platform = { path = "../platform" }
 rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -24,6 +25,7 @@ testing = []
 [dev-dependencies]
 apeiron-store = { path = ".", features = ["testing"] }
 tempfile = "3"
+rusqlite.workspace = true
 
 [lints.rust]
 # Здесь нет и не будет ни одного unsafe: всё, что требует JNI, живёт в

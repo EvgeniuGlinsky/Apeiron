@@ -41,9 +41,14 @@ pub const KEY_BYTES: usize = 32;
 pub const NONCE_BYTES: usize = 24;
 /// Длина метки аутентичности Poly1305.
 pub const TAG_BYTES: usize = 16;
+/// Длина непрозрачной метки поиска.
+pub const LOOKUP_TAG_BYTES: usize = 16;
 
 /// Разделитель области вывода ключей.
 const KDF_DOMAIN: &[u8] = b"apeiron/kdf/v1";
+
+/// Разделитель области меток поиска.
+const LOOKUP_DOMAIN: &[u8] = b"apeiron/lookup/v1";
 
 /// Метки назначения для [`SecretKey::derive`].
 ///
@@ -132,6 +137,36 @@ impl SecretKey {
             out.zeroize();
         }
         Self(out)
+    }
+
+    /// Непрозрачная метка для поиска по значению, которое нельзя хранить
+    /// открытым.
+    ///
+    /// Нужна затем, что искать надо, а раскрывать нельзя. Если хранить
+    /// публичный ключ собеседника как есть, список собеседников читается из
+    /// файла базы без всякого ключа — то есть ровно то, что базу и должно было
+    /// защитить. Метка же детерминирована (годится в уникальный индекс) и без
+    /// мастер-ключа не говорит ни о чём.
+    ///
+    /// Это тот же приём, что отдельная ветвь `K_addr` в исследовании (§16.2):
+    /// знание адреса не приближает к содержимому. Ключ для меток выводится
+    /// отдельной меткой назначения и с ключами расшифровки не связан.
+    ///
+    /// Шестнадцати байтов достаточно: метка не секрет и не подпись, её работа —
+    /// различать значения, а не сопротивляться подбору.
+    pub fn tag(&self, value: &[u8]) -> [u8; LOOKUP_TAG_BYTES] {
+        let hk = Hkdf::<Sha256>::new(Some(KDF_DOMAIN), &self.0);
+        let mut info = Vec::with_capacity(LOOKUP_DOMAIN.len() + value.len());
+        info.extend_from_slice(LOOKUP_DOMAIN);
+        info.extend_from_slice(value);
+
+        let mut out = [0u8; LOOKUP_TAG_BYTES];
+        // Как и в derive: ветка недостижима при такой длине, но паниковать
+        // нельзя, а нулевая метка сломает уникальный индекс сразу и громко.
+        if hk.expand(&info, &mut out).is_err() {
+            out.zeroize();
+        }
+        out
     }
 
     fn cipher(&self) -> Result<XChaCha20Poly1305, AeadError> {
@@ -296,6 +331,25 @@ mod tests {
         let b = master.derive("одно");
         let sealed = seal(&a, b"", "текст".as_bytes()).unwrap();
         assert_eq!(open(&b, b"", &sealed).unwrap(), "текст".as_bytes());
+    }
+
+    #[test]
+    fn lookup_tags_differ_by_value_and_by_key() {
+        let a = SecretKey::generate().expect("ОС отдаёт случайность");
+        let b = SecretKey::generate().expect("ОС отдаёт случайность");
+
+        assert_eq!(
+            a.tag("один".as_bytes()),
+            a.tag("один".as_bytes()),
+            "метка обязана быть устойчивой"
+        );
+        assert_ne!(a.tag("один".as_bytes()), a.tag("два".as_bytes()));
+        assert_ne!(
+            a.tag("один".as_bytes()),
+            b.tag("один".as_bytes()),
+            "с другим ключом метка обязана быть другой"
+        );
+        assert_ne!(a.tag("один".as_bytes()), [0u8; LOOKUP_TAG_BYTES]);
     }
 
     #[test]

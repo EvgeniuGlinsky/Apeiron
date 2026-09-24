@@ -120,6 +120,7 @@ name = "apeiron-store"
 version = "0.1.0"
 dependencies = [
  "apeiron-core",
+ "apeiron-platform",
  "apeiron-store",
  "hex",
  "rusqlite",
