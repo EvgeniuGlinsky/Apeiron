@@ -172,7 +172,7 @@ messenger, and against P2 a catastrophic one. Against P8 nothing that lives insi
   | Finding | Status |
   |---|---|
   | Non-contributory Diffie-Hellman: zero public keys were accepted, yielding a predictable all-zero shared secret | **fixed in 0.10.0**: `diffie_hellman()` returns an `Option`, and a `NonContributoryKey` error was added. Checked by our test `zero_public_key_is_rejected`, not taken on faith |
-  | Version downgrade and MACs truncated to 64 bits in V2 | does not concern us: V2 is not standardized and in 0.10.0 was moved behind an experimental feature flag. We are explicitly on V1 |
+  | Version downgrade, and MACs truncated to 64 bits | **corrected 24.09.2026** — this row used to say the truncation was in V2 and so did not concern us; it is the other way round. V1, which we use explicitly (V2 is not standardized and sits behind an experimental flag since 0.10.0, so there is nothing to downgrade from), is the version with 8-byte MACs (`encrypt_truncated_mac`). It still costs nothing here: a third party cannot even submit a forged message — the outer Poly1305 layer and the address signature of the transport (`docs/transport.md` §3) reject it first — and the peer holds the keys anyway |
   | Non-strict Ed25519 signature verification | **fixed in 0.10.0**: strict verification became the default behavior. We have also switched to `verify_strict` ourselves |
   | No more than 40 skipped-message keys per chain | not fixed and will not be. Significant for our architecture; worked around by sorting the batch into order before decryption — `docs/crypto.md`, section 4 |
   | Deterministic IV in the pickle format | not used: we serialize state with our own AEAD |
@@ -388,8 +388,9 @@ verified".
   — the signed packet is repeated, no keys are needed — and, as a separate later step, fetches new
   ones undecrypted. Checking is cheap; listening is expensive.
 
-  **What it costs:** an envelope is at most 1000 bytes (about 700 characters of text; longer
-  messages go in parts; media do not go this way); background delivery takes minutes to hours;
+  **What it costs:** an envelope is at most 1000 bytes (783 bytes of text per part: about 780
+  Latin characters, but only about 390 Cyrillic ones; longer messages go in up to 32 parts; media
+  do not go this way); background delivery takes minutes to hours;
   entry into the network goes through well-known bootstrap addresses — losing them does not stop a
   phone that already knows nodes, and those are cached.
 - **Cost:** the release build requests the network permission from now on.
