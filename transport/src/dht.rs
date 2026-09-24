@@ -87,6 +87,11 @@ impl FakeDht {
         self.state().black_holes.insert(key);
     }
 
+    /// Puts to `key` land again.
+    pub fn heal(&self, key: &[u8; 32]) {
+        self.state().black_holes.remove(key);
+    }
+
     /// Every stored item expires, as after hours without a re-put.
     pub fn expire_all(&self) {
         self.state().items.clear();

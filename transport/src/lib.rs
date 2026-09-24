@@ -40,6 +40,8 @@ pub enum TransportError {
     NotOurs,
     #[error("invitation: {0}")]
     Invitation(String),
+    #[error("the stored pair state is damaged: {0}")]
+    Corrupt(&'static str),
     #[error("the text needs {parts} parts; at most {} fit", envelope::MAX_PARTS)]
     TooLong { parts: usize },
     #[error("key derivation failed")]

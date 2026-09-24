@@ -447,3 +447,74 @@ fn budgets_fit_the_envelope() {
     }
     assert!(len(&mut a.chat, NORMAL_TEXT_BYTES) <= MAX_OLM_BYTES);
 }
+
+/// Stores both sides and restores them from the bytes, as the app does on every launch.
+fn store_and_restore(side: &mut Side, peer: &Side) {
+    let pair = side.pair.to_bytes().unwrap();
+    let chat = side.chat.pickle().unwrap();
+    side.chat = Chat::from_pickle(&chat).unwrap();
+    side.pair = Pair::restore(&side.id, &peer.id.public(), &side.chat.session_id(), &pair).unwrap();
+}
+
+/// §9: the pair survives being stored at any moment — here with a long message half assembled
+/// on the receiving side (its first part decrypted, the second lost for now) and parts waiting
+/// behind the gap — and the conversation goes on as if nothing had happened.
+#[test]
+fn a_pair_survives_being_stored_mid_conversation() {
+    let dht = FakeDht::new();
+    let (mut a, mut b) = pair_up();
+
+    let text = "Длинное сообщение, которое прервётся на середине. ".repeat(30);
+    let id = a.send(&text, T0);
+    let hole = a.message_key(&b, id + 1);
+    dht.black_hole(hole);
+    a.round(&dht, T0);
+    assert!(received(&b.round(&dht, T0 + 1)).is_empty());
+
+    store_and_restore(&mut a, &b);
+    store_and_restore(&mut b, &a);
+
+    dht.heal(&hole);
+    a.round(&dht, T0 + REPUT_EVERY_S);
+    let got = received(&b.round(&dht, T0 + REPUT_EVERY_S + 1));
+    assert_eq!(got, vec![(id, text)]);
+
+    store_and_restore(&mut a, &b);
+    assert!(a
+        .round(&dht, T0 + REPUT_EVERY_S + 2)
+        .contains(&Event::Delivered { first: id }));
+
+    // And both ways after it.
+    let from_b = b.send("ответ после восстановления", T0 + REPUT_EVERY_S + 3);
+    b.round(&dht, T0 + REPUT_EVERY_S + 3);
+    store_and_restore(&mut a, &b);
+    assert_eq!(
+        received(&a.round(&dht, T0 + REPUT_EVERY_S + 4)),
+        vec![(from_b, "ответ после восстановления".into())]
+    );
+}
+
+#[test]
+fn a_damaged_pair_state_is_refused() {
+    let dht = FakeDht::new();
+    let (mut a, b) = pair_up();
+    a.send("something to store", T0);
+    a.round(&dht, T0);
+    let bytes = a.pair.to_bytes().unwrap();
+    let sid = a.chat.session_id();
+
+    assert!(Pair::restore(&a.id, &b.id.public(), &sid, &bytes).is_ok());
+    for cut in [0, 1, bytes.len() / 2, bytes.len() - 1] {
+        assert!(
+            Pair::restore(&a.id, &b.id.public(), &sid, &bytes[..cut]).is_err(),
+            "restored from {cut} of {} bytes",
+            bytes.len()
+        );
+    }
+    let mut longer = bytes.to_vec();
+    longer.push(0);
+    assert!(Pair::restore(&a.id, &b.id.public(), &sid, &longer).is_err());
+    let mut other_format = bytes.to_vec();
+    other_format[0] = 9;
+    assert!(Pair::restore(&a.id, &b.id.public(), &sid, &other_format).is_err());
+}

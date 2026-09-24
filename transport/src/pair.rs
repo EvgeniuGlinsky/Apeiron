@@ -18,6 +18,8 @@ use crate::envelope::{Body, Part, State, MAX_OLM_BYTES, MAX_PARTS};
 use crate::item::{open_value, SignedItem};
 use crate::TransportError;
 
+mod persist;
+
 /// Re-put an unacknowledged item this often (BEP 44 recommends hourly; survival ≥ 4 h measured).
 pub const REPUT_EVERY_S: u64 = 3_600;
 
