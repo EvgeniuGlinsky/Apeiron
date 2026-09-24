@@ -17,64 +17,65 @@ import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
 
 /**
- * Аппаратное хранилище ключа: всё, что требует Android Keystore.
+ * Hardware key store: everything that requires Android Keystore.
  *
- * ## Почему это на Kotlin, а не на Rust
+ * ## Why this is in Kotlin, not Rust
  *
- * Записка этапа предписывала ходить в Keystore «через JNI прямо из Rust, а не
- * через Dart-плагин, — иначе ключевой материал пройдёт через Dart и нарушит
- * R-004». Причина верна, вывод из неё — нет: Kotlin это не Dart. Ключ идёт
- * Keystore → Kotlin → JNI → Rust и в Dart не попадает никогда, R-004 цел.
+ * The stage note prescribed going to Keystore "over JNI directly from Rust,
+ * not through a Dart plugin — otherwise key material will pass through Dart
+ * and violate R-004". The reason is right, the conclusion is not: Kotlin is
+ * not Dart. The key goes Keystore → Kotlin → JNI → Rust and never reaches
+ * Dart, R-004 is intact.
  *
- * А разница в цене большая. Если вызывающая сторона — Rust, к работе с Keystore
- * прилагаются дескрипторы методов, собранные вручную; построение `String[]`
- * через `NewObjectArray`; таблица локальных ссылок, где на присоединённом
- * нативном потоке гарантировано шестнадцать слотов, а этой последовательности
- * нужно полсотни; проверка исключения после каждого вызова, потому что
- * непроверенное исключение убивает процесс при отсоединении потока; и
- * различение типов отказа Keystore сравнением строк с именами классов. Всё это
- * — код под `cfg(target_os = "android")`, который на рабочей машине не
- * компилируется вообще, и каждая опечатка в нём стоит цикла «собрать APK →
- * поставить → получить ответ».
+ * But the difference in cost is large. If the caller is Rust, working with
+ * Keystore comes with hand-built method descriptors; building `String[]`
+ * via `NewObjectArray`; a local reference table where an attached native
+ * thread is guaranteed sixteen slots while this sequence needs about fifty;
+ * an exception check after every call, because an unchecked exception kills
+ * the process when the thread detaches; and telling Keystore failure types
+ * apart by comparing strings with class names. All of this is code under
+ * `cfg(target_os = "android")`, which does not compile on the development
+ * machine at all, and every typo in it costs a "build APK → install → get
+ * an answer" cycle.
  *
- * Здесь же `try/catch` с настоящими типами, а Gradle проверяет файл при каждой
- * сборке: неверное имя метода становится ошибкой компиляции, а не крахом на
- * телефоне. Решение R-010 в `docs/threat-log.md`.
+ * Here instead there is `try/catch` with real types, and Gradle checks the
+ * file on every build: a wrong method name becomes a compile error, not a
+ * crash on the phone. Decision R-010 in `docs/threat-log.md`.
  *
- * ## Что здесь есть и чего нет
+ * ## What is here and what is not
  *
- * Есть: создание невыгружаемого ключа KEK, запечатывание и распечатывание им
- * коротких данных, определение уровня железа, стирание.
+ * Here: creating a non-exportable hardware key (KEK), sealing and opening
+ * short data with it, determining the hardware level, erasure.
  *
- * Нет: работы с файлами, формата обёртки, мьютексов и вообще состояния, кроме
- * ссылки на контекст. Всё это принадлежит Rust. Этот файл — переходник к
- * Keystore, и только.
+ * Not here: file handling, the wrapper format, mutexes, or any state at all
+ * apart from a context reference. All of that belongs to Rust. This file is
+ * an adapter to Keystore, and nothing more.
  */
 object Vault {
-    /** Всё в порядке. */
+    /** All is well. */
     private const val STATUS_OK = 0
 
-    /** Повторить позже; данные целы. Сюда попадает всё, что не GONE. */
+    /** Retry later; the data is intact. Everything not GONE lands here. */
     private const val STATUS_TRANSIENT = 1
 
     /**
-     * Ключ исчез. Расшифровать хранилище нельзя ничем, единственный выход —
-     * начать заново.
+     * Key gone. Nothing can decrypt the vault; the only way out is to
+     * start over.
      *
-     * Достижим ровно из трёх условий, и это самое важное место файла:
-     * `containsAlias` вернул false, `getKey` вернул null,
-     * `KeyPermanentlyInvalidatedException`. Всё прочее — TRANSIENT.
+     * Reachable from exactly three conditions, and this is the most important
+     * place in the file: `containsAlias` returned false, `getKey` returned
+     * null, `KeyPermanentlyInvalidatedException`. Everything else is TRANSIENT.
      *
-     * Причина не теоретическая. `setUnlockedDeviceRequired` бросает
-     * `UserNotAuthenticatedException` на **разблокированном** устройстве, если
-     * его разблокировали слабой биометрией — это подтверждённый дефект прошивок.
-     * Если истолковать такое как «ключ потерян» и перевыпустить KEK, приложение
-     * уничтожит переписку владельца из-за преходящего сбоя. Это должно быть
-     * структурно невозможно, а не «мы аккуратно написали».
+     * The reason is not theoretical. `setUnlockedDeviceRequired` throws
+     * `UserNotAuthenticatedException` on an **unlocked** device if it was
+     * unlocked with weak biometrics — a confirmed firmware defect. If that is
+     * interpreted as "key lost" and the KEK is reissued, the app will destroy
+     * the owner's conversations because of a transient failure. This must be
+     * structurally impossible, not "we wrote it carefully".
      */
     private const val STATUS_GONE = 2
 
-    /** Наша собственная ошибка. Как и TRANSIENT, данных не трогает. */
+    /** Our own error. Like TRANSIENT, it does not touch the data. */
     private const val STATUS_INTERNAL = 3
 
     private const val ALIAS = "apeiron.kek.v1"
@@ -84,42 +85,44 @@ object Vault {
     private const val GCM_IV_BYTES = 12
 
     /**
-     * Предел на то, что вообще можно пропускать через KEK.
+     * Limit on what may be passed through the KEK at all.
      *
-     * StrongBox медленнее TEE в десятки раз: мегабайт через него шифруется
-     * порядка пятнадцати секунд. Через KEK проходят тридцать четыре байта —
-     * обёртка ключа базы, — и предел стоит затем, чтобы однажды через него не
-     * пустили саму базу, после чего приложение замрёт на глазах у владельца.
+     * StrongBox is tens of times slower than TEE: a megabyte takes on the
+     * order of fifteen seconds to encrypt through it. Thirty-four bytes pass
+     * through the KEK — the wrapper of the database key — and the limit is
+     * there so that one day nobody passes the database itself through it,
+     * after which the app would freeze before the owner's eyes.
      */
     private const val MAX_WRAP_BYTES = 64
 
     private lateinit var appContext: Context
 
-    /** Что произошло при последней попытке создать ключ — для отчёта. */
+    /** What happened on the last attempt to create the key — for the report. */
     private var lastKeyNote: String = "ключ ещё не запрашивался"
 
-    /** Чем кончилась попытка связаться с ядром. Единственный способ узнать о
-     * неудаче: до появления движка Flutter показать её негде. */
+    /** How the attempt to connect to the core ended. The only way to learn
+     * of a failure: before the Flutter engine exists, there is nowhere to
+     * show it. */
     private var registrationNote: String = "связь с ядром ещё не устанавливалась"
 
     /**
-     * Вызывается из [MainActivity] до старта Dart.
+     * Called from [MainActivity] before Dart starts.
      *
-     * Здесь же грузится библиотека: `System.loadLibrary` и `dlopen` из Dart
-     * попадают в одно пространство имён компоновщика и находят один и тот же
-     * объект по soname, поэтому копия кода остаётся одна.
+     * The library is loaded here too: `System.loadLibrary` and `dlopen` from
+     * Dart land in the same linker namespace and find the same object by
+     * soname, so there remains a single copy of the code.
      *
-     * **Наружу не бросает ничего, и это не перестраховка.** Вызов приходит из
-     * `onCreate` до того, как поднят движок Flutter: исключение отсюда — это
-     * чёрный экран и ни одной строчки на экране, потому что показывать её
-     * нечем. `UnsatisfiedLinkError` тут вполне достижим (нет `.so` под эту
-     * архитектуру, не нашёлся символ нативного метода), и разница между
-     * «приложение не запускается» и «приложение запустилось и говорит, что
-     * именно не вышло» — это ровно та разница, ради которой пишется
-     * диагностика.
+     * **It throws nothing outward, and this is not overcaution.** The call
+     * comes from `onCreate` before the Flutter engine is up: an exception from
+     * here is a black screen and not a single line on it, because there is
+     * nothing to show it with. `UnsatisfiedLinkError` is quite reachable here
+     * (no `.so` for this architecture, the native method symbol not found),
+     * and the difference between "the app does not start" and "the app
+     * started and says what exactly failed" is exactly the difference that
+     * diagnostics are written for.
      *
-     * При неудаче Rust просто остаётся без ссылок и отвечает внятной ошибкой,
-     * а причина ложится в отчёт.
+     * On failure Rust is simply left without the references and responds with
+     * a clear error, and the cause goes into the report.
      */
     @JvmStatic
     fun register(context: Context) {
@@ -129,44 +132,44 @@ object Vault {
             nativeRegister(this, appContext.filesDir.absolutePath)
             registrationNote = "связь с ядром установлена"
         } catch (e: Throwable) {
-            // Throwable, а не Exception: UnsatisfiedLinkError — это Error.
+            // Throwable, not Exception: UnsatisfiedLinkError is an Error.
             registrationNote = "СВЯЗЬ С ЯДРОМ НЕ УСТАНОВЛЕНА: ${describe(e)}"
         }
     }
 
     /**
-     * Отдаёт Rust ссылку на себя и путь к каталогу данных.
+     * Gives Rust a reference to itself and the data directory path.
      *
-     * Экземпляр передаётся явным параметром, а не берётся из служебных
-     * аргументов JNI: так не имеет значения, скомпилирует Kotlin этот метод
-     * статическим или методом экземпляра. Класс не передаётся — метод ищется
-     * по классу самого объекта. `FindClass` на стороне Rust не вызывается
-     * нигде: системный загрузчик классов всё равно не увидел бы класс
-     * приложения с рабочего потока.
+     * The instance is passed as an explicit parameter, not taken from the
+     * implicit JNI arguments: this way it does not matter whether Kotlin
+     * compiles this method as static or as an instance method. The class is
+     * not passed — the method is looked up by the object's own class.
+     * `FindClass` is not called anywhere on the Rust side: the system class
+     * loader would not see the app's class from a worker thread anyway.
      */
     private external fun nativeRegister(self: Any, filesDir: String)
 
     // ─────────────────────────────────────────────────────────────────────────
-    // То, что зовёт Rust. Формат ответа один на все: первый байт — состояние,
-    // дальше либо полезные данные, либо текст сообщения в UTF-8.
+    // What Rust calls. One response format for all: the first byte is the
+    // status, then either the payload or the message text in UTF-8.
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * Убеждается, что ключ на месте, и сообщает уровень железа.
+     * Makes sure the key is in place and reports the hardware level.
      *
-     * Ответ: `[STATUS_OK, уровень] + заметка в UTF-8`, где уровень — сырое
-     * число из `KeyInfo.getSecurityLevel()`, либо `[состояние] + сообщение`.
+     * Response: `[STATUS_OK, level] + note in UTF-8`, where level is the raw
+     * number from `KeyInfo.getSecurityLevel()`, or `[status] + message`.
      *
-     * Заметка говорит, **как ключ появился**: пробовался ли StrongBox и чем
-     * кончилась попытка. Она отдаётся наружу, а не остаётся здесь, потому что
-     * здесь она живёт только до конца процесса — и пропадает ровно к тому
-     * моменту, когда её захотят прочитать. Хранить её будет Rust, вместе с
-     * обёрткой.
+     * The note says **how the key came to be**: whether StrongBox was tried
+     * and how the attempt ended. It is handed out rather than kept here,
+     * because here it lives only until the process ends — and disappears
+     * exactly by the time someone wants to read it. Rust will store it,
+     * together with the wrapper.
      *
-     * @param allowCreate создавать ключ, если его нет. Rust передаёт `false`,
-     *   когда файл обёртки уже существует: в этой ситуации отсутствие ключа
-     *   означает не «первый запуск», а «ключ исчез», и перевыпуск уничтожил бы
-     *   данные безвозвратно.
+     * @param allowCreate create the key if it is missing. Rust passes `false`
+     *   when the wrapper file already exists: in that situation a missing key
+     *   means not "first run" but "key gone", and reissuing it would destroy
+     *   the data irreversibly.
      */
     fun ensureKey(allowCreate: Boolean): ByteArray {
         return try {
@@ -194,13 +197,14 @@ object Vault {
     }
 
     /**
-     * Запечатывает короткие данные ключом KEK.
+     * Seals short data with the KEK.
      *
-     * Ответ: `[STATUS_OK] + одноразовое число (12) + шифртекст`, либо
-     * `[состояние] + сообщение`.
+     * Response: `[STATUS_OK] + nonce (12) + ciphertext`, or
+     * `[status] + message`.
      *
-     * Одноразовое число выдаёт Keystore, а не мы: у ключа включено
-     * `setRandomizedEncryptionRequired`, и свой IV на шифровании запрещён.
+     * The nonce is issued by Keystore, not by us: the key has
+     * `setRandomizedEncryptionRequired` enabled, and a custom IV on encryption
+     * is forbidden.
      */
     fun wrap(plain: ByteArray): ByteArray {
         if (plain.isEmpty() || plain.size > MAX_WRAP_BYTES) {
@@ -230,10 +234,10 @@ object Vault {
     }
 
     /**
-     * Распечатывает то, что запечатал [wrap].
+     * Opens what [wrap] sealed.
      *
-     * На входе `одноразовое число (12) + шифртекст`, на выходе
-     * `[STATUS_OK] + открытый текст` либо `[состояние] + сообщение`.
+     * Input is `nonce (12) + ciphertext`, output is
+     * `[STATUS_OK] + plaintext` or `[status] + message`.
      */
     fun unwrap(ivAndCt: ByteArray): ByteArray {
         if (ivAndCt.size <= GCM_IV_BYTES) {
@@ -257,9 +261,9 @@ object Vault {
         } catch (e: KeyPermanentlyInvalidatedException) {
             fail(STATUS_GONE, "ключ хранилища необратимо обесценен системой")
         } catch (e: UserNotAuthenticatedException) {
-            // Приходит и когда устройство заперто, и когда его разблокировали
-            // способом, которого железу не хватает. Различить по типу нельзя,
-            // поэтому это НЕ «ключ исчез», а «повторите».
+            // Arrives both when the device is locked and when it was unlocked
+            // by a method the hardware finds insufficient. The type cannot
+            // tell them apart, so this is NOT "key gone" but "retry".
             fail(
                 STATUS_TRANSIENT,
                 "устройство заперто или разблокировано способом, которого не хватает",
@@ -267,16 +271,16 @@ object Vault {
         } catch (e: Exception) {
             fail(STATUS_TRANSIENT, describe(e))
         } finally {
-            // Сужает окно, но не закрывает его: сборщик мусора ART перемещает
-            // объекты, а у Cipher свои промежуточные буферы, до которых отсюда
-            // не дотянуться. Писать «затёрто» было бы неправдой.
+            // Narrows the window but does not close it: the ART garbage
+            // collector moves objects, and Cipher has its own intermediate
+            // buffers out of reach from here. Writing "wiped" would be untrue.
             plain?.fill(0)
         }
     }
 
     /**
-     * Стирает ключ. После этого хранилище не восстановить — в этом и смысл
-     * (R-005, криптографическое стирание: уничтожается ключ, а не данные).
+     * Erases the key. After this the vault cannot be recovered — that is the
+     * point (R-005, cryptographic erasure: the key is destroyed, not the data).
      */
     fun destroy(): ByteArray {
         return try {
@@ -292,10 +296,10 @@ object Vault {
     }
 
     /**
-     * Полный отчёт о платформе. Секретов не содержит.
+     * Full platform report. Contains no secrets.
      *
-     * Проверка на устройстве одна, и она обязана ответить на все вопросы сразу,
-     * а не на тот, который догадались задать.
+     * There is only one on-device check, and it must answer all questions at
+     * once, not just the one someone thought to ask.
      */
     fun diagnostics(): String {
         val out = StringBuilder()
@@ -329,12 +333,12 @@ object Vault {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Внутреннее
+    // Internal
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * `load(null)` обязателен: без него первый же `containsAlias` даёт
-     * `KeyStoreException: Uninitialized keystore`.
+     * `load(null)` is mandatory: without it the very first `containsAlias`
+     * gives `KeyStoreException: Uninitialized keystore`.
      */
     private fun openStore(): KeyStore {
         val store = KeyStore.getInstance(PROVIDER)
@@ -350,18 +354,19 @@ object Vault {
     }
 
     /**
-     * Создаёт ключ: сначала пробует StrongBox, при любой неудаче откатывается
-     * на TEE.
+     * Creates the key: tries StrongBox first, and on any failure falls back
+     * to TEE.
      *
-     * Откат ловит `Exception` целиком, а не только
-     * `StrongBoxUnavailableException`: AOSP отображает в этот тип единственный
-     * код отказа, остальные приезжают как `ProviderException` или
-     * `KeyStoreException`, а на части прошивок генерация падает
-     * невоспроизводимо. Перед повторной попыткой алиас удаляется — неудачная
-     * генерация местами оставляет полузапись, и следующий `containsAlias`
-     * соврал бы.
+     * The fallback catches `Exception` as a whole, not just
+     * `StrongBoxUnavailableException`: AOSP maps only a single failure code to
+     * this type, the others arrive as `ProviderException` or
+     * `KeyStoreException`, and on some firmware generation fails
+     * non-reproducibly. The alias is deleted before the retry — a failed
+     * generation sometimes leaves a half-written entry, and the next
+     * `containsAlias` would lie.
      *
-     * Сюда попадают только когда файла обёртки ещё нет, то есть терять нечего.
+     * This is reached only when there is no wrapper file yet, so nothing can
+     * be lost.
      */
     private fun createKey(store: KeyStore): SecretKey {
         try {
@@ -389,13 +394,13 @@ object Vault {
             .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
             .setKeySize(256)
-            // Решение, а не умолчание: запрет на свой IV закрывает повторное
-            // использование одноразового числа, на котором построен
-            // CVE-2021-25444 в keymaster Samsung.
+            // A decision, not a default: banning a custom IV rules out the
+            // nonce reuse on which CVE-2021-25444 in Samsung's keymaster
+            // is built.
             .setRandomizedEncryptionRequired(true)
-            // Железо отказывается работать, пока телефон заперт. Это то, чего не
-            // даёт шифрование файловой системы: на запертом, но загруженном
-            // телефоне хранилище уже расшифровано.
+            // The hardware refuses to work while the phone is locked. This is
+            // what file-system encryption does not give: on a locked but booted
+            // phone the storage is already decrypted.
             .setUnlockedDeviceRequired(true)
         if (strongBox) {
             builder.setIsStrongBoxBacked(true)
@@ -406,11 +411,11 @@ object Vault {
     }
 
     /**
-     * Полный круг: зашифровать и расшифровать, сверив результат.
+     * Full round trip: encrypt and decrypt, comparing the result.
      *
-     * Алиас считается принятым только после него. StrongBox умеет отказывать не
-     * на `generateKey`, а позже — на `Cipher.init` или `doFinal`, и тогда
-     * «успешно созданный» ключ оказался бы нерабочим уже у владельца.
+     * The alias is considered accepted only after it. StrongBox can refuse not
+     * at `generateKey` but later — at `Cipher.init` or `doFinal`, and then a
+     * "successfully created" key would turn out broken in the owner's hands.
      */
     private fun probe(key: SecretKey) {
         val sample = ByteArray(32) { it.toByte() }
@@ -429,18 +434,19 @@ object Vault {
     }
 
     /**
-     * Что система **сообщает** об уровне защиты ключа.
+     * What the system **reports** about the key's protection level.
      *
-     * Именно «сообщает». Для симметричных ключей аттестации не существует:
-     * цепочки сертификатов у них нет, и `KeyInfo` — это самоотчёт фреймворка,
-     * исполняемый в нашем же процессе. Скомпрометированное устройство вернёт
-     * что угодно. Число годится для честной надписи в интерфейсе и не годится
-     * как доказательство.
+     * Precisely "reports". There is no attestation for symmetric keys: they
+     * have no certificate chain, and `KeyInfo` is a self-report by the
+     * framework, executed in our own process. A compromised device will return
+     * anything. The number is fit for an honest label in the UI and unfit as
+     * proof.
      *
-     * Числа те же, что у `KeyProperties`: -2 неизвестно, -1 железо без
-     * уточнения, 0 программный, 1 TEE, 2 StrongBox. На API 28-30
-     * `getSecurityLevel()` ещё нет, и остаётся `isInsideSecureHardware()`,
-     * который различает только «железо или не железо» — отсюда -1.
+     * The numbers are the same as in `KeyProperties`: -2 unknown, -1 hardware
+     * without specifics, 0 software, 1 TEE, 2 StrongBox. On API 28-30
+     * `getSecurityLevel()` does not exist yet, which leaves
+     * `isInsideSecureHardware()`, which distinguishes only "hardware or not
+     * hardware" — hence -1.
      */
     private fun securityLevelOf(key: SecretKey): Int {
         return try {
@@ -485,11 +491,11 @@ object Vault {
     }.getOrElse { "выяснить не удалось" }
 
     /**
-     * Класс исключения вместе с сообщением.
+     * The exception class together with its message.
      *
-     * Отказы различаются по типу, а не по этой строке — она нужна отчёту, и
-     * только ему. В красный баннер владельцу она не идёт: имя класса Java ему
-     * бесполезно и выносит наружу внутренности.
+     * Failures are told apart by type, not by this string — it is needed by
+     * the report, and only by it. It does not go into the owner's red banner:
+     * a Java class name is useless to them and exposes internals.
      */
     private fun describe(e: Throwable): String {
         val name = e.javaClass.name

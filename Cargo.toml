@@ -9,16 +9,16 @@ rust-version = "1.90"
 license = "AGPL-3.0-or-later"
 
 [workspace.dependencies]
-# Версии подобраны **под то же поколение, что у vodozemac**. Иначе в бинаре
-# оказываются две независимые реализации X25519 и Ed25519 сразу: вдвое больше
-# кода рядом с ключами, вдвое больше обязанностей по обновлению и вечный вопрос
-# «а в какую из них приехала заплатка». Проверяется `cargo deny check`
-# (multiple-versions) — при следующем расхождении он это назовёт.
+# Versions are chosen **for the same generation as vodozemac's**. Otherwise the binary
+# ends up with two independent implementations of X25519 and Ed25519 at once: twice the
+# code next to the keys, twice the update obligations and the eternal question
+# "which of them did the patch land in". Checked by `cargo deny check`
+# (multiple-versions) — it will name the next divergence.
 ed25519-dalek = { version = "3", features = ["rand_core", "zeroize"] }
 x25519-dalek = { version = "3", features = ["static_secrets", "zeroize"] }
-# Случайность берётся прямо у операционной системы. `rand`/`rand_core` для
-# этого больше не нужны: в 0.10 источник ОС из них вынесен, а промежуточный
-# слой абстракций над «дай N случайных байт» нам и не был нужен.
+# Randomness is taken directly from the operating system. `rand`/`rand_core` are no
+# longer needed for this: in 0.10 the OS source was moved out of them, and we never
+# needed an intermediate abstraction layer over "give me N random bytes" anyway.
 getrandom = "0.4"
 zeroize = { version = "1", features = ["derive"] }
 sha2 = "0.11"
@@ -26,45 +26,45 @@ subtle = "2"
 thiserror = "2"
 hex = "0.4"
 
-# Двойной храповик Olm. Версия закреплена точно: криптографическую зависимость
-# нельзя обновлять «само собой» — обновление должно быть осознанным действием
-# с чтением журнала изменений. Обоснование выбора и разбор известных замечаний
-# к vodozemac — решение R-009 в docs/threat-log.md.
+# Olm double ratchet. The version is pinned exactly: a cryptographic dependency
+# must not be updated "on its own" — an update must be a deliberate action
+# involving reading the changelog. The rationale for the choice and a review of known
+# findings against vodozemac are decision R-009 in docs/threat-log.md.
 vodozemac = "=0.11.0"
 
-# Вывод ключей и AEAD для локального хранения. Оба — общепринятые реализации
-# соответствующих RFC; свои примитивы не пишем (§18 исследования).
+# Key derivation and AEAD for local storage. Both are widely accepted implementations
+# of the corresponding RFCs; we do not write our own primitives (§18 of the research).
 hkdf = "0.13"
 chacha20poly1305 = "0.11"
 
-# Локальная база. SQLite, а не своя раскладка файлов: состояние храповика и
-# запись о сообщении обязаны попадать на диск одной транзакцией, иначе после
-# внезапного выключения телефона часть сообщений становится нечитаемой навсегда.
-# Своего движка хранения не пишем по той же причине, по которой не пишем своих
-# примитивов шифрования.
+# Local database. SQLite, not a custom file layout: the ratchet state and the
+# message record must reach the disk in one transaction, otherwise after a
+# sudden phone shutdown some messages become unreadable forever.
+# We do not write our own storage engine for the same reason we do not write our
+# own encryption primitives.
 #
-# `bundled` компилирует SQLite из исходников — cargokit выставляет CC_/AR_/
-# RANLIB_/CFLAGS_ для каждой цели Android, поэтому C-код собирается штатно.
-# SQLCipher не берём: шифруем сами, записями, своим AEAD — так криптостек
-# остаётся одного поколения, а запись оказывается привязана к своему месту
-# в базе (см. docs/storage.md).
+# `bundled` compiles SQLite from source — cargokit sets CC_/AR_/
+# RANLIB_/CFLAGS_ for each Android target, so the C code builds normally.
+# We do not take SQLCipher: we encrypt ourselves, per record, with our own AEAD — this way
+# the crypto stack stays of one generation, and a record ends up bound to its location
+# in the database (see docs/storage.md).
 rusqlite = { version = "0.40", features = ["bundled"] }
 
-# Сериализация состояния vodozemac (AccountPickle/SessionPickle). Оба типа
-# объявлены как Serialize/Deserialize, своего канонического вида у них нет,
-# а подписывать их не нужно — поэтому годится serde_json. Обе зависимости уже
-# были в дереве транзитивно через vodozemac, белый список лицензий не меняется.
+# Serialisation of vodozemac state (AccountPickle/SessionPickle). Both types
+# are declared as Serialize/Deserialize, they have no canonical form of their own,
+# and they do not need to be signed — so serde_json will do. Both dependencies were
+# already in the tree transitively via vodozemac; the licence allow-list does not change.
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-# JNI. Подключается ТОЛЬКО под Android (см. platform/Cargo.toml) и закреплён
-# точной версией по той же причине, что vodozemac: это код рядом с мастер-ключом,
-# и обновление обязано быть осознанным действием. Фичу `invocation` включать
-# нельзя никогда — она тянет java-locator и линкуется с libjvm.
+# JNI. Included ONLY for Android (see platform/Cargo.toml) and pinned to an
+# exact version for the same reason as vodozemac: this is code next to the master key,
+# and an update must be a deliberate action. The `invocation` feature must
+# never be enabled — it pulls in java-locator and links against libjvm.
 jni = { version = "=0.22.4", default-features = false }
 
-# Сборка с отладочной информацией, но без переполнения диска C: —
-# target/ создаётся рядом с проектом; см. .cargo/config.toml
+# Build with debug information, but without overflowing drive C: —
+# target/ is created next to the project; see .cargo/config.toml
 [profile.release]
 opt-level = 3
 lto = "thin"

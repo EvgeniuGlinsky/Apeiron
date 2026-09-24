@@ -24,13 +24,13 @@ app/rust_builder/**/ephemeral/
 .vscode/
 *.swp
 
-# ОС
+# OS
 Thumbs.db
 Desktop.ini
 .DS_Store
 
-# Секреты и ключи — сюда не должно попасть ничего, но на всякий случай.
-# Утечка ключа подписи через git — классический способ потерять проект.
+# Secrets and keys — nothing should end up here, but just in case.
+# Leaking a signing key through git is a classic way to lose a project.
 *.jks
 *.keystore
 *.p12
@@ -41,6 +41,6 @@ secrets/
 *.env
 .env.*
 
-# Записка для передачи: содержит локальные пути и подробности машины,
-# в публичный репозиторий не идёт.
+# Handoff note: contains local paths and machine details,
+# does not go into the public repository.
 HANDOFF.md

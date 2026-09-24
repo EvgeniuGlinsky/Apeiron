@@ -5,17 +5,17 @@
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules">
-        <!-- Резервное копирование выключено намеренно, и двумя способами сразу.
+        <!-- Backup is disabled deliberately, and in two ways at once.
 
-             Мастер-ключ живёт в аппаратном хранилище устройства и наружу не
-             выгружается — значит в бэкап уедет зашифрованная база, а ключ от неё
-             нет. Восстановление дало бы нерасшифровываемый мусор, а копия
-             шифротекста осталась бы лежать в облаке.
+             The master key lives in the device's hardware store and is never
+             exported — so the backup would carry the encrypted database but not
+             its key. A restore would yield undecryptable garbage, and a copy of
+             the ciphertext would stay lying in the cloud.
 
-             allowBackup="false" закрывает облачный бэкап и работает на API 28-30.
-             На targetSdk 31+ его одного мало: на части прошивок перенос на новый
-             телефон им не отключается. Поэтому рядом лежит dataExtractionRules,
-             где исключены оба раздела — и cloud-backup, и device-transfer. -->
+             allowBackup="false" closes cloud backup and works on API 28-30.
+             On targetSdk 31+ it alone is not enough: on some firmware it does not
+             disable transfer to a new phone. That is why dataExtractionRules sits
+             next to it, excluding both sections — cloud-backup and device-transfer. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"

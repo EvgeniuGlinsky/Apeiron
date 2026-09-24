@@ -1,15 +1,15 @@
-# Обязательные проверки.
+# Mandatory checks.
 #
-# До 23.09.2026 их не было вовсе, и это обошлось дорого: сборка выдала APK без
-# нативной библиотеки и отрапортовала успехом. Здесь собрано то, что должно
-# ловить такие вещи до человека.
+# Until 23.09.2026 there were none at all, and that cost dearly: the build produced an APK
+# without the native library and reported success. Collected here is what should
+# catch such things before a human does.
 #
-# **Действия закреплены по SHA, а не по тегу.** Тег в чужом репозитории можно
-# переставить на другой коммит, SHA — нет. Для проекта, который обещает
-# проверяемость, доверять подвижной метке в чужих руках нельзя. SHA взяты
-# 23.09.2026; при обновлении версии брать новый SHA, а не тег.
+# **Actions are pinned by SHA, not by tag.** A tag in someone else's repository can
+# be moved to another commit, a SHA cannot. For a project that promises
+# verifiability, trusting a movable label in someone else's hands is not acceptable.
+# SHAs taken on 23.09.2026; when updating a version, take the new SHA, not the tag.
 
-name: Проверки
+name: Checks
 
 on:
   push:
@@ -17,86 +17,86 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Ровно столько прав, сколько нужно на чтение исходников.
+# Exactly as many permissions as needed to read the sources.
 permissions:
   contents: read
 
-# Новый толчок в ту же ветку отменяет предыдущий прогон.
+# A new push to the same branch cancels the previous run.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   rust:
-    name: Rust — формат, линты, тесты
+    name: Rust — format, lints, tests
     runs-on: ubuntu-latest
     steps:
-      - name: Забрать исходники
+      - name: Check out sources
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
-      - name: Поставить тулчейн из rust-toolchain.toml
+      - name: Install toolchain from rust-toolchain.toml
         run: rustup show
 
-      - name: Формат
+      - name: Format
         run: cargo fmt --all --check
 
-      - name: Линты
-        # `-D warnings`: предупреждение, на которое никто не смотрит, — это
-        # не предупреждение. В ядре к тому же запрещены unwrap/expect/panic.
+      - name: Lints
+        # `-D warnings`: a warning nobody looks at is not a
+        # warning. In the core, unwrap/expect/panic are banned as well.
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Линты кода под Android
-        # Весь JNI лежит под cfg(target_os = "android") и обычным прогоном не
-        # проверяется вовсе: на рабочей машине его не компилирует никто, а
-        # ошибка в нём обнаруживается уже на телефоне. Здесь это бесплатно —
-        # clippy проверяет, а не линкует, и NDK ему не нужен: у apeiron-platform
-        # нет зависимостей с кодом на C.
+      - name: Lints for Android code
+        # All JNI lives under cfg(target_os = "android") and is not checked
+        # by a regular run at all: nobody compiles it on the development machine, and
+        # an error in it is discovered only on the phone. Here it is free —
+        # clippy checks, it does not link, and it needs no NDK: apeiron-platform
+        # has no dependencies with C code.
         run: |
           rustup target add aarch64-linux-android
           cargo clippy --target aarch64-linux-android -p apeiron-platform -- -D warnings
 
-      - name: Тесты
+      - name: Tests
         run: cargo test --workspace
 
   deps:
-    name: Зависимости — уязвимости и лицензии
+    name: Dependencies — vulnerabilities and licences
     runs-on: ubuntu-latest
     steps:
-      - name: Забрать исходники
+      - name: Check out sources
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
-      - name: Поставить cargo-deny
-        # Ставим из исходников, а не сторонним действием: одним чужим
-        # доверенным шагом в цепочке меньше.
+      - name: Install cargo-deny
+        # Installed from source, not via a third-party action: one fewer
+        # trusted foreign step in the chain.
         run: cargo install --locked cargo-deny
 
-      - name: Проверить
+      - name: Check
         run: cargo deny check
 
   flutter:
-    name: Flutter — анализ и тесты
+    name: Flutter — analysis and tests
     runs-on: ubuntu-latest
     steps:
-      - name: Забрать исходники
+      - name: Check out sources
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
-      - name: Поставить Flutter
+      - name: Install Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: '3.41.2'
           channel: stable
           cache: true
 
-      - name: Зависимости
+      - name: Dependencies
         working-directory: app
         run: flutter pub get
 
-      - name: Анализ
+      - name: Analysis
         working-directory: app
         run: flutter analyze
 
-      - name: Тесты
+      - name: Tests
         working-directory: app
-        # Контактные листы (`*_sheet.dart`) сюда не попадают: они названы без
-        # суффикса `_test` намеренно, потому что рисуют PNG и не завершаются.
+        # Contact sheets (`*_sheet.dart`) are not included here: they are named without
+        # the `_test` suffix deliberately, because they render PNGs and do not terminate.
         run: flutter test

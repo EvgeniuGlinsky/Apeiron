@@ -1,7 +1,7 @@
-//! Граница между Flutter и ядром.
+//! Boundary between Flutter and the core.
 //!
-//! Правило для всего, что здесь объявлено: наружу уходит только публичное.
-//! Ключи, открытый текст и состояние протокола остаются в Rust (R-004).
+//! Rule for everything declared here: only public data goes out.
+//! Keys, plaintext and protocol state stay in Rust (R-004).
 
 pub mod identity;
 pub mod vault;

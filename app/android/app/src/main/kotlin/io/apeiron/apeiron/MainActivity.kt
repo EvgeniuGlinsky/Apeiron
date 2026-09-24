@@ -5,17 +5,18 @@ import io.flutter.embedding.android.FlutterActivity
 
 class MainActivity : FlutterActivity() {
     /**
-     * [Vault.register] вызывается **до** `super.onCreate`, то есть до того, как
-     * Flutter поднимет движок и запустит Dart.
+     * [Vault.register] is called **before** `super.onCreate`, that is, before
+     * Flutter brings up the engine and starts Dart.
      *
-     * Порядок существенный. `register` грузит нативную библиотеку и отдаёт Rust
-     * ссылки на класс [Vault] и путь к каталогу данных; без этого первое же
-     * обращение к хранилищу вернуло бы отказ.
+     * The order matters. `register` loads the native library and gives Rust
+     * references to the [Vault] class and the data directory path; without it
+     * the very first access to the store would return a refusal.
      *
-     * Исключений отсюда не выпускает: при неудаче Rust останется без ссылок и
-     * скажет об этом внятной ошибкой. Падение же в конструкторе Activity — это
-     * чёрный экран без единой строчки диагностики, потому что Flutter-движка к
-     * этому моменту ещё нет.
+     * It lets no exceptions out: on failure Rust is left without the
+     * references and says so with a clear error. A crash in the Activity
+     * constructor, on the other hand, is a black screen without a single line
+     * of diagnostics, because the Flutter engine does not exist yet at this
+     * point.
      */
     override fun onCreate(savedInstanceState: Bundle?) {
         Vault.register(this)

@@ -1,15 +1,15 @@
-# Правила для `cargo deny check` — уязвимости, лицензии и разрастание дерева
-# зависимостей.
+# Rules for `cargo deny check` — vulnerabilities, licences and growth of the
+# dependency tree.
 #
-# Зачем это здесь. Проект обещает проверяемость, а всякая зависимость — это
-# чужой код, который попадёт в APK и будет выполняться рядом с ключами.
-# Криптографических зависимостей у нас немного и добавляться они будут редко,
-# поэтому дешевле держать белый список и разбирать каждое новое имя руками,
-# чем однажды обнаружить в дереве что-нибудь заброшенное с известной дырой.
+# Why this is here. The project promises verifiability, and every dependency is
+# someone else's code that will end up in the APK and run next to the keys.
+# We have few cryptographic dependencies and new ones will be added rarely,
+# so it is cheaper to keep an allow-list and review each new name by hand
+# than to one day find something abandoned with a known hole in the tree.
 
 [graph]
-# Проверяем ровно те цели, под которые собираем, — иначе в отчёт лезут
-# зависимости для платформ, куда мы не ходим.
+# We check exactly the targets we build for — otherwise the report fills up with
+# dependencies for platforms we do not go to.
 targets = [
     "aarch64-linux-android",
     "armv7-linux-androideabi",
@@ -20,19 +20,19 @@ all-features = false
 
 [advisories]
 version = 2
-# Отозванная версия крейта — это либо дыра, либо ошибка публикации.
-# И то и другое повод остановиться.
+# A yanked crate version is either a hole or a publishing mistake.
+# Either one is a reason to stop.
 yanked = "deny"
 ignore = []
 
 [licenses]
 version = 2
-# Белый список, а не чёрный: неизвестная лицензия должна останавливать сборку,
-# а не проскакивать.
+# An allow-list, not a deny-list: an unknown licence must stop the build,
+# not slip through.
 #
-# Список подрезан до того, что в дереве действительно есть. Разрешать лицензии
-# «на всякий случай» бессмысленно: смысл проверки в том, чтобы появление новой
-# заставило человека посмотреть, что за крейт пришёл и откуда.
+# The list is trimmed to what is actually in the tree. Allowing licences
+# "just in case" is pointless: the point of the check is that a new one appearing
+# makes a person look at what crate arrived and from where.
 allow = [
     "Apache-2.0",
     "MIT",
@@ -40,29 +40,29 @@ allow = [
     "Unicode-3.0",
     "Unlicense",
     "Zlib",
-    # Наши собственные крейты воркспейса.
+    # Our own workspace crates.
     "AGPL-3.0-or-later",
 ]
 confidence-threshold = 0.93
 
 [bans]
-# Две версии одного крейта в дереве — обычно следствие ленивого обновления,
-# а в криптографии ещё и риск: заплатку получит одна из них.
+# Two versions of one crate in the tree are usually the result of lazy updating,
+# and in cryptography also a risk: only one of them will get the patch.
 #
-# Сейчас задвоены `digest`, `block-buffer`, `crypto-common` и `syn`. Источник
-# один и безобидный: `flutter_rust_bridge_macros` тянет `md-5` старого
-# поколения, и это **процедурный макрос** — код времени сборки, в приложение
-# он не попадает. Криптография приложения при этом в одном экземпляре, что
-# и было целью.
+# Currently duplicated are `digest`, `block-buffer`, `crypto-common` and `syn`. The
+# source is single and harmless: `flutter_rust_bridge_macros` pulls in an old-generation
+# `md-5`, and this is a **procedural macro** — build-time code, it does not end up
+# in the app. The app's cryptography meanwhile exists in a single copy, which
+# was the goal.
 multiple-versions = "warn"
 
-# Зависимость без указания версии — это либо недосмотр, либо путь внутри
-# воркспейса. Первое запрещаем, второе разрешаем: `apeiron-core` подключается
-# по пути намеренно, отдельной версии у него нет и не должно быть.
+# A dependency without a version is either an oversight or a path inside the
+# workspace. We forbid the first and allow the second: `apeiron-core` is included
+# by path deliberately, it has no separate version and should not have one.
 wildcards = "deny"
 allow-wildcard-paths = true
-# Списки ниже пусты намеренно: пока запрещать нечего поимённо, но место
-# для записи «этот крейт мы осознанно не берём» должно существовать.
+# The lists below are empty deliberately: there is nothing to ban by name yet, but a
+# place to record "we deliberately do not take this crate" must exist.
 deny = []
 skip = []
 

@@ -1,8 +1,8 @@
-# Нормализация переносов строк. Без этого Windows-рабочая копия даёт CRLF,
-# а любой другой участник — LF, и каждый файл выглядит изменённым целиком.
+# Line-ending normalisation. Without it a Windows working copy produces CRLF,
+# any other contributor LF, and every file looks changed in its entirety.
 * text=auto eol=lf
 
-# Windows-специфичное оставляем с CRLF: иначе ломаются инструменты MSVC.
+# Windows-specific files keep CRLF: otherwise MSVC tools break.
 *.bat   text eol=crlf
 *.cmd   text eol=crlf
 *.ps1   text eol=crlf
@@ -11,7 +11,7 @@
 *.rc    text eol=crlf
 *.manifest text eol=crlf
 
-# Бинарное — не трогать.
+# Binary — do not touch.
 *.png   binary
 *.jpg   binary
 *.ico   binary

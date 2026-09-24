@@ -1,15 +1,15 @@
-//! Платформы без аппаратного хранилища ключей.
+//! Platforms without a hardware key store.
 //!
-//! Живёт вне `api/` намеренно: всё, что лежит там, разбирает
-//! flutter_rust_bridge, а этому типу через границу FFI ходить незачем.
+//! Lives outside `api/` deliberately: everything there is parsed by
+//! flutter_rust_bridge, and this type has no reason to cross the FFI boundary.
 
 use apeiron_platform::{KeyStatus, KeyWrapper, PlatformError};
 
-/// Заглушка для платформ без аппаратного хранилища.
+/// Stub for platforms without a hardware store.
 ///
-/// Десктоп заморожен решением заказчика, и делать вид, что здесь есть защита,
-/// нельзя: приложение честно скажет, что хранилища нет, вместо того чтобы молча
-/// положить ключ в файл рядом с базой.
+/// Desktop is frozen by the project owner's decision, and pretending there is
+/// protection here is not allowed: the app will honestly say there is no store
+/// instead of silently putting the key in a file next to the database.
 #[derive(Default)]
 pub struct NoVault;
 

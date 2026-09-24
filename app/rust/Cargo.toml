@@ -1,15 +1,15 @@
 [package]
 name = "rust_lib_apeiron"
-# Наследуем от воркспейса, как остальные крейты. Без `license` крейт уезжает
-# в публичный репозиторий необъявленным — это нашёл `cargo deny check`.
+# Inherited from the workspace, like the other crates. Without `license` the crate
+# goes to the public repository undeclared; `cargo deny check` caught this.
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Мост между Flutter и ядром. Тонкий по замыслу: логики здесь нет, только перенос через FFI."
-# На crates.io не публикуется: это часть приложения, а не библиотека общего
-# пользования. Заодно закрывает случайный `cargo publish` криптографического
-# кода, который ещё в работе.
+description = "Bridge between Flutter and the core. Thin by design: no logic here, only transport over FFI."
+# Not published to crates.io: this is part of the application, not a general-
+# purpose library. It also blocks an accidental `cargo publish` of cryptographic
+# code that is still in progress.
 publish = false
 
 [lib]
@@ -25,14 +25,14 @@ zeroize.workspace = true
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
-# Мост — код на границе FFI. Паника здесь не перехватывается ничем и роняет
-# процесс приложения целиком, поэтому запреты те же, что в ядре.
+# The bridge is code on the FFI boundary. A panic here is caught by nothing and
+# takes down the whole application process, so the bans are the same as in the core.
 #
-# `deny`, а не `forbid` как в ядре: FFI без `unsafe` не существует, и
-# сгенерированному мосту он нужен по природе. `forbid` нельзя снять локально
-# даже осознанно, `deny` — можно, и ровно в одном месте: на объявлении
-# `mod frb_generated` в `src/lib.rs`, с объяснением. Весь код, который пишем
-# мы, остаётся без `unsafe`.
+# `deny`, not `forbid` as in the core: FFI does not exist without `unsafe`, and
+# the generated bridge needs it by nature. `forbid` cannot be lifted locally
+# even deliberately, `deny` can, and in exactly one place: on the declaration
+# `mod frb_generated` in `src/lib.rs`, with an explanation. All the code we
+# write ourselves stays free of `unsafe`.
 unsafe_code = "deny"
 
 [lints.clippy]

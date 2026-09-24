@@ -72,8 +72,8 @@ flutter:
   # https://flutter.dev/to/asset-from-package
 
   fonts:
-    # Шрифты бандлятся, а не тянутся пакетом google_fonts: тот скачивает их
-    # с fonts.gstatic.com при первом запуске, сообщая Google факт установки.
+    # Fonts are bundled, not pulled in by the google_fonts package: it downloads
+    # them from fonts.gstatic.com on first launch, telling Google about the install.
     - family: Inter
       fonts:
         - asset: assets/fonts/Inter-Regular.otf
@@ -88,8 +88,9 @@ flutter:
           weight: 600
         - asset: assets/fonts/SyneBold.ttf
           weight: 700
-    # Вариант NL — без лигатур. На экране, где показывают ключи, подстановка
-    # глифов не нужна в принципе: цена отказа нулевая, класс ошибок исчезает.
+    # The NL variant has no ligatures. On a screen that shows keys, glyph
+    # substitution is not needed at all: dropping it costs nothing, and a whole
+    # class of errors disappears.
     - family: JetBrains Mono
       fonts:
         - asset: assets/fonts/JetBrainsMonoNL-Regular.ttf

@@ -28,13 +28,13 @@ android {
         applicationId = "io.apeiron.apeiron"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        // minSdk задан числом, а не flutter.minSdkVersion, намеренно.
-        // И setIsStrongBoxBacked, и setUnlockedDeviceRequired появляются в API 28,
-        // на которых держится хранение мастер-ключа (R-002). Ниже 28 они
-        // недоступны, и схема выродилась бы в программный ключ — то есть во
-        // вторую ветку кода, которую здесь никто никогда не выполнит.
-        // Цена: API 24 покрывает 96,6 % устройств, API 28 — 93,5 %
-        // (Statcounter, апрель 2026). Теряются Android 7 и 8.
+        // minSdk is set as a number, not flutter.minSdkVersion, deliberately.
+        // Both setIsStrongBoxBacked and setUnlockedDeviceRequired appear in
+        // API 28, and master-key storage rests on them (R-002). Below 28 they
+        // are unavailable, and the scheme would degrade into a software key —
+        // that is, into a second code branch nobody here would ever execute.
+        // Cost: API 24 covers 96.6 % of devices, API 28 — 93.5 %
+        // (Statcounter, April 2026). Android 7 and 8 are lost.
         minSdk = 28
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -55,39 +55,39 @@ flutter {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Предохранители сборки
+// Build guards
 //
-// 23.09.2026 сборка release выдала APK **без** `librust_lib_apeiron.so` и
-// отрапортовала успехом. Приложение упало бы на запуске: без этой библиотеки
-// нет ни ключей, ни личности — вообще ничего.
+// On 23.09.2026 the release build produced an APK **without**
+// `librust_lib_apeiron.so` and reported success. The app would have crashed
+// on launch: without this library there are no keys, no identity — nothing.
 //
-// Причин было две, и закрыты обе.
-//  1. Cargokit не нашёл rustup (переменные окружения не дошли до демона Gradle)
-//     и завершился с ошибкой — но `run_build_tool.cmd` возвращал 0. Исправлено
-//     в самом батнике: см. правку APEIRON PATCH в
-//     `app/rust_builder/cargokit/run_build_tool.cmd`.
-//  2. Ничто не проверяло готовый артефакт. Это закрывает `verifyRustLib` ниже.
+// There were two causes, and both are closed.
+//  1. Cargokit did not find rustup (environment variables did not reach the
+//     Gradle daemon) and exited with an error — but `run_build_tool.cmd`
+//     returned 0. Fixed in the batch file itself: see the APEIRON PATCH edit
+//     in `app/rust_builder/cargokit/run_build_tool.cmd`.
+//  2. Nothing checked the finished artifact. `verifyRustLib` below closes it.
 //
-// Первая правка живёт в вендорном коде и уедет при обновлении cargokit —
-// вторая наша и переживёт. Поэтому их две, а не одна.
-// Подробности: `docs/build-guards.md`.
+// The first fix lives in vendored code and will be lost on a cargokit
+// update — the second is ours and will survive. Hence two, not one.
+// Details: `docs/build-guards.md`.
 // ─────────────────────────────────────────────────────────────────────────────
 
 val rustLibraryName = "librust_lib_apeiron.so"
 
-// Символ, через который Kotlin отдаёт Rust доступ к аппаратному ключу.
-// Имя задано явно и в Rust (export_name), и здесь: если они разойдутся,
-// сборка встанет тут, а не приложение на телефоне.
+// The symbol through which Kotlin gives Rust access to the hardware key.
+// The name is set explicitly both in Rust (export_name) and here: if they
+// diverge, the build stops here, not the app on the phone.
 val rustJniSymbol = "Java_io_apeiron_apeiron_Vault_nativeRegister"
 
 /**
- * Требует, чтобы в собранном APK для **каждой** упакованной архитектуры лежала
- * нативная библиотека Rust.
+ * Requires that the built APK contains the native Rust library for **every**
+ * packaged architecture.
  *
- * Список архитектур не задан заранее намеренно: он зависит от того, как вызвана
- * сборка (`--target-platform`, `--split-per-abi`). Проверяется то, что реально
- * попало в APK: если там есть `lib/arm64-v8a/`, то в нём обязана быть и наша
- * библиотека.
+ * The list of architectures is deliberately not fixed in advance: it depends
+ * on how the build is invoked (`--target-platform`, `--split-per-abi`). What
+ * is checked is what actually got into the APK: if it has `lib/arm64-v8a/`,
+ * our library must be in it too.
  */
 abstract class VerifyRustLib : DefaultTask() {
     @get:InputFiles
@@ -97,14 +97,15 @@ abstract class VerifyRustLib : DefaultTask() {
     abstract val libraryName: Property<String>
 
     /**
-     * Имя символа JNI, который обязан быть экспортирован из библиотеки.
+     * Name of the JNI symbol that must be exported from the library.
      *
-     * Через него Kotlin отдаёт Rust ссылку на Vault и путь к каталогу данных.
-     * Символ объявлен в крейте-зависимости, а не в самом cdylib, и теряется он
-     * молча: `System.loadLibrary` на отсутствующий символ не жалуется, а
-     * приложение просто остаётся без доступа к аппаратному ключу — и выясняется
-     * это уже на телефоне. Проверено, что сейчас он на месте; правило нужно,
-     * чтобы так и осталось.
+     * Through it Kotlin gives Rust a reference to Vault and the data
+     * directory path. The symbol is declared in a dependency crate, not in the
+     * cdylib itself, and it is lost silently: `System.loadLibrary` does not
+     * complain about a missing symbol, the app simply ends up without access
+     * to the hardware key — and this is discovered only on the phone. It has
+     * been checked that it is in place now; the rule is needed so that it
+     * stays that way.
      */
     @get:Input
     abstract val requiredSymbol: Property<String>
@@ -119,7 +120,7 @@ abstract class VerifyRustLib : DefaultTask() {
             .orEmpty()
 
         if (apks.isEmpty()) {
-            throw GradleException("Предохранитель: в $dir нет ни одного APK — проверять нечего.")
+            throw GradleException("Build guard: there is no APK in $dir — nothing to check.")
         }
 
         for (apk in apks) {
@@ -134,19 +135,20 @@ abstract class VerifyRustLib : DefaultTask() {
                     .sorted()
 
                 if (abis.isEmpty()) {
-                    throw GradleException(report(apk.name, "в APK нет нативных библиотек вовсе"))
+                    throw GradleException(report(apk.name, "the APK has no native libraries at all"))
                 }
 
                 val missing = abis.filterNot { abi -> nativeLibs.contains("lib/$abi/$lib") }
                 if (missing.isNotEmpty()) {
                     throw GradleException(
-                        report(apk.name, "нет $lib для: ${missing.joinToString(", ")}")
+                        report(apk.name, "no $lib for: ${missing.joinToString(", ")}")
                     )
                 }
 
-                // Символ ищется прямо в байтах: он лежит в таблице
-                // динамических символов, которую `strip = "symbols"` не трогает.
-                // Так не нужны ни nm, ni readelf из NDK.
+                // The symbol is searched for directly in the bytes: it sits
+                // in the dynamic symbol table, which `strip = "symbols"`
+                // does not touch. So neither nm nor readelf from the NDK
+                // is needed.
                 val needle = symbol.toByteArray(Charsets.US_ASCII)
                 val without = abis.filterNot { abi ->
                     zip.getInputStream(zip.getEntry("lib/$abi/$lib")).use { input ->
@@ -155,12 +157,12 @@ abstract class VerifyRustLib : DefaultTask() {
                 }
                 if (without.isNotEmpty()) {
                     throw GradleException(
-                        report(apk.name, "в $lib нет символа $symbol для: ${without.joinToString(", ")}")
+                        report(apk.name, "$lib has no symbol $symbol for: ${without.joinToString(", ")}")
                     )
                 }
 
                 logger.lifecycle(
-                    "Предохранитель: ${apk.name} — $lib и символ $symbol на месте для ${abis.joinToString(", ")}"
+                    "Build guard: ${apk.name} — $lib and symbol $symbol in place for ${abis.joinToString(", ")}"
                 )
             }
         }
@@ -179,38 +181,39 @@ abstract class VerifyRustLib : DefaultTask() {
 
     private fun report(apk: String, what: String): String = """
         |
-        |Предохранитель сборки: APK негоден и наружу не пойдёт.
+        |Build guard: the APK is unfit and will not be shipped.
         |
         |  APK:      $apk
-        |  Проблема: $what
+        |  Problem:  $what
         |
-        |Почти всегда это значит, что не собралась библиотека Rust. Ищите выше
-        |в выводе строку SEVERE от cargokit. Самая частая причина на этой
-        |машине — rustup не виден демону Gradle:
+        |This almost always means the Rust library did not build. Look above
+        |in the output for a SEVERE line from cargokit. The most common cause on this
+        |machine is that rustup is not visible to the Gradle daemon:
         |
-        |  1) задать переменные в той сессии, из которой идёт сборка:
-        |     CARGO_HOME, RUSTUP_HOME и PATH с каталогом cargo/bin;
-        |  2) остановить демон, который держит старое окружение:
+        |  1) set the variables in the session the build runs from:
+        |     CARGO_HOME, RUSTUP_HOME and PATH with the cargo/bin directory;
+        |  2) stop the daemon that holds the old environment:
         |     app/android/gradlew.bat --stop
-        |  3) собрать заново.
+        |  3) build again.
         |
-        |Демон наследует окружение процесса, который его поднял, и держит его
-        |до перезапуска — задать переменные без --stop недостаточно.
+        |The daemon inherits the environment of the process that started it and keeps it
+        |until restarted — setting the variables without --stop is not enough.
         |
     """.trimMargin()
 }
 
 /**
- * Ранняя проверка: виден ли rustup вообще.
+ * Early check: whether rustup is visible at all.
  *
- * Без неё о беде узнаёшь через минуту-две компиляции, и сообщение cargokit
- * («Maybe you need to install Rust?») уводит в сторону: Rust на этой машине
- * установлен, просто не виден сборке.
+ * Without it you learn about the trouble after a minute or two of
+ * compilation, and the cargokit message ("Maybe you need to install Rust?")
+ * is misleading: Rust is installed on this machine, it is just not visible to
+ * the build.
  *
- * Ищем там же, где ищет сам cargokit (`build_tool/lib/src/rustup.dart`):
- * в `CARGO_HOME/bin`, в `%USERPROFILE%\.cargo\bin` и по всему `PATH`.
- * Задать путь через свойство Gradle или `cargokit.yaml` нельзя — такой
- * настройки в cargokit нет, проверено по его исходникам.
+ * We search where cargokit itself searches (`build_tool/lib/src/rustup.dart`):
+ * in `CARGO_HOME/bin`, in `%USERPROFILE%\.cargo\bin` and across all of `PATH`.
+ * The path cannot be set via a Gradle property or `cargokit.yaml` — cargokit
+ * has no such setting, verified against its sources.
  */
 abstract class CheckRustToolchain : DefaultTask() {
     @get:Input
@@ -261,26 +264,26 @@ abstract class CheckRustToolchain : DefaultTask() {
             throw GradleException(
                 """
                 |
-                |Предохранитель сборки: rustup не виден — библиотека Rust не соберётся.
+                |Build guard: rustup is not visible — the Rust library will not build.
                 |
-                |Rust на машине установлен, но окружение сборки его не видит. Это
-                |не «поставьте Rust», что бы ни писал cargokit дальше.
+                |Rust is installed on the machine, but the build environment does not see it.
+                |This is not "install Rust", whatever cargokit writes further on.
                 |
-                |  1) CARGO_HOME, RUSTUP_HOME и PATH с каталогом cargo/bin —
-                |     в той сессии, откуда идёт сборка;
-                |  2) app/android/gradlew.bat --stop — демон держит старое окружение;
-                |  3) собрать заново.
+                |  1) CARGO_HOME, RUSTUP_HOME and PATH with the cargo/bin directory —
+                |     in the session the build runs from;
+                |  2) app/android/gradlew.bat --stop — the daemon holds the old environment;
+                |  3) build again.
                 |
                 """.trimMargin()
             )
         }
-        logger.lifecycle("Предохранитель: rustup найден — $found")
+        logger.lifecycle("Build guard: rustup found — $found")
     }
 }
 
 val checkRustToolchain = tasks.register<CheckRustToolchain>("checkRustToolchain") {
     group = "verification"
-    description = "Проверяет, что rustup виден сборке, до того как начнётся компиляция."
+    description = "Checks that rustup is visible to the build before compilation starts."
     cargoHome.set(providers.environmentVariable("CARGO_HOME"))
     userProfile.set(providers.environmentVariable("USERPROFILE"))
     searchPath.set(providers.environmentVariable("PATH"))
@@ -296,18 +299,18 @@ androidComponents {
 
         val verify = tasks.register<VerifyRustLib>("verifyRustLib$suffix") {
             group = "verification"
-            description = "Требует наличия $rustLibraryName в APK варианта ${variant.name}."
+            description = "Requires $rustLibraryName to be present in the APK of variant ${variant.name}."
             apkDirectory.set(variant.artifacts.get(SingleArtifact.APK))
             libraryName.set(rustLibraryName)
             requiredSymbol.set(rustJniSymbol)
         }
 
-        // `assemble` — то, что вызывает `flutter build apk`. Проверка становится
-        // частью сборки, а не отдельным ритуалом, который забудут выполнить.
+        // `assemble` is what `flutter build apk` invokes. The check becomes
+        // part of the build, not a separate ritual someone will forget to do.
         //
-        // Привязка ленивая (`matching`/`configureEach`, а не `named`): на момент
-        // обхода вариантов задач `assembleDebug` ещё не существует, и обращение
-        // по имени падает с UnknownTaskException.
+        // The binding is lazy (`matching`/`configureEach`, not `named`): when
+        // variants are traversed, the task `assembleDebug` does not exist
+        // yet, and looking it up by name fails with UnknownTaskException.
         tasks.matching { it.name == "assemble$suffix" }.configureEach {
             dependsOn(verify)
         }

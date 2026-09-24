@@ -1,17 +1,17 @@
-//! Мост к хранилищу и аппаратному ключу.
+//! Bridge to the vault and the hardware key.
 //!
-//! Через эту границу проходит только публичное и только описательное. Ключ базы
-//! и мастер-ключ наружу не выходят никогда: они живут в Rust, а до него доходят
-//! из Kotlin напрямую через JNI, минуя Dart (R-004).
+//! Only public and only descriptive data crosses this boundary. The database key
+//! and the master key never go out: they live in Rust, and reach it from
+//! Kotlin directly over JNI, bypassing Dart (R-004).
 //!
-//! # Почему отказ — это состояние, а не ошибка
+//! # Why a refusal is a state, not an error
 //!
-//! Ошибка из Rust приезжает в Dart голой строкой и печатается в красном
-//! баннере. Для «StrongBox недоступен» и «ключ исчез» это негодный канал:
-//! первое вообще не сбой, а второе — положение, в котором человеку надо принять
-//! решение, а не прочитать сообщение об ошибке. Поэтому [`unlock_vault`] не
-//! возвращает `Result`: он возвращает [`VaultStatus`], где состояние названо
-//! прямо.
+//! An error from Rust arrives in Dart as a bare string and is printed in a red
+//! banner. For "StrongBox unavailable" and "key gone" this is an unfit channel:
+//! the first is not a failure at all, and the second is a situation in which a
+//! person has to make a decision, not read an error message. So [`unlock_vault`]
+//! does not return `Result`: it returns [`VaultStatus`], where the state is named
+//! directly.
 
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
@@ -20,19 +20,19 @@ use apeiron_core::{Identity, Sigchain};
 use apeiron_platform::{KeyWrapper, SecurityLevel};
 use apeiron_store::{selfcheck, Storage, StorageError};
 
-/// Аппаратное хранилище этой платформы.
+/// The hardware store of this platform.
 #[cfg(target_os = "android")]
 type Vault = apeiron_platform::AndroidVault;
 
-/// На всём, что не Android, аппаратного хранилища нет.
+/// On anything that is not Android, there is no hardware store.
 #[cfg(not(target_os = "android"))]
 type Vault = crate::desktop::NoVault;
 
-/// Состояние работы приложения между разблокировками.
+/// The app's working state between unlocks.
 ///
-/// `None` означает «заперто»: `Storage` уничтожен, а вместе с ним затёрты ключ
-/// базы и все подключи. Разблокировка разворачивает ключ заново — и на запертом
-/// телефоне железо этого не сделает, что и требуется по R-001.
+/// `None` means "locked": `Storage` is destroyed, and with it the database key
+/// and all subkeys are wiped. Unlocking unwraps the key again — and on a locked
+/// phone the hardware will not do that, which is exactly what R-001 requires.
 struct Session {
     storage: Storage,
     identity: Option<Identity>,
@@ -47,36 +47,36 @@ fn state() -> &'static Mutex<Option<Session>> {
 const POISONED: &str = "внутренняя блокировка повреждена: перезапустите приложение";
 const LOCKED: &str = "хранилище заперто";
 
-/// В каком положении хранилище.
+/// What state the vault is in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VaultState {
-    /// Открыто и готово.
+    /// Open and ready.
     Opened,
-    /// Заперто: ключ базы затёрт, нужна разблокировка.
+    /// Locked: the database key is wiped, an unlock is needed.
     Locked,
-    /// Ключ исчез из защищённого модуля. Расшифровать нельзя ничем.
+    /// The key is gone from the secure module. Nothing can decrypt.
     KeyGone,
-    /// Преходящий отказ. Данные целы, надо повторить.
+    /// Transient failure. The data is intact, retry.
     Retry,
-    /// Аппаратного хранилища на этой платформе нет.
+    /// There is no hardware store on this platform.
     Unavailable,
 }
 
-/// Что показывать про хранилище.
+/// What to show about the vault.
 pub struct VaultStatus {
     pub state: VaultState,
-    /// Пояснение для человека. Пустая строка, если пояснять нечего.
+    /// Explanation for a person. Empty string if there is nothing to explain.
     pub message: String,
-    /// Название уровня: StrongBox, TEE, программный, железо без уточнения.
+    /// Level name: StrongBox, TEE, software, hardware without specifics.
     pub level_name: String,
-    /// Сырое число `KeyInfo.getSecurityLevel()`. Показывается рядом, чтобы
-    /// незнакомое значение было видно, а не подменялось ближайшим знакомым.
+    /// The raw number from `KeyInfo.getSecurityLevel()`. Shown alongside so
+    /// that an unfamiliar value is visible, not replaced by the nearest familiar one.
     pub level_raw: i32,
-    /// Лежит ли ключ в железе, по сообщению системы.
+    /// Whether the key is in hardware, as reported by the system.
     pub hardware_backed: bool,
-    /// Первый ли это запуск с этим хранилищем.
+    /// Whether this is the first run with this vault.
     pub first_run: bool,
-    /// Есть ли в хранилище личность.
+    /// Whether the vault holds an identity.
     pub has_identity: bool,
 }
 
@@ -107,17 +107,17 @@ impl VaultStatus {
     }
 }
 
-/// Одна строка отчёта самопроверки.
+/// One line of the self-check report.
 pub struct CheckLine {
     pub name: String,
     pub passed: bool,
     pub detail: String,
 }
 
-/// Открывает хранилище и загружает личность.
+/// Opens the vault and loads the identity.
 ///
-/// `Result` здесь намеренно нет: отказ железа — это положение, о котором надо
-/// рассказать, а не красный баннер с именем класса Java.
+/// There is deliberately no `Result` here: a hardware refusal is a situation to
+/// be explained, not a red banner with a Java class name.
 #[flutter_rust_bridge::frb]
 pub fn unlock_vault() -> VaultStatus {
     let mut guard = match state().lock() {
@@ -137,8 +137,8 @@ pub fn unlock_vault() -> VaultStatus {
         Ok(storage) => {
             let identity = match storage.load_identity() {
                 Ok(id) => id,
-                // Хранилище открылось, а личность не читается. Это не «ключ
-                // исчез»: ключ на месте, испорчена одна запись.
+                // The vault opened, but the identity cannot be read. This is not
+                // "key gone": the key is in place, one record is corrupted.
                 Err(e) => return VaultStatus::without_vault(VaultState::Retry, e.to_string()),
             };
             let session = Session { storage, identity };
@@ -153,7 +153,7 @@ pub fn unlock_vault() -> VaultStatus {
     }
 }
 
-/// Текущее положение, без попытки открыть.
+/// The current state, without an attempt to open.
 #[flutter_rust_bridge::frb]
 pub fn vault_status() -> VaultStatus {
     match state().lock() {
@@ -165,11 +165,11 @@ pub fn vault_status() -> VaultStatus {
     }
 }
 
-/// Запирает: уничтожает ключ базы и всё, что из него выведено.
+/// Locks: destroys the database key and everything derived from it.
 ///
-/// Вызывается при уходе приложения в фон и при гашении экрана — решение R-001.
-/// Разблокировка потребует аппаратного ключа заново, а на запертом телефоне
-/// железо им работать откажется.
+/// Called when the app goes to the background and when the screen turns off —
+/// decision R-001. Unlocking will require the hardware key again, and on a
+/// locked phone the hardware will refuse to use it.
 #[flutter_rust_bridge::frb]
 pub fn lock_vault() -> Result<(), String> {
     let mut guard = state().lock().map_err(|_| POISONED.to_string())?;
@@ -177,10 +177,11 @@ pub fn lock_vault() -> Result<(), String> {
     Ok(())
 }
 
-/// Стирает всё криптографически (R-005): уничтожает ключ, а не данные.
+/// Erases everything cryptographically (R-005): destroys the key, not the data.
 ///
-/// Требовать нечего, потому что расшифровать нечем — даже если копию базы
-/// успели снять. Действие необратимо и вызывается только осознанно.
+/// There is nothing to demand, because there is nothing to decrypt with — even if a
+/// copy of the database was already taken. The action is irreversible and is
+/// invoked only deliberately.
 #[flutter_rust_bridge::frb]
 pub fn wipe_everything() -> Result<(), String> {
     let mut guard = state().lock().map_err(|_| POISONED.to_string())?;
@@ -189,7 +190,7 @@ pub fn wipe_everything() -> Result<(), String> {
     Storage::wipe(&dir, &Vault::default()).map_err(|e| e.to_string())
 }
 
-/// Прогоняет самопроверку на этом устройстве.
+/// Runs the self-check on this device.
 #[flutter_rust_bridge::frb]
 pub fn self_check() -> Result<Vec<CheckLine>, String> {
     let guard = state().lock().map_err(|_| POISONED.to_string())?;
@@ -204,11 +205,11 @@ pub fn self_check() -> Result<Vec<CheckLine>, String> {
         .collect())
 }
 
-/// Диагностика платформы одной строкой на каждый факт.
+/// Platform diagnostics, one line per fact.
 ///
-/// Нужна затем, что проверка на устройстве одна: установка обязана ответить на
-/// все вопросы сразу, а не на тот, который догадались задать. Отчёт
-/// показывается как есть и пересылается целиком. Секретов не содержит.
+/// Needed because there is only one on-device check: an install must answer
+/// all questions at once, not just the one someone thought to ask. The report
+/// is shown as is and forwarded in full. Contains no secrets.
 #[flutter_rust_bridge::frb]
 pub fn platform_diagnostics() -> Result<String, String> {
     let mut report = String::new();
@@ -235,9 +236,9 @@ pub fn platform_diagnostics() -> Result<String, String> {
                         "как появился ключ: {}\n",
                         String::from_utf8_lossy(&note)
                     )),
-                    // Пусто — значит хранилище создано сборкой, которая этого
-                    // ещё не записывала. Молчать нельзя: иначе отсутствие
-                    // строки прочтут как «ничего особенного не было».
+                    // Empty means the vault was created by a build that did not
+                    // record this yet. Staying silent is not allowed: otherwise the
+                    // missing line would be read as "nothing special happened".
                     Ok(None) => {
                         report.push_str("как появился ключ: не записано (создан прежней сборкой)\n")
                     }
@@ -258,7 +259,7 @@ pub fn platform_diagnostics() -> Result<String, String> {
     Ok(report)
 }
 
-/// Каталог данных приложения.
+/// The app's data directory.
 #[cfg(target_os = "android")]
 fn storage_dir() -> Result<PathBuf, String> {
     apeiron_platform::storage_dir()
@@ -271,13 +272,14 @@ fn storage_dir() -> Result<PathBuf, String> {
     Err("на этой платформе каталог данных не определён: сборка заморожена".to_string())
 }
 
-// ── Внутреннее, для api::identity ───────────────────────────────────────────
+// ── Internal, for api::identity ─────────────────────────────────────────────
 
-/// Создаёт личность, аккаунт устройства и журнал — и сохраняет всё разом.
+/// Creates the identity, the device account and the sigchain — and saves them
+/// all at once.
 ///
-/// Разом, потому что порознь они бессмысленны: личность без аккаунта не может
-/// переписываться, аккаунт без журнала нельзя отозвать, а журналу без личности
-/// не с чего начаться.
+/// At once, because apart they are meaningless: an identity without an account
+/// cannot exchange messages, an account without a sigchain cannot be revoked,
+/// and a sigchain without an identity has nothing to start from.
 pub(crate) fn create_identity() -> Result<(), String> {
     let mut guard = state().lock().map_err(|_| POISONED.to_string())?;
     let session = guard.as_mut().ok_or_else(|| LOCKED.to_string())?;
@@ -303,10 +305,10 @@ pub(crate) fn create_identity() -> Result<(), String> {
     Ok(())
 }
 
-/// Читает что-нибудь публичное из текущей личности.
+/// Reads something public from the current identity.
 ///
-/// Наружу отдаётся результат замыкания, а не сама личность: так секрет не может
-/// покинуть этот модуль по невнимательности.
+/// The closure's result is handed out, not the identity itself: this way a secret
+/// cannot leave this module through carelessness.
 pub(crate) fn with_identity<T>(f: impl FnOnce(&Identity) -> T) -> Result<Option<T>, String> {
     let guard = state().lock().map_err(|_| POISONED.to_string())?;
     Ok(guard.as_ref().and_then(|s| s.identity.as_ref()).map(f))

@@ -1,21 +1,21 @@
-# Правила R8 для релизной сборки.
+# R8 rules for the release build.
 #
-# Flutter подключает этот файл автоматически, если он существует, и сам включает
-# минификацию в release. Отсюда и надобность: класс io.apeiron.apeiron.Vault
-# вызывается из Rust через JNI по имени, и переименованный R8 класс Rust не
-# найдёт — молча, уже на устройстве.
+# Flutter picks up this file automatically if it exists, and enables minification
+# in release itself. Hence the need: the class io.apeiron.apeiron.Vault is
+# called from Rust over JNI by name, and Rust will not find a class renamed by R8
+# — silently, already on the device.
 #
-# Умолчание Flutter (proguard-android-optimize.txt) содержит
-# -keepclasseswithmembernames class * { native <methods>; }, и одного этого,
-# скорее всего, хватило бы: у Vault есть нативный метод. Но полагаться на чужое
-# умолчание в том месте, где отказ обнаруживается только на телефоне, — плохой
-# размен. Правило ниже явное и переживёт смену умолчания.
+# The Flutter default (proguard-android-optimize.txt) contains
+# -keepclasseswithmembernames class * { native <methods>; }, and that alone would
+# most likely be enough: Vault has a native method. But relying on someone else's
+# default in a place where a failure is discovered only on the phone is a bad
+# trade. The rule below is explicit and will survive a change of the default.
 
 -keep class io.apeiron.apeiron.Vault {
     *;
 }
 
-# Классы с нативными методами — на случай, если их станет больше одного.
+# Classes with native methods — in case there is ever more than one.
 -keepclasseswithmembernames class * {
     native <methods>;
 }

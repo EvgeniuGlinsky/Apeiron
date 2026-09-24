@@ -1,29 +1,29 @@
-//! Мост к личности устройства.
+//! Bridge to the device identity.
 //!
-//! Через эту границу проходит только публичное. Секретные ключи остаются в Rust
-//! — решение R-004 в `docs/threat-log.md`.
+//! Only public data crosses this boundary. Secret keys stay in Rust
+//! — decision R-004 in `docs/threat-log.md`.
 //!
-//! Причина не в аккуратности, а в том, что в Dart затирание памяти невозможно:
-//! сборщик мусора копирует объекты при уплотнении кучи и не даёт никаких
-//! гарантий, что прежняя копия строки затёрта. Всё, что попало в Dart, следует
-//! считать оставшимся в памяти до конца жизни процесса.
+//! The reason is not tidiness but the fact that wiping memory is impossible in
+//! Dart: the garbage collector copies objects when compacting the heap and gives
+//! no guarantee that the previous copy of a string has been wiped. Anything that
+//! reached Dart must be considered left in memory until the process ends.
 //!
-//! Личность больше не живёт в отдельном статике: она лежит в открытом
-//! хранилище (`super::vault`) и переживает перезапуск приложения. До появления
-//! хранилища каждый запуск порождал новую личность — то есть новый отпечаток у
-//! человека, который уже прочитал прежний вслух при сверке.
+//! The identity no longer lives in a separate static: it sits in the open
+//! vault (`super::vault`) and survives an app restart. Before the vault
+//! existed, every launch produced a new identity — that is, a new fingerprint
+//! for a person who had already read the previous one aloud during verification.
 
 use apeiron_core::{Identity, PublicIdentity};
 
 use super::vault;
 
-/// То, что разрешено показывать. Секретов не содержит.
+/// What is allowed to be shown. Contains no secrets.
 pub struct PublicIdentityView {
-    /// Тридцать цифр шестью группами — то, что читают вслух при сверке.
+    /// Thirty digits in six groups — what is read aloud during verification.
     pub fingerprint: String,
-    /// Публичный ключ подписи Ed25519, hex.
+    /// Public Ed25519 signing key, hex.
     pub signing_key_hex: String,
-    /// Публичный ключ согласования X25519, hex.
+    /// Public X25519 key-agreement key, hex.
     pub agreement_key_hex: String,
 }
 
@@ -43,35 +43,36 @@ fn view(identity: &Identity) -> PublicIdentityView {
     PublicIdentityView::from(&identity.public())
 }
 
-/// Создаёт новую личность и сохраняет её.
+/// Creates a new identity and saves it.
 ///
-/// Вместе с ней заводятся аккаунт устройства и журнал личности: порознь они
-/// бессмысленны. Операция необратима — смена личности рвёт все существующие
-/// переписки, — и хранилище к этому моменту обязано быть открыто.
+/// The device account and the sigchain (identity log) are created with it: apart
+/// they are meaningless. The operation is irreversible — changing the identity
+/// breaks all existing conversations — and the vault must be open by this point.
 #[flutter_rust_bridge::frb]
 pub fn generate_identity() -> Result<PublicIdentityView, String> {
     vault::create_identity()?;
     current_identity()?.ok_or_else(|| "личность не сохранилась".to_string())
 }
 
-/// Текущая личность, если хранилище открыто.
+/// The current identity, if the vault is open.
 #[flutter_rust_bridge::frb]
 pub fn current_identity() -> Result<Option<PublicIdentityView>, String> {
     vault::with_identity(view)
 }
 
-/// Блокировка: запирает хранилище и затирает ключи.
+/// Locking: locks the vault and wipes the keys.
 ///
-/// Вызывается при уходе приложения в фон и при гашении экрана — решение R-001.
+/// Called when the app goes to the background and when the screen turns off —
+/// decision R-001.
 #[flutter_rust_bridge::frb]
 pub fn lock_identity() -> Result<(), String> {
     vault::lock_vault()
 }
 
-/// Число сверки с собеседником по его публичной личности.
+/// Safety number with a peer, from their public identity.
 ///
-/// Обе стороны получают одну и ту же строку. Расхождение означает, что между
-/// вами кто-то есть, и переписку начинать нельзя.
+/// Both sides get the same string. A mismatch means someone is between
+/// you, and the conversation must not be started.
 #[flutter_rust_bridge::frb]
 pub fn safety_number_with(peer_public_hex: String) -> Result<String, String> {
     let bytes = hex::decode(peer_public_hex.trim())
@@ -80,8 +81,8 @@ pub fn safety_number_with(peer_public_hex: String) -> Result<String, String> {
     vault::with_identity(|me| me.public().safety_number(&peer))?.ok_or_else(|| LOCKED.to_string())
 }
 
-/// Публичная личность целиком, hex — то, что кодируется в QR при добавлении
-/// контакта.
+/// The whole public identity, hex — what is encoded in the QR code when adding
+/// a contact.
 #[flutter_rust_bridge::frb]
 pub fn public_identity_hex() -> Result<String, String> {
     vault::with_identity(|me| hex::encode(me.public().to_bytes()))?

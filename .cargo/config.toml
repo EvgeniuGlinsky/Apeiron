@@ -1,5 +1,6 @@
-# Каталоги сборки Rust растут быстро. Если системный диск тесен, держите
-# проект и CARGO_HOME на другом томе: target/ создаётся рядом с проектом,
-# и абсолютный путь здесь не нужен — он всё равно не переносится между машинами.
+# Rust build directories grow fast. If the system drive is cramped, keep the
+# project and CARGO_HOME on another volume: target/ is created next to the
+# project, and an absolute path is not needed here — it would not carry over
+# between machines anyway.
 [build]
 target-dir = "target"

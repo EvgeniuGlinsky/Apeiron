@@ -1,13 +1,15 @@
-# Тулчейн и цели сборки, зафиксированные в репозитории.
+# Toolchain and build targets, pinned in the repository.
 #
-# `channel` намеренно не задан. Пин конкретной версии заставил бы rustup качать
-# отдельный тулчейн даже там, где ровно эта версия уже стоит под именем stable,
-# — гигабайт на ровном месте. Нижняя граница языка и так зафиксирована
-# (`rust-version` в Cargo.toml воркспейса), а верхняя нам не нужна.
+# `channel` is deliberately not set. Pinning a specific version would make
+# rustup download a separate toolchain even where exactly that version is
+# already installed as stable — a gigabyte for nothing. The lower bound of the
+# language is pinned anyway (`rust-version` in the workspace Cargo.toml), and
+# we do not need an upper one.
 #
-# Существенны здесь `targets` и `components`: без целей Android cargokit
-# соберёт пустоту, а без rustfmt/clippy не пройдёт проверка в CI. Перечислены —
-# значит rustup доставит их сам, а не через час выяснится, что их нет.
+# What matters here is `targets` and `components`: without the Android targets
+# cargokit will build nothing, and without rustfmt/clippy the CI check will not
+# pass. Listed means rustup delivers them itself, rather than it turning out an
+# hour later that they are missing.
 [toolchain]
 components = ["rustfmt", "clippy"]
 targets = [
