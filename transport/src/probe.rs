@@ -132,31 +132,32 @@ pub fn put(dht: &Dht, seed: &Seed) -> PutOutcome {
 }
 
 /// Result of one get.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GetOutcome {
     /// Some node returned exactly the expected value.
     pub found: bool,
-    /// Some node returned a different value under the same key and salt.
+    /// Some node returned a different value under the same key and salt — before the match,
+    /// since the lookup stops there.
     pub wrong: bool,
     /// Time to the first response, if any.
     pub first_ms: Option<u64>,
-    /// Time until the query finished.
-    pub query_ms: u64,
+    /// Time until the lookup stopped: at the match, or when the query ran out of nodes.
+    pub until_ms: u64,
     pub responses: usize,
+    /// The lookup thread died, so "not found" says nothing about the network.
+    pub died: bool,
 }
 
 /// Looks up the item of `seed`.
+///
+/// Stops at the first node that returns exactly the expected value: the rest of the query
+/// cannot change the answer and costs seconds. Dropping the iterator early is safe with
+/// `mainline` 8.0.0 — its actor ignores sends to a closed channel (`let _ = s.send(r)`).
 pub fn get(dht: &Dht, seed: &Seed) -> GetOutcome {
     let salt = seed.salt();
     let expected = seed.value();
     let started = Instant::now();
-    let mut out = GetOutcome {
-        found: false,
-        wrong: false,
-        first_ms: None,
-        query_ms: 0,
-        responses: 0,
-    };
+    let mut out = GetOutcome::default();
     for item in dht.get_mutable(&seed.public_key(), Some(&salt), None) {
         out.responses = out.responses.saturating_add(1);
         if out.first_ms.is_none() {
@@ -164,12 +165,35 @@ pub fn get(dht: &Dht, seed: &Seed) -> GetOutcome {
         }
         if item.value() == expected.as_slice() {
             out.found = true;
-        } else {
-            out.wrong = true;
+            break;
         }
+        out.wrong = true;
     }
-    out.query_ms = ms(started.elapsed());
+    out.until_ms = ms(started.elapsed());
     out
+}
+
+/// Looks up many items at once through one node, a thread each: one after another, twelve
+/// lookups of a few seconds each add up to a minute.
+pub fn get_many(dht: &Dht, seeds: &[Seed]) -> Vec<GetOutcome> {
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = seeds
+            .iter()
+            .map(|seed| {
+                let dht = dht.clone();
+                scope.spawn(move || get(&dht, seed))
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|h| {
+                h.join().unwrap_or(GetOutcome {
+                    died: true,
+                    ..GetOutcome::default()
+                })
+            })
+            .collect()
+    })
 }
 
 /// The `p`-th percentile (0–100) of `values`, nearest rank. Zero for no values.
@@ -192,11 +216,17 @@ pub fn summarize_gets(outcomes: &[GetOutcome]) -> String {
         .filter_map(|o| o.first_ms)
         .collect();
     let wrong = outcomes.iter().filter(|o| o.wrong).count();
+    let died = outcomes.iter().filter(|o| o.died).count();
     format!(
-        "found {found}/{}; first response p50 {} ms, p95 {} ms; wrong values {wrong}",
+        "found {found}/{}; first response p50 {} ms, p95 {} ms; wrong values {wrong}{}",
         outcomes.len(),
         percentile(&firsts, 50),
         percentile(&firsts, 95),
+        if died > 0 {
+            format!("; lookup threads died {died}")
+        } else {
+            String::new()
+        },
     )
 }
 
@@ -273,5 +303,32 @@ mod tests {
         assert!(got.found);
         assert!(!got.wrong);
         assert!(!get(&dht, &Seed([8; 32])).found);
+    }
+
+    /// Parallel lookups through one node find exactly what was put, and keep the order.
+    #[test]
+    fn get_many_on_a_local_testnet() {
+        let Ok(testnet) = mainline::Testnet::builder(10).build() else {
+            return;
+        };
+        let Ok(dht) = Dht::builder()
+            .bootstrap(&testnet.bootstrap)
+            .bind_address(std::net::Ipv4Addr::LOCALHOST)
+            .build()
+        else {
+            return;
+        };
+        assert!(dht.bootstrapped(), "the local testnet did not bootstrap");
+        let (a, b, c) = (Seed([11; 32]), Seed([12; 32]), Seed([13; 32]));
+        for seed in [&a, &b, &c] {
+            let outcome = put(&dht, seed);
+            assert!(outcome.ok, "put failed: {}", outcome.error);
+        }
+        let asked = [a, Seed([99; 32]), b, c];
+        let got = get_many(&dht, &asked);
+        let found: Vec<bool> = got.iter().map(|o| o.found).collect();
+        assert_eq!(found, [true, false, true, true]);
+        assert!(got.iter().all(|o| !o.wrong && !o.died));
+        assert!(summarize_gets(&got).starts_with("found 3/4;"));
     }
 }

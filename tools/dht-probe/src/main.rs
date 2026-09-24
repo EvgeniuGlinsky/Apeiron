@@ -86,7 +86,7 @@ fn seeds_in(text: &str) -> Vec<Seed> {
 fn read_round(dir: &Path, seeds: &[Seed], what: &str) {
     match probe::node() {
         Ok((dht, boot_ms)) => {
-            let outcomes: Vec<_> = seeds.iter().map(|s| probe::get(&dht, s)).collect();
+            let outcomes = probe::get_many(&dht, seeds);
             log(
                 dir,
                 &format!(
