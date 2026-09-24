@@ -54,6 +54,9 @@ pub use wrapper::{KdfParams, Presence, Timing, MAX_PIN_DIGITS, MIN_PIN_DIGITS};
 pub const DATABASE_FILE: &str = "apeiron.db";
 
 /// Internal record: how the hardware key came about.
+///
+/// A storage key, not text: it is written on the device, and renaming it orphans the
+/// record already there.
 pub const META_KEY_ORIGIN: &str = "ключ/как появился";
 
 /// What can go wrong in the storage.
@@ -65,8 +68,8 @@ pub enum StorageError {
     /// only state from which it is allowed to offer "start
     /// over". Everything else is "retry", and the data is intact.
     #[error(
-        "КЛЮЧ ХРАНИЛИЩА ИСЧЕЗ ИЗ ЗАЩИЩЁННОГО МОДУЛЯ ЭТОГО ТЕЛЕФОНА. \
-         Переписку расшифровать нельзя ничем. Единственный выход — начать заново."
+        "THE STORAGE KEY IS GONE FROM THIS PHONE'S SECURE MODULE. \
+         Nothing can decrypt the conversations. The only way out is to start over."
     )]
     KeyGone,
 
@@ -75,35 +78,33 @@ pub enum StorageError {
     /// by a fourth, deterministic condition, and kept apart from a wrong PIN so that the
     /// owner does not collect delays for a PIN that was right.
     #[error(
-        "КЛЮЧ В ЗАЩИЩЁННОМ МОДУЛЕ НЕ ТОТ, КОТОРЫМ СДЕЛАНО ХРАНИЛИЩЕ. \
-         Переписку расшифровать нельзя ничем. Единственный выход — начать заново."
+        "THE KEY IN THE SECURE MODULE IS NOT THE ONE THE STORAGE WAS MADE WITH. \
+         Nothing can decrypt the conversations. The only way out is to start over."
     )]
     KeyMismatch,
 
     /// Data of a build before the PIN. This build does not open it (`docs/storage.md`).
-    #[error(
-        "данные тестовой сборки до появления пина: эта сборка их не открывает, начните заново"
-    )]
+    #[error("data of a test build from before the PIN: this build does not open it, start over")]
     Legacy,
 
     /// No vault yet: a PIN has to be set first.
-    #[error("хранилища ещё нет: задайте пин")]
+    #[error("no vault yet: set a PIN")]
     NoVault,
 
     /// Not a PIN this vault could have: wrong length or not only digits.
-    #[error("пин — от 6 до 16 цифр")]
+    #[error("a PIN is 6 to 16 digits")]
     BadPin,
 
     #[error(transparent)]
     Platform(PlatformError),
 
-    #[error("обёртка ключа непригодна: {0}")]
+    #[error("the key wrapper is unusable: {0}")]
     Wrapper(String),
 
-    #[error("файловая ошибка: {0}")]
+    #[error("file error: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("ошибка базы: {0}")]
+    #[error("database error: {0}")]
     Db(#[from] rusqlite::Error),
 
     #[error(transparent)]
@@ -122,12 +123,12 @@ pub enum StorageError {
     Sigchain(#[from] apeiron_core::SigchainError),
 
     #[error(
-        "база записана схемой версии {found}, а эта сборка знает только {known}. \
-         Читать её нельзя: старый код понял бы новые записи неправильно."
+        "the database was written with schema version {found}, and this build knows only \
+         {known}. It must not be read: old code would misread the new records."
     )]
     SchemaTooNew { found: u16, known: u16 },
 
-    #[error("внутренняя блокировка повреждена: перезапустите приложение")]
+    #[error("internal lock poisoned: restart the app")]
     Poisoned,
 }
 

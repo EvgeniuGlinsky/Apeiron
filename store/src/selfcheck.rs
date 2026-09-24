@@ -26,6 +26,9 @@ use crate::record::{open_record, seal_record, Table};
 use crate::{Storage, StorageError};
 
 /// Keys of the internal records by which the previous launch is recognized.
+///
+/// Storage keys, not text: they are written on the device, and renaming one orphans the
+/// record already there.
 const META_FINGERPRINT: &str = "самопроверка/отпечаток";
 const META_DEVICE_KEY: &str = "самопроверка/ключ устройства";
 const META_PROBE_CHAT: &str = "самопроверка/проба переписки";
@@ -36,12 +39,13 @@ const META_RUNS: &str = "самопроверка/число прогонов";
 const META_SEED_PROCESS: &str = "самопроверка/процесс, заложивший пробу";
 
 /// The text of the probe message. Stored encrypted between launches.
+/// Data, not text: a probe already on the phone is compared with it. Must stay as is.
 const PROBE_TEXT: &str = "это сообщение зашифровано до перезапуска";
 
 /// How to really restart the app. Swiping it away from the recents list does not kill the
 /// process on Samsung, and a check that asks for a restart it cannot get stays red forever.
 const HOW_TO_RESTART: &str =
-    "Остановите приложение: Настройки → Приложения → Apeiron → «Остановить» (смахивание из недавних процесс не завершает), откройте заново и повторите";
+    "Stop the app: Settings → Apps → Apeiron → Force stop (swiping it away from recents does not end the process), open it again and repeat";
 
 /// A random mark of **this** process.
 ///
@@ -115,14 +119,14 @@ pub fn run_with_mark(storage: &Storage, mark: &str) -> Vec<Check> {
     let runs = bump_runs(storage);
     let fresh = is_fresh_process(storage, mark);
 
-    out.push(Check::ok("прогонов проверки", format!("{runs}")));
+    out.push(Check::ok("check runs", format!("{runs}")));
     out.push(Check {
-        name: "закладку делал другой процесс".to_string(),
+        name: "the probe was planted by another process".to_string(),
         passed: fresh,
         detail: if fresh {
-            "да — значит строкам про выживание состояния можно верить".to_string()
+            "yes — so the lines about the state surviving can be trusted".to_string()
         } else {
-            format!("НЕТ: пробу заложил этот же процесс, перезапуск не проверен ничем. {HOW_TO_RESTART}")
+            format!("NO: the probe was planted by this same process, nothing has checked the restart. {HOW_TO_RESTART}")
         },
     });
 
@@ -181,10 +185,10 @@ fn bump_runs(storage: &Storage) -> u64 {
 fn check_level(storage: &Storage) -> Check {
     let level = storage.security_level();
     let at_creation = storage.level_at_creation();
-    let mut detail = format!("система сообщает: {} ({})", level.name(), level.raw());
+    let mut detail = format!("the system reports: {} ({})", level.name(), level.raw());
     if level.raw() != at_creation.raw() {
         detail.push_str(&format!(
-            "; при создании было {} ({})",
+            "; at creation it was {} ({})",
             at_creation.name(),
             at_creation.raw()
         ));
@@ -193,17 +197,17 @@ fn check_level(storage: &Storage) -> Check {
     // there is no attestation, and KeyInfo is the framework's self-report in our own
     // process. It is not a check and must not be called one.
     Check {
-        name: "где лежит ключ".to_string(),
+        name: "where the key is kept".to_string(),
         passed: level.is_hardware(),
         detail,
     }
 }
 
 fn check_identity(storage: &Storage, fresh: bool, planted: &mut bool) -> Check {
-    let name = "личность пережила перезапуск";
+    let name = "identity survived the restart";
     let identity = match storage.load_identity() {
         Ok(Some(id)) => id,
-        Ok(None) => return Check::failed(name, "личности в хранилище нет"),
+        Ok(None) => return Check::failed(name, "no identity in the storage"),
         Err(e) => return Check::failed(name, e.to_string()),
     };
     let current = identity.public().fingerprint();
@@ -212,28 +216,28 @@ fn check_identity(storage: &Storage, fresh: bool, planted: &mut bool) -> Check {
         Ok(Some(saved)) => {
             let saved = String::from_utf8_lossy(&saved).into_owned();
             if saved == current {
-                verified(name, fresh, format!("отпечаток тот же: {current}"))
+                verified(name, fresh, format!("same fingerprint: {current}"))
             } else {
                 Check::failed(
                     name,
-                    format!("было {saved}, стало {current} — это другая личность"),
+                    format!("was {saved}, now {current} — this is a different identity"),
                 )
             }
         }
         Ok(None) => {
             *planted = true;
             let _ = storage.meta_set(META_FINGERPRINT, current.as_bytes());
-            not_yet(name, format!("запомнен отпечаток {current}"))
+            not_yet(name, format!("fingerprint {current} remembered"))
         }
         Err(e) => Check::failed(name, e.to_string()),
     }
 }
 
 fn check_account(storage: &Storage, fresh: bool, planted: &mut bool) -> Check {
-    let name = "аккаунт устройства тот же";
+    let name = "device account is the same";
     let account = match storage.load_account() {
         Ok(Some(a)) => a,
-        Ok(None) => return Check::failed(name, "аккаунта в хранилище нет"),
+        Ok(None) => return Check::failed(name, "no account in the storage"),
         Err(e) => return Check::failed(name, e.to_string()),
     };
     let current = account.identity_keys().curve25519.to_base64();
@@ -242,18 +246,18 @@ fn check_account(storage: &Storage, fresh: bool, planted: &mut bool) -> Check {
         Ok(Some(saved)) => {
             let saved = String::from_utf8_lossy(&saved).into_owned();
             if saved == current {
-                verified(name, fresh, "ключ устройства не сменился")
+                verified(name, fresh, "the device key did not change")
             } else {
                 Check::failed(
                     name,
-                    "ключ устройства сменился — все существующие переписки порваны",
+                    "the device key changed — all existing conversations are broken",
                 )
             }
         }
         Ok(None) => {
             *planted = true;
             let _ = storage.meta_set(META_DEVICE_KEY, current.as_bytes());
-            not_yet(name, "ключ устройства запомнен")
+            not_yet(name, "device key remembered")
         }
         Err(e) => Check::failed(name, e.to_string()),
     }
@@ -266,7 +270,7 @@ fn check_account(storage: &Storage, fresh: bool, planted: &mut bool) -> Check {
 /// forever, and there is nothing to fix it with; that is why it is exactly this that must
 /// be checked, not "the file is in place".
 fn check_conversation(storage: &Storage, fresh: bool, planted: &mut bool) -> Check {
-    let name = "переписка читается после перезапуска";
+    let name = "conversation readable after the restart";
 
     let saved_chat = storage.meta_get(META_PROBE_CHAT).ok().flatten();
     let saved_ct = storage.meta_get(META_PROBE_CIPHERTEXT).ok().flatten();
@@ -276,9 +280,9 @@ fn check_conversation(storage: &Storage, fresh: bool, planted: &mut bool) -> Che
     match (saved_chat, saved_ct, saved_bundle, saved_account) {
         (Some(_), Some(ct), Some(bundle), Some(account)) => match replay(&ct, &bundle, &account) {
             Ok(text) if text == PROBE_TEXT => {
-                verified(name, fresh, "расшифровано ровно то, что было зашифровано")
+                verified(name, fresh, "decrypted exactly what was encrypted")
             }
-            Ok(text) => Check::failed(name, format!("расшифровалось другое: {text}")),
+            Ok(text) => Check::failed(name, format!("decrypted to something else: {text}")),
             Err(e) => Check::failed(name, e.to_string()),
         },
         _ => {
@@ -286,7 +290,7 @@ fn check_conversation(storage: &Storage, fresh: bool, planted: &mut bool) -> Che
             // own too, and erring towards red is the only safe direction.
             *planted = true;
             match seed_probe(storage) {
-                Ok(()) => not_yet(name, "проба заложена"),
+                Ok(()) => not_yet(name, "probe planted"),
                 Err(e) => Check::failed(name, e.to_string()),
             }
         }
@@ -322,7 +326,7 @@ fn seed_probe(storage: &Storage) -> Result<(), StorageError> {
         apeiron_core::vodozemac::olm::OlmMessage::PreKey(m) => m.to_base64(),
         apeiron_core::vodozemac::olm::OlmMessage::Normal(_) => {
             return Err(StorageError::Wrapper(
-                "первое сообщение обязано быть сообщением установления сессии".to_string(),
+                "the first message must be a session-establishing message".to_string(),
             ))
         }
     };
@@ -356,7 +360,7 @@ fn replay(ciphertext: &[u8], bundle: &[u8], account: &[u8]) -> Result<String, St
 ///
 /// Checked on probe bytes; production records are not touched.
 fn check_record_binding(storage: &Storage) -> Check {
-    let name = "запись нельзя переложить на чужое место";
+    let name = "a record cannot be moved to another place";
     let key = storage.probe_key();
     let sealed = match seal_record(key, Table::Meta, 1, b"probe") {
         Ok(v) => v,
@@ -367,32 +371,32 @@ fn check_record_binding(storage: &Storage) -> Check {
     let own_place = open_record(key, Table::Meta, 1, &sealed).is_ok();
 
     if moved && other_table && own_place {
-        Check::ok(name, "чужой номер и чужая таблица отвергнуты")
+        Check::ok(name, "another id and another table rejected")
     } else {
         Check::failed(
             name,
-            format!("своё место: {own_place}, чужой номер отвергнут: {moved}, чужая таблица отвергнута: {other_table}"),
+            format!("own place: {own_place}, another id rejected: {moved}, another table rejected: {other_table}"),
         )
     }
 }
 
 /// A damaged record is rejected, not half-read.
 fn check_damaged_record(storage: &Storage) -> Check {
-    let name = "повреждённая запись отвергается";
+    let name = "a damaged record is rejected";
     let key = storage.probe_key();
     let mut sealed = match seal_record(key, Table::Meta, 1, b"probe") {
         Ok(v) => v,
         Err(e) => return Check::failed(name, e.to_string()),
     };
     let Some(last) = sealed.last_mut() else {
-        return Check::failed(name, "пустая запись");
+        return Check::failed(name, "empty record");
     };
     *last ^= 0x01;
 
     if open_record(key, Table::Meta, 1, &sealed).is_err() {
-        Check::ok(name, "перевёрнутый бит замечен")
+        Check::ok(name, "flipped bit detected")
     } else {
-        Check::failed(name, "перевёрнутый бит прошёл как исправная запись")
+        Check::failed(name, "flipped bit passed as an intact record")
     }
 }
 
@@ -405,7 +409,7 @@ fn not_yet(name: &str, detail: impl Into<String>) -> Check {
     Check {
         name: name.to_string(),
         passed: false,
-        detail: format!("проверять нечего, {}. {HOW_TO_RESTART}", detail.into()),
+        detail: format!("nothing to check yet, {}. {HOW_TO_RESTART}", detail.into()),
     }
 }
 
@@ -423,7 +427,7 @@ fn verified(name: &str, fresh: bool, detail: impl Into<String>) -> Check {
             name: name.to_string(),
             passed: false,
             detail: format!(
-                "{detail}, но закладку делал этот же процесс — перезапуск не проверен. {HOW_TO_RESTART}"
+                "{detail}, but the probe was planted by this same process — the restart has not been checked. {HOW_TO_RESTART}"
             ),
         }
     }
@@ -455,18 +459,18 @@ pub fn pin_checks<H: HardwareKey + Sync>(
     let params = match crate::wrapper::params(dir) {
         Ok(Some(p)) => p,
         Ok(None) => {
-            out.push(Check::failed("пин: хранилище", "хранилище без пина"));
+            out.push(Check::failed("PIN: vault", "vault without a PIN"));
             return out;
         }
         Err(e) => {
-            out.push(Check::failed("пин: хранилище", e.to_string()));
+            out.push(Check::failed("PIN: vault", e.to_string()));
             return out;
         }
     };
     out.push(Check::ok(
-        "пин: параметры",
+        "PIN: parameters",
         format!(
-            "цепочка {} операций в железе, Argon2id {} МиБ × {} прохода",
+            "chain of {} operations in hardware, Argon2id {} MiB × {} passes",
             params.rounds,
             params.argon_kib / 1024,
             params.argon_t
@@ -475,34 +479,34 @@ pub fn pin_checks<H: HardwareKey + Sync>(
 
     let t = storage.timing();
     out.push(Check::ok(
-        "пин: разблокировка в этом запуске",
-        format!("Argon2id {} мс, цепочка {} мс", t.argon_ms, t.chain_ms),
+        "PIN: unlock in this launch",
+        format!("Argon2id {} ms, chain {} ms", t.argon_ms, t.chain_ms),
     ));
 
     let calibration = match crate::wrapper::calibrate(hw, storage.security_level(), u32::MAX) {
         Ok(c) => c,
         Err(e) => {
-            out.push(Check::failed("пин: замер операции", e.to_string()));
+            out.push(Check::failed("PIN: timing one operation", e.to_string()));
             return out;
         }
     };
     out.push(Check::ok(
-        "пин: одна операция в железе",
+        "PIN: one operation in hardware",
         format!(
-            "{} мкс (лучшая из трёх пачек по 64)",
+            "{} µs (best of three batches of 64)",
             calibration.per_op_ns / 1_000
         ),
     ));
 
     let parallel = parallel_speedup(hw, calibration.per_op_ns);
     out.push(Check::ok(
-        "пин: параллельность железа",
+        "PIN: hardware parallelism",
         match parallel {
             Some(x) => format!(
-                "{PARALLEL_THREADS} потока дают ×{:.1} к одному",
+                "{PARALLEL_THREADS} threads give ×{:.1} over one",
                 x as f64 / 100.0
             ),
-            None => "замерить не удалось".to_string(),
+            None => "could not be measured".to_string(),
         },
     ));
 
@@ -510,15 +514,15 @@ pub fn pin_checks<H: HardwareKey + Sync>(
 
     match crate::wrapper::random_candidate_rejected(dir, hw) {
         Ok((true, _)) => out.push(Check::ok(
-            "пин: случайный неверный пин отвергнут",
-            "проверено без счётчика: кандидат рождён внутри и наружу не выходит",
+            "PIN: a random wrong PIN is rejected",
+            "checked without the counter: the candidate is born inside and never leaves",
         )),
         Ok((false, _)) => out.push(Check::failed(
-            "пин: случайный неверный пин отвергнут",
-            "НЕТ: случайный пин открыл хранилище",
+            "PIN: a random wrong PIN is rejected",
+            "NO: a random PIN opened the vault",
         )),
         Err(e) => out.push(Check::failed(
-            "пин: случайный неверный пин отвергнут",
+            "PIN: a random wrong PIN is rejected",
             e.to_string(),
         )),
     }
@@ -526,16 +530,16 @@ pub fn pin_checks<H: HardwareKey + Sync>(
     let state = PinState::load(dir);
     let survived = state.total > failures_in_this_process;
     out.push(Check {
-        name: "пин: счётчик пережил перезапуск".to_string(),
+        name: "PIN: the counter survived the restart".to_string(),
         passed: survived,
         detail: if survived {
             format!(
-                "неудач всего {}, из них в этом процессе {failures_in_this_process}: остальные записал прежний процесс",
+                "{} failures in total, {failures_in_this_process} of them in this process: the rest were written by an earlier process",
                 state.total
             )
         } else {
             format!(
-                "неудач всего {}, все в этом процессе. Введите неверный пин и повторите после перезапуска. {HOW_TO_RESTART}",
+                "{} failures in total, all in this process. Enter a wrong PIN and repeat after a restart. {HOW_TO_RESTART}",
                 state.total
             )
         },
@@ -543,20 +547,20 @@ pub fn pin_checks<H: HardwareKey + Sync>(
 
     out.push(match hw.boot_clock() {
         Ok(c) if c.elapsed_ms > 0 => Check::ok(
-            "пин: часы загрузки",
+            "PIN: boot clock",
             format!(
-                "BOOT_COUNT {}, elapsedRealtime {} с{}",
+                "BOOT_COUNT {}, elapsedRealtime {} s{}",
                 c.boot_count,
                 c.elapsed_ms / 1_000,
                 if c.boot_count < 0 {
-                    " (счётчика загрузок нет: перезагрузка узнаётся только по часам)"
+                    " (no boot counter: a reboot is recognized only by the clock)"
                 } else {
                     ""
                 }
             ),
         ),
-        Ok(c) => Check::failed("пин: часы загрузки", format!("странные часы: {c:?}")),
-        Err(e) => Check::failed("пин: часы загрузки", e.to_string()),
+        Ok(c) => Check::failed("PIN: boot clock", format!("strange clock: {c:?}")),
+        Err(e) => Check::failed("PIN: boot clock", e.to_string()),
     });
 
     out
@@ -600,11 +604,11 @@ fn estimate(rounds: u32, per_op_ns: u64, parallel: Option<u64>) -> Check {
         half * guess_ns as f64 / 1e9 / 86_400.0
     };
     Check::ok(
-        "пин: оценка перебора с root на этом телефоне",
+        "PIN: brute-force estimate with root on this phone",
         format!(
-            "в среднем 6 цифр ≈ {:.1} сут, 8 цифр ≈ {:.0} сут, 10 цифр ≈ {:.0} лет. \
-             Оценка с запасом ×{ATTACKER_SPEEDUP}: в обход фреймворка железо может отвечать быстрее. \
-             Если ключ извлекут из железа — эти числа не действуют, остаётся Argon2id и длина пина",
+            "on average 6 digits ≈ {:.1} days, 8 digits ≈ {:.0} days, 10 digits ≈ {:.0} years. \
+             The estimate has a ×{ATTACKER_SPEEDUP} margin: bypassing the framework, the hardware may answer faster. \
+             If the key is extracted from the hardware, these numbers do not apply; what remains is Argon2id and the PIN length",
             days(6),
             days(8),
             days(10) / 365.0

@@ -92,16 +92,16 @@ pub mod purpose {
 /// What can go wrong.
 #[derive(Debug, thiserror::Error)]
 pub enum AeadError {
-    #[error("не удалось запечатать: {0}")]
+    #[error("sealing failed: {0}")]
     Seal(String),
 
     #[error(
-        "ЗАПИСЬ НЕ ПРОШЛА ПРОВЕРКУ ПОДЛИННОСТИ. Она повреждена или подменена; \
-         содержимому доверять нельзя."
+        "THE RECORD FAILED THE AUTHENTICITY CHECK. It is damaged or substituted; \
+         its contents must not be trusted."
     )]
     Open,
 
-    #[error("запись короче служебных полей: {0} байт при минимуме {1}")]
+    #[error("record shorter than its service fields: {0} bytes, minimum {1}")]
     TooShort(usize, usize),
 
     #[error(transparent)]

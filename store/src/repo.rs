@@ -389,7 +389,7 @@ fn encode_contact(peer: &PublicIdentity, name: &str) -> Vec<u8> {
 
 fn decode_contact(plain: &[u8]) -> Result<(PublicIdentity, String), StorageError> {
     let head = plain.get(..64).ok_or_else(|| {
-        StorageError::Wrapper("запись о контакте короче публичной личности".to_string())
+        StorageError::Wrapper("contact record shorter than a public identity".to_string())
     })?;
     let tail = plain.get(64..).unwrap_or_default();
     let peer = PublicIdentity::from_bytes(head)?;

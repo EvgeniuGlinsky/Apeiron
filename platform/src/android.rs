@@ -120,7 +120,7 @@ pub fn storage_dir() -> Result<&'static Path, PlatformError> {
 
 fn not_registered() -> PlatformError {
     PlatformError::Internal(
-        "Vault не зарегистрирован: приложение запущено в обход MainActivity".to_string(),
+        "Vault is not registered: the app was started bypassing MainActivity".to_string(),
     )
 }
 

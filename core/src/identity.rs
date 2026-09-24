@@ -34,11 +34,11 @@ const SAFETY_NUMBER_DOMAIN: &[u8] = b"apeiron/safety-number/v1";
 
 #[derive(Debug, thiserror::Error)]
 pub enum IdentityError {
-    #[error("неверная длина: ожидалось {expected} байт, получено {got}")]
+    #[error("wrong length: expected {expected} bytes, got {got}")]
     Length { expected: usize, got: usize },
-    #[error("байты не образуют корректный ключ Ed25519")]
+    #[error("the bytes do not form a valid Ed25519 key")]
     MalformedVerifyingKey,
-    #[error("подпись не проходит проверку")]
+    #[error("the signature does not verify")]
     BadSignature,
 }
 

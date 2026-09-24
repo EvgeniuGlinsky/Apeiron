@@ -15,7 +15,7 @@ pub struct NoVault;
 
 fn unavailable() -> PlatformError {
     PlatformError::Internal(
-        "на этой платформе аппаратного хранилища ключей нет; сборка для неё заморожена".to_string(),
+        "this platform has no hardware key store; the build for it is frozen".to_string(),
     )
 }
 

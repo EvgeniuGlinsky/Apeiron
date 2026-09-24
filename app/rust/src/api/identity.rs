@@ -37,7 +37,7 @@ impl From<&PublicIdentity> for PublicIdentityView {
     }
 }
 
-const LOCKED: &str = "личность заблокирована";
+const LOCKED: &str = "the identity is locked";
 
 fn view(identity: &Identity) -> PublicIdentityView {
     PublicIdentityView::from(&identity.public())
@@ -51,7 +51,7 @@ fn view(identity: &Identity) -> PublicIdentityView {
 #[flutter_rust_bridge::frb]
 pub fn generate_identity() -> Result<PublicIdentityView, String> {
     vault::create_identity()?;
-    current_identity()?.ok_or_else(|| "личность не сохранилась".to_string())
+    current_identity()?.ok_or_else(|| "the identity was not saved".to_string())
 }
 
 /// The current identity, if the vault is open.
@@ -76,7 +76,7 @@ pub fn lock_identity() -> Result<(), String> {
 #[flutter_rust_bridge::frb]
 pub fn safety_number_with(peer_public_hex: String) -> Result<String, String> {
     let bytes = hex::decode(peer_public_hex.trim())
-        .map_err(|_| "ключ собеседника не является шестнадцатеричной строкой".to_string())?;
+        .map_err(|_| "the peer's key is not a hex string".to_string())?;
     let peer = PublicIdentity::from_bytes(&bytes).map_err(|e| e.to_string())?;
     vault::with_identity(|me| me.public().safety_number(&peer))?.ok_or_else(|| LOCKED.to_string())
 }

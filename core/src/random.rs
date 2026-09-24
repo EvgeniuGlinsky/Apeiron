@@ -18,7 +18,7 @@ use zeroize::Zeroize;
 
 /// The operating system did not provide randomness.
 #[derive(Debug, Error)]
-#[error("операционная система не выдала случайные байты: {0}")]
+#[error("the operating system did not provide random bytes: {0}")]
 pub struct RandomError(getrandom::Error);
 
 /// Random bytes from the OS kernel.

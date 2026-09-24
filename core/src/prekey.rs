@@ -45,25 +45,26 @@ pub const PREKEY_BUNDLE_BYTES: usize = PUBLIC_IDENTITY_BYTES + KEY_BYTES * 3 + S
 /// What can go wrong with a prekey bundle.
 #[derive(Debug, thiserror::Error)]
 pub enum PrekeyError {
-    #[error("пакет пред-ключей: ожидалось {expected} байт, получено {got}")]
+    #[error("prekey bundle: expected {expected} bytes, got {got}")]
     Length { expected: usize, got: usize },
 
-    #[error("пакет пред-ключей: личность не разбирается: {0}")]
+    #[error("prekey bundle: the identity does not parse: {0}")]
     Identity(#[from] IdentityError),
 
-    #[error("пакет пред-ключей: ключ не разбирается: {0}")]
+    #[error("prekey bundle: a key does not parse: {0}")]
     Key(#[from] KeyError),
 
-    #[error("пакет пред-ключей: подпись не разбирается")]
+    #[error("prekey bundle: the signature does not parse")]
     MalformedSignature,
 
     #[error(
-        "ПОДПИСЬ ПАКЕТА НЕВЕРНА. Ключи в нём не принадлежат заявленной личности — \
-         либо пакет подменён по дороге, либо повреждён. Переписку начинать нельзя."
+        "THE BUNDLE SIGNATURE IS INVALID. Its keys do not belong to the claimed identity — \
+         the bundle was either substituted on the way or damaged. A conversation must not \
+         be started."
     )]
     BadSignature,
 
-    #[error("у устройства не осталось неизрасходованных одноразовых ключей")]
+    #[error("the device has no unused one-time keys left")]
     NoOneTimeKeys,
 }
 

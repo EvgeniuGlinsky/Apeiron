@@ -37,26 +37,27 @@ use crate::prekey::PrekeyBundle;
 /// What can go wrong in a conversation.
 #[derive(Debug, thiserror::Error)]
 pub enum ChatError {
-    #[error("не удалось создать сессию: {0}")]
+    #[error("failed to create the session: {0}")]
     Creation(#[from] SessionCreationError),
 
-    #[error("не удалось зашифровать: {0}")]
+    #[error("encryption failed: {0}")]
     Encryption(#[from] EncryptionError),
 
-    #[error("не удалось расшифровать: {0}")]
+    #[error("decryption failed: {0}")]
     Decryption(#[from] DecryptionError),
 
-    #[error("расшифрованное не является текстом UTF-8")]
+    #[error("the decrypted data is not UTF-8 text")]
     NotText,
 
-    #[error("внутренняя ошибка: сообщение осталось необработанным")]
+    #[error("internal error: the message was left unprocessed")]
     NotProcessed,
 
-    #[error("состояние переписки не удалось сохранить: {0}")]
+    #[error("failed to save the conversation state: {0}")]
     Pickle(String),
 
     #[error(
-        "СОСТОЯНИЕ ПЕРЕПИСКИ ПОВРЕЖДЕНО ИЛИ ПОДМЕНЕНО: {0}.          Продолжать эту переписку нельзя."
+        "THE CONVERSATION STATE IS DAMAGED OR SUBSTITUTED: {0}. \
+         This conversation must not be continued."
     )]
     Unpickle(String),
 }
@@ -184,12 +185,12 @@ impl Chat {
     /// from outside, and corruption inside the boundary goes no further than the
     /// boundary; hence a separate error instead of silently returning an empty state.
     pub fn from_pickle(bytes: &[u8]) -> Result<Self, ChatError> {
-        let head = bytes
-            .get(..PUBLIC_IDENTITY_BYTES)
-            .ok_or_else(|| ChatError::Unpickle("запись короче публичной личности".to_string()))?;
+        let head = bytes.get(..PUBLIC_IDENTITY_BYTES).ok_or_else(|| {
+            ChatError::Unpickle("record shorter than a public identity".to_string())
+        })?;
         let tail = bytes
             .get(PUBLIC_IDENTITY_BYTES..)
-            .ok_or_else(|| ChatError::Unpickle("запись без состояния храповика".to_string()))?;
+            .ok_or_else(|| ChatError::Unpickle("record without the ratchet state".to_string()))?;
         let peer =
             PublicIdentity::from_bytes(head).map_err(|e| ChatError::Unpickle(e.to_string()))?;
         let pickle =

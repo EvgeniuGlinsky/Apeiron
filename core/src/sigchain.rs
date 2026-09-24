@@ -48,16 +48,18 @@ const TAG_REVOKE_DEVICE: u8 = 3;
 /// What can go wrong with the log.
 #[derive(Debug, thiserror::Error)]
 pub enum SigchainError {
-    #[error("журнал пуст")]
+    #[error("the log is empty")]
     Empty,
 
-    #[error("запись {0}: первой обязана быть запись о рождении личности")]
+    #[error("entry {0}: the first entry must be the birth of the identity")]
     MissingGenesis(u64),
 
-    #[error("запись {0}: рождение личности может быть только первой записью")]
+    #[error("entry {0}: the birth of the identity can only be the first entry")]
     RepeatedGenesis(u64),
 
-    #[error("запись {index}: номер {got}, ожидался {expected} — журнал переставлен или неполон")]
+    #[error(
+        "entry {index}: number {got}, expected {expected} — the log is reordered or incomplete"
+    )]
     OutOfOrder {
         index: usize,
         got: u64,
@@ -65,39 +67,39 @@ pub enum SigchainError {
     },
 
     #[error(
-        "запись {0}: ссылка на предыдущую не сходится. Из журнала что-то изъято \
-         или подменено — например, отзыв устройства."
+        "entry {0}: the link to the previous entry does not match. Something was removed from \
+         the log or substituted — a device revocation, for example."
     )]
     BrokenLink(u64),
 
-    #[error("запись {0}: подписана ключом, который этой личности не принадлежит")]
+    #[error("entry {0}: signed by a key that does not belong to this identity")]
     UnknownSigner(u64),
 
-    #[error("запись {0}: подписана отозванным устройством")]
+    #[error("entry {0}: signed by a revoked device")]
     RevokedSigner(u64),
 
-    #[error("ЗАПИСЬ {0}: ПОДПИСЬ НЕВЕРНА. Журналу доверять нельзя.")]
+    #[error("ENTRY {0}: THE SIGNATURE IS INVALID. The log must not be trusted.")]
     BadSignature(u64),
 
-    #[error("запись {0}: устройство уже есть в журнале")]
+    #[error("entry {0}: the device is already in the log")]
     DuplicateDevice(u64),
 
-    #[error("запись {0}: отзыв устройства, которого в журнале нет")]
+    #[error("entry {0}: revokes a device that is not in the log")]
     UnknownDevice(u64),
 
-    #[error("запись {0}: устройство уже отозвано")]
+    #[error("entry {0}: the device is already revoked")]
     AlreadyRevoked(u64),
 
-    #[error("журнал оборван на записи {0}")]
+    #[error("the log is cut off at entry {0}")]
     Truncated(usize),
 
-    #[error("запись {0}: неизвестный вид записи {1}")]
+    #[error("entry {0}: unknown entry kind {1}")]
     UnknownTag(usize, u8),
 
     #[error(transparent)]
     Identity(#[from] IdentityError),
 
-    #[error("ключ в записи не разбирается")]
+    #[error("the key in the entry does not parse")]
     MalformedKey,
 }
 

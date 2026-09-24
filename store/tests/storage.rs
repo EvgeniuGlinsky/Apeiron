@@ -504,12 +504,12 @@ fn the_self_check_does_not_claim_success_on_the_first_run() {
     store.save_account(&Account::new()).unwrap();
 
     let checks = apeiron_store::selfcheck::run_with_mark(&store, "process-A");
-    let survived = find(&checks, "переписка читается после перезапуска");
+    let survived = find(&checks, "conversation readable after the restart");
     assert!(
         !survived.passed,
         "on the first launch the state was declared to have survived a restart"
     );
-    assert!(survived.detail.contains("«Остановить»"));
+    assert!(survived.detail.contains("Force stop"));
 }
 
 /// The most important property of the self-check: it does not turn green without a real
@@ -530,11 +530,11 @@ fn the_self_check_stays_red_within_the_same_process() {
     // The same process, a second run: the state will match, but it cannot be counted.
     let checks = apeiron_store::selfcheck::run_with_mark(&store, "process-A");
 
-    assert!(!find(&checks, "закладку делал другой процесс").passed);
+    assert!(!find(&checks, "the probe was planted by another process").passed);
     for name in [
-        "личность пережила перезапуск",
-        "аккаунт устройства тот же",
-        "переписка читается после перезапуска",
+        "identity survived the restart",
+        "device account is the same",
+        "conversation readable after the restart",
     ] {
         let check = find(&checks, name);
         assert!(
@@ -542,7 +542,7 @@ fn the_self_check_stays_red_within_the_same_process() {
             "\"{name}\" counted without a restart: {}",
             check.detail
         );
-        assert!(check.detail.contains("этот же процесс"));
+        assert!(check.detail.contains("this same process"));
     }
 }
 
@@ -571,7 +571,7 @@ fn the_self_check_passes_after_a_real_reopen() {
         "after a real restart these did not pass: {failed:#?}"
     );
     assert_eq!(
-        find(&checks, "прогонов проверки").detail,
+        find(&checks, "check runs").detail,
         "2",
         "runs are not counted"
     );
@@ -628,7 +628,7 @@ fn a_probe_planted_anew_in_the_same_process_is_not_counted() {
         store.save_account(&Account::new()).unwrap();
         let _ = apeiron_store::selfcheck::run_with_mark(&store, "process-A");
         let proven = apeiron_store::selfcheck::run_with_mark(&store, "process-B");
-        assert!(find(&proven, "закладку делал другой процесс").passed);
+        assert!(find(&proven, "the probe was planted by another process").passed);
     }
 
     // The same process B starts over with an empty storage.
@@ -639,8 +639,8 @@ fn a_probe_planted_anew_in_the_same_process_is_not_counted() {
     store.save_account(&Account::new()).unwrap();
     for _ in 0..2 {
         let checks = apeiron_store::selfcheck::run_with_mark(&store, "process-B");
-        assert!(!find(&checks, "закладку делал другой процесс").passed);
-        assert!(!find(&checks, "переписка читается после перезапуска").passed);
+        assert!(!find(&checks, "the probe was planted by another process").passed);
+        assert!(!find(&checks, "conversation readable after the restart").passed);
     }
 }
 

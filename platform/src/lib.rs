@@ -49,7 +49,7 @@ pub enum PlatformError {
     /// **unlocked** device if it was unlocked with weak
     /// biometrics: a confirmed firmware defect. Interpreting a transient failure
     /// as "key lost" would mean destroying the owner's conversations.
-    #[error("защищённый модуль устройства сейчас недоступен: {0}")]
+    #[error("the device's secure module is unavailable right now: {0}")]
     Transient(String),
 
     /// The key is gone. Nothing can decrypt the storage.
@@ -61,14 +61,14 @@ pub enum PlatformError {
     /// according to years of developer complaints, after firmware updates on some
     /// devices.
     #[error(
-        "КЛЮЧ ХРАНИЛИЩА ИСЧЕЗ ИЗ ЗАЩИЩЁННОГО МОДУЛЯ ЭТОГО ТЕЛЕФОНА. \
-         Переписку расшифровать нельзя ничем. Единственный выход — начать заново."
+        "THE STORAGE KEY IS GONE FROM THIS PHONE'S SECURE MODULE. \
+         Nothing can decrypt the conversations. The only way out is to start over."
     )]
     Gone,
 
     /// Our own error. Like [`PlatformError::Transient`], it does not touch the
     /// data.
-    #[error("внутренняя ошибка обращения к хранилищу ключей: {0}")]
+    #[error("internal error accessing the key store: {0}")]
     Internal(String),
 }
 
@@ -120,14 +120,15 @@ impl SecurityLevel {
         self.raw
     }
 
-    /// The name, in Russian.
+    /// The name, in English, for diagnostics. The app shows its own localized name, chosen
+    /// by the raw number.
     pub fn name(&self) -> &'static str {
         match self.raw {
             Self::STRONGBOX => "StrongBox",
             Self::TRUSTED_ENVIRONMENT => "TEE",
-            Self::SOFTWARE => "программный",
-            Self::UNKNOWN_SECURE => "железо без уточнения",
-            _ => "неизвестно",
+            Self::SOFTWARE => "software",
+            Self::UNKNOWN_SECURE => "secure hardware, unspecified",
+            _ => "unknown",
         }
     }
 

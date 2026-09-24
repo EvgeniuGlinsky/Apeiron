@@ -58,8 +58,8 @@ fn writer() -> [u8; 8] {
 /// restart — the self-check needs exactly that distinction.
 static FAILURES_HERE: AtomicU32 = AtomicU32::new(0);
 
-const POISONED: &str = "внутренняя блокировка повреждена: перезапустите приложение";
-const LOCKED: &str = "хранилище заперто";
+const POISONED: &str = "internal lock poisoned: restart the app";
+const LOCKED: &str = "the vault is locked";
 
 /// What state the vault is in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
