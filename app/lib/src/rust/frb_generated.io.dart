@@ -3,6 +3,7 @@
 
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
+import 'api/chat.dart';
 import 'api/identity.dart';
 import 'api/pin.dart';
 import 'api/probe.dart';
@@ -28,13 +29,28 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool dco_decode_bool(dynamic raw);
 
   @protected
+  PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw);
+
+  @protected
   PublicIdentityView dco_decode_box_autoadd_public_identity_view(dynamic raw);
 
   @protected
   CheckLine dco_decode_check_line(dynamic raw);
 
   @protected
+  ContactItem dco_decode_contact_item(dynamic raw);
+
+  @protected
+  ContactState dco_decode_contact_state(dynamic raw);
+
+  @protected
   int dco_decode_i_32(dynamic raw);
+
+  @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw);
+
+  @protected
+  InvitationItem dco_decode_invitation_item(dynamic raw);
 
   @protected
   List<String> dco_decode_list_String(dynamic raw);
@@ -43,12 +59,33 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<CheckLine> dco_decode_list_check_line(dynamic raw);
 
   @protected
+  List<ContactItem> dco_decode_list_contact_item(dynamic raw);
+
+  @protected
+  List<InvitationItem> dco_decode_list_invitation_item(dynamic raw);
+
+  @protected
+  List<MessageItem> dco_decode_list_message_item(dynamic raw);
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
+
+  @protected
+  MessageItem dco_decode_message_item(dynamic raw);
+
+  @protected
+  MessageState dco_decode_message_state(dynamic raw);
+
+  @protected
+  PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw);
 
   @protected
   PublicIdentityView? dco_decode_opt_box_autoadd_public_identity_view(
     dynamic raw,
   );
+
+  @protected
+  PinPadPrefs dco_decode_pin_pad_prefs(dynamic raw);
 
   @protected
   PublicIdentityView dco_decode_public_identity_view(dynamic raw);
@@ -75,6 +112,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
+  PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer);
+
+  @protected
   PublicIdentityView sse_decode_box_autoadd_public_identity_view(
     SseDeserializer deserializer,
   );
@@ -83,7 +123,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   CheckLine sse_decode_check_line(SseDeserializer deserializer);
 
   @protected
+  ContactItem sse_decode_contact_item(SseDeserializer deserializer);
+
+  @protected
+  ContactState sse_decode_contact_state(SseDeserializer deserializer);
+
+  @protected
   int sse_decode_i_32(SseDeserializer deserializer);
+
+  @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
+
+  @protected
+  InvitationItem sse_decode_invitation_item(SseDeserializer deserializer);
 
   @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
@@ -92,12 +144,35 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<CheckLine> sse_decode_list_check_line(SseDeserializer deserializer);
 
   @protected
+  List<ContactItem> sse_decode_list_contact_item(SseDeserializer deserializer);
+
+  @protected
+  List<InvitationItem> sse_decode_list_invitation_item(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<MessageItem> sse_decode_list_message_item(SseDeserializer deserializer);
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
+
+  @protected
+  MessageItem sse_decode_message_item(SseDeserializer deserializer);
+
+  @protected
+  MessageState sse_decode_message_state(SseDeserializer deserializer);
+
+  @protected
+  PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer);
 
   @protected
   PublicIdentityView? sse_decode_opt_box_autoadd_public_identity_view(
     SseDeserializer deserializer,
   );
+
+  @protected
+  PinPadPrefs sse_decode_pin_pad_prefs(SseDeserializer deserializer);
 
   @protected
   PublicIdentityView sse_decode_public_identity_view(
@@ -126,6 +201,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_i_64(
+    PlatformInt64 self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_public_identity_view(
     PublicIdentityView self,
     SseSerializer serializer,
@@ -135,7 +216,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_check_line(CheckLine self, SseSerializer serializer);
 
   @protected
+  void sse_encode_contact_item(ContactItem self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_contact_state(ContactState self, SseSerializer serializer);
+
+  @protected
   void sse_encode_i_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_invitation_item(
+    InvitationItem self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
@@ -147,8 +243,38 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_contact_item(
+    List<ContactItem> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_invitation_item(
+    List<InvitationItem> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_message_item(
+    List<MessageItem> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_prim_u_8_strict(
     Uint8List self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_message_item(MessageItem self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_message_state(MessageState self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_64(
+    PlatformInt64? self,
     SseSerializer serializer,
   );
 
@@ -157,6 +283,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     PublicIdentityView? self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_pin_pad_prefs(PinPadPrefs self, SseSerializer serializer);
 
   @protected
   void sse_encode_public_identity_view(

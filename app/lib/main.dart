@@ -4,8 +4,8 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'check_screen.dart';
-import 'fingerprint.dart';
+import 'chats_screen.dart';
+import 'identity_view.dart';
 import 'l10n/app_localizations.dart';
 import 'locale_choice.dart';
 import 'lock_policy.dart';
@@ -173,6 +173,8 @@ class _IdentityScreenState extends State<IdentityScreen>
   Future<void> _lock() => _run(() async {
     _idle?.cancel();
     _idle = null;
+    // Every screen opened over this one shows what the keys opened: all go.
+    if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
     await lockIdentity();
     final vault = await vaultStatus();
     if (mounted) {
@@ -187,6 +189,16 @@ class _IdentityScreenState extends State<IdentityScreen>
   Widget build(BuildContext context) {
     final id = _identity;
     final vault = _vault;
+    if (id != null && vault != null && vault.state == VaultState.opened) {
+      return Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) => _noteActivity(),
+        onPointerMove: (_) => _noteActivity(),
+        onPointerHover: (_) => _noteActivity(),
+        onPointerSignal: (_) => _noteActivity(),
+        child: ChatsHome(identity: id, policy: _policy, onLock: _lock),
+      );
+    }
     return Listener(
       // Push back the idle timer. `translucent` so that events also reach
       // the widgets beneath us: we listen, we do not intercept.
@@ -205,27 +217,7 @@ class _IdentityScreenState extends State<IdentityScreen>
               const ApeironWordmark(height: 19),
             ],
           ),
-          actions: [
-            if (id != null)
-              IconButton(
-                tooltip: AppLocalizations.of(context).selfCheckTooltip,
-                onPressed: _busy
-                    ? null
-                    : () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const CheckScreen(),
-                        ),
-                      ),
-                icon: const Icon(Icons.fact_check_outlined, color: Ap.fog400),
-              ),
-            if (id != null)
-              IconButton(
-                tooltip: AppLocalizations.of(context).lockTooltip,
-                onPressed: _busy ? null : _lock,
-                icon: const Icon(Icons.lock_outline, color: Ap.fog400),
-              ),
-            const SizedBox(width: Ap.s8),
-          ],
+          actions: [const SizedBox(width: Ap.s8)],
         ),
         body: SafeArea(
           child: Center(
@@ -257,13 +249,12 @@ class _IdentityScreenState extends State<IdentityScreen>
                       ),
                       const SizedBox(height: Ap.s20),
                     ],
-                    if (vault != null && vault.state == VaultState.opened)
-                      if (id == null)
-                        _LockedState(busy: _busy, onGenerate: _generate)
-                      else
-                        _IdentityView(identity: id),
+                    if (vault != null &&
+                        vault.state == VaultState.opened &&
+                        id == null)
+                      _LockedState(busy: _busy, onGenerate: _generate),
                     const SizedBox(height: Ap.s40),
-                    _HonestNote(policy: _policy),
+                    HonestNote(policy: _policy),
                   ],
                 ),
               ),
@@ -303,163 +294,6 @@ class _LockedState extends StatelessWidget {
           child: Text(l.createIdentity),
         ),
       ],
-    );
-  }
-}
-
-class _IdentityView extends StatelessWidget {
-  const _IdentityView({required this.identity});
-
-  final PublicIdentityView identity;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-    final l = AppLocalizations.of(context);
-    final groups = identity.fingerprint.split(' ');
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(l.fingerprintTitle, style: t.labelLarge),
-        const SizedBox(height: Ap.s8),
-        Text(l.fingerprintBody, style: t.bodySmall),
-        const SizedBox(height: Ap.s16),
-
-        // The copper accent is used only here. Key verification looks like
-        // nothing else in the app, on purpose: people must look at it.
-        Container(
-          decoration: const BoxDecoration(
-            color: Ap.basalt800,
-            border: Border(
-              left: BorderSide(color: Ap.ember400, width: 3),
-              top: BorderSide(color: Ap.stone700),
-              right: BorderSide(color: Ap.stone700),
-              bottom: BorderSide(color: Ap.stone700),
-            ),
-          ),
-          padding: const EdgeInsets.symmetric(
-            vertical: Ap.s28,
-            horizontal: Ap.s16,
-          ),
-          // A rigid 3 × 2 grid, not Wrap: the split must be the same on
-          // every screen. When verifying by voice, a shifting layout is a
-          // source of errors, and an error here means a missed man in the
-          // middle.
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final (i, row) in fingerprintRows(groups, 3).indexed) ...[
-                if (i > 0) const SizedBox(height: Ap.s16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    for (final g in row)
-                      Flexible(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            g,
-                            style: Ap.mono(
-                              size: 26,
-                              spacing: 3.4,
-                              weight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ],
-          ),
-        ),
-        const SizedBox(height: Ap.s12),
-        Row(
-          children: [
-            Container(width: 7, height: 7, color: Ap.ember400),
-            const SizedBox(width: Ap.s8),
-            Text(
-              l.notVerified,
-              style: t.labelMedium?.copyWith(color: Ap.ember400),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: Ap.s28),
-        _KeyRow(label: l.keySigning, value: identity.signingKeyHex),
-        const SizedBox(height: Ap.s16),
-        _KeyRow(label: l.keyAgreement, value: identity.agreementKeyHex),
-      ],
-    );
-  }
-}
-
-class _KeyRow extends StatelessWidget {
-  const _KeyRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style: Theme.of(context).textTheme.labelMedium,
-              ),
-            ),
-            IconButton(
-              iconSize: 16,
-              visualDensity: VisualDensity.compact,
-              tooltip: l.copy,
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: value));
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text(l.copied)));
-              },
-              icon: const Icon(Icons.content_copy, color: Ap.fog400),
-            ),
-          ],
-        ),
-        const SizedBox(height: Ap.s4),
-        SelectableText(value, style: Ap.mono(size: 12, color: Ap.fog400)),
-      ],
-    );
-  }
-}
-
-class _HonestNote extends StatelessWidget {
-  const _HonestNote({required this.policy});
-
-  final LockPolicy policy;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-    final l = AppLocalizations.of(context);
-    return Container(
-      padding: const EdgeInsets.all(Ap.s16),
-      decoration: BoxDecoration(border: Border.all(color: Ap.stone700)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(l.trueNowTitle, style: t.labelLarge),
-          const SizedBox(height: Ap.s8),
-          Text(l.trueNowBody(policy.explanation(l)), style: t.bodySmall),
-          const SizedBox(height: Ap.s16),
-          Text(l.notYetTitle, style: t.labelLarge),
-          const SizedBox(height: Ap.s8),
-          Text(l.notYetBody, style: t.bodySmall),
-        ],
-      ),
     );
   }
 }

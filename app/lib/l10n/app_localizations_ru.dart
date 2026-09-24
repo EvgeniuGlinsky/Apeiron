@@ -55,11 +55,11 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get notYetTitle => 'ЧЕГО ЕЩЁ НЕТ';
+  String get notYetTitle => 'КАК ИДУТ СООБЩЕНИЯ';
 
   @override
   String get notYetBody =>
-      'Переписки пока нет. В сеть приложение ходит только ради замера DHT на экране самопроверки: тестовые конверты без содержимого.';
+      'Сообщения идут через Mainline DHT — сеть, которой пользуется BitTorrent: у неё нет владельца, и нашего сервера на пути нет. Содержимое защищено; кто с кем говорит — сети видно.';
 
   @override
   String get lockExplainMobile =>
@@ -311,4 +311,217 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get platformBody =>
       'Секретов здесь нет. Это то, что можно переслать целиком.';
+
+  @override
+  String get pinChoiceTitle => 'КАКИМ БУДЕТ ПИН';
+
+  @override
+  String get pinChoiceLength => 'ДЛИНА';
+
+  @override
+  String pinDigits(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count цифры',
+      many: '$count цифр',
+      few: '$count цифры',
+      one: '$count цифра',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get pinChoiceKeyboard => 'КЛАВИАТУРА';
+
+  @override
+  String get pinKeyboardScrambled => 'Перемешанная';
+
+  @override
+  String get pinKeyboardOrdered => 'Обычная';
+
+  @override
+  String get pinRecommendedTag => 'рекомендуем';
+
+  @override
+  String get pinChoiceRecommend =>
+      'Рекомендуем 8 цифр и перемешанную клавиатуру: это самый надёжный вариант.';
+
+  @override
+  String get pinChoiceHonest =>
+      'Тот, кто заберёт этот телефон и получит на нём root, может перебирать пины в его защищённом чипе: 4 цифры падают за минуты, 6 — примерно за полсуток, 8 — примерно за месяц. Перемешанная клавиатура скрывает пин от того, кто видит только ваш палец.';
+
+  @override
+  String get pinChoiceContinue => 'ДАЛЕЕ';
+
+  @override
+  String get pinOrderedNote => 'Экран закрыт от снимков и записи.';
+
+  @override
+  String get settingsTooltip => 'Настройки';
+
+  @override
+  String get settingsTitle => 'НАСТРОЙКИ';
+
+  @override
+  String get settingsPin => 'ПИН';
+
+  @override
+  String get settingsKeyboard => 'Перемешанная клавиатура';
+
+  @override
+  String get settingsKeyboardNote =>
+      'Новая раскладка на каждую попытку. Рекомендуем.';
+
+  @override
+  String get settingsChangePin => 'Сменить пин';
+
+  @override
+  String get settingsChangePinNote =>
+      'Ничего не перешифровывается: под новый пин запечатывается только ключ данных.';
+
+  @override
+  String get settingsIdentity => 'МОЯ ЛИЧНОСТЬ';
+
+  @override
+  String get settingsSelfCheck => 'Самопроверка';
+
+  @override
+  String get changePinTitle => 'СМЕНА ПИНА';
+
+  @override
+  String get pinCurrent => 'ТЕКУЩИЙ ПИН';
+
+  @override
+  String get pinChanged => 'Пин сменён';
+
+  @override
+  String get chatsEmptyTitle => 'ПОКА НИ ОДНОЙ ПЕРЕПИСКИ';
+
+  @override
+  String get chatsEmptyBody =>
+      'Пригласите кого-нибудь или примите приглашение, которое прислали вам. Сообщения идут через DHT BitTorrent: ни один наш сервер их не хранит.';
+
+  @override
+  String get invite => 'ПРИГЛАСИТЬ';
+
+  @override
+  String get acceptInvitation => 'ПРИНЯТЬ ПРИГЛАШЕНИЕ';
+
+  @override
+  String get invitationsWaiting => 'ПРИГЛАШЕНИЯ ЖДУТ ОТВЕТА';
+
+  @override
+  String invitationUntil(String date) {
+    return 'до $date';
+  }
+
+  @override
+  String get contactWaiting => 'ждёт, пока примут';
+
+  @override
+  String get contactNotAccepted => 'приглашение не принято';
+
+  @override
+  String get contactTaken => 'на приглашение первым ответил кто-то другой';
+
+  @override
+  String get contactDamaged => 'переписка повреждена';
+
+  @override
+  String get contactVerified => 'сверено';
+
+  @override
+  String get contactNotVerified => 'не сверено';
+
+  @override
+  String get inviteTitle => 'ПРИГЛАШЕНИЕ';
+
+  @override
+  String get inviteName => 'Для кого (имя, которое вы увидите)';
+
+  @override
+  String get inviteCreate => 'СОЗДАТЬ ПРИГЛАШЕНИЕ';
+
+  @override
+  String get inviteBody =>
+      'Отправьте этот текст любым путём. Кто прочтёт его по дороге, сможет ответить от имени этого человека, поэтому потом сверьте с ним число сверки — лично или голосом.';
+
+  @override
+  String inviteExpires(String date) {
+    return 'Действует до $date.';
+  }
+
+  @override
+  String get inviteWithdraw => 'ОТОЗВАТЬ';
+
+  @override
+  String get acceptPaste => 'Текст приглашения (apeiron:…)';
+
+  @override
+  String get acceptName => 'Имя для контакта';
+
+  @override
+  String get acceptFirst => 'Первое сообщение (необязательно)';
+
+  @override
+  String get acceptButton => 'ПРИНЯТЬ';
+
+  @override
+  String get acceptNote =>
+      'Контакт будет ждать, пока пригласивший не заберёт ваш ответ.';
+
+  @override
+  String get messageHint => 'Сообщение';
+
+  @override
+  String get send => 'Отправить';
+
+  @override
+  String get msgQueued => 'ещё не отправлено';
+
+  @override
+  String get msgSent => 'отправлено';
+
+  @override
+  String get msgDelivered => 'доставлено';
+
+  @override
+  String get msgNotDelivered => 'не доставлено';
+
+  @override
+  String get msgAddressTaken => 'не доставлено: адрес занят';
+
+  @override
+  String get msgLost => 'Часть их сообщений потеряна';
+
+  @override
+  String get chatWaitingNote =>
+      'Приглашение ещё не принято. Писать можно: сообщения подождут.';
+
+  @override
+  String get chatClosedNote => 'Эта переписка больше ничего не принесёт.';
+
+  @override
+  String get chatEmpty => 'Сообщений пока нет.';
+
+  @override
+  String get verifyAction => 'Сверить';
+
+  @override
+  String get verifyTitle => 'ЧИСЛО СВЕРКИ';
+
+  @override
+  String verifyBody(String name) {
+    return 'Сверьте эти цифры с собеседником ($name) — лично или голосом, не через этот чат. Если отличается хоть одна, между вами кто-то есть.';
+  }
+
+  @override
+  String get verifyConfirm => 'ЧИСЛА СОВПАЛИ';
+
+  @override
+  String get verifyUndo => 'СНЯТЬ ОТМЕТКУ';
+
+  @override
+  String get verifiedByYou => 'СВЕРЕНО ВАМИ';
 }

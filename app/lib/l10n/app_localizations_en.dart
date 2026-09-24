@@ -55,11 +55,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get notYetTitle => 'WHAT IS NOT HERE YET';
+  String get notYetTitle => 'HOW MESSAGES TRAVEL';
 
   @override
   String get notYetBody =>
-      'There are no conversations yet. The app goes online only for the DHT measurement on the self-check screen: test envelopes with no content.';
+      'Messages travel through Mainline DHT, the network BitTorrent uses: nobody owns it and no server of ours is in the way. The content is protected; who talks to whom is visible to the network.';
 
   @override
   String get lockExplainMobile =>
@@ -312,4 +312,216 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get platformBody =>
       'There are no secrets here. This is what can be sent as a whole.';
+
+  @override
+  String get pinChoiceTitle => 'HOW THE PIN WILL BE';
+
+  @override
+  String get pinChoiceLength => 'LENGTH';
+
+  @override
+  String pinDigits(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count digits',
+      one: '$count digit',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get pinChoiceKeyboard => 'KEYBOARD';
+
+  @override
+  String get pinKeyboardScrambled => 'Scrambled';
+
+  @override
+  String get pinKeyboardOrdered => 'Usual';
+
+  @override
+  String get pinRecommendedTag => 'recommended';
+
+  @override
+  String get pinChoiceRecommend =>
+      'We recommend 8 digits and the scrambled keyboard: it is the most reliable choice.';
+
+  @override
+  String get pinChoiceHonest =>
+      'Someone who takes this phone and gets root on it can try PINs in its secure chip: 4 digits fall in minutes, 6 in about half a day, 8 in about a month. The scrambled keyboard hides the PIN from someone who sees only your finger.';
+
+  @override
+  String get pinChoiceContinue => 'CONTINUE';
+
+  @override
+  String get pinOrderedNote =>
+      'The screen is closed to screenshots and recording.';
+
+  @override
+  String get settingsTooltip => 'Settings';
+
+  @override
+  String get settingsTitle => 'SETTINGS';
+
+  @override
+  String get settingsPin => 'PIN';
+
+  @override
+  String get settingsKeyboard => 'Scrambled keyboard';
+
+  @override
+  String get settingsKeyboardNote =>
+      'A new layout for every attempt. Recommended.';
+
+  @override
+  String get settingsChangePin => 'Change PIN';
+
+  @override
+  String get settingsChangePinNote =>
+      'Nothing is re-encrypted: only the key of the data is sealed under the new PIN.';
+
+  @override
+  String get settingsIdentity => 'MY IDENTITY';
+
+  @override
+  String get settingsSelfCheck => 'Self-check';
+
+  @override
+  String get changePinTitle => 'CHANGE PIN';
+
+  @override
+  String get pinCurrent => 'CURRENT PIN';
+
+  @override
+  String get pinChanged => 'The PIN is changed';
+
+  @override
+  String get chatsEmptyTitle => 'NO CONVERSATIONS YET';
+
+  @override
+  String get chatsEmptyBody =>
+      'Invite someone, or accept an invitation someone sent you. Messages go through the BitTorrent DHT: no server of ours holds them.';
+
+  @override
+  String get invite => 'INVITE';
+
+  @override
+  String get acceptInvitation => 'ACCEPT AN INVITATION';
+
+  @override
+  String get invitationsWaiting => 'INVITATIONS WAITING FOR AN ANSWER';
+
+  @override
+  String invitationUntil(String date) {
+    return 'until $date';
+  }
+
+  @override
+  String get contactWaiting => 'waiting for them to accept';
+
+  @override
+  String get contactNotAccepted => 'the invitation was not accepted';
+
+  @override
+  String get contactTaken => 'someone else answered the invitation first';
+
+  @override
+  String get contactDamaged => 'the conversation is damaged';
+
+  @override
+  String get contactVerified => 'verified';
+
+  @override
+  String get contactNotVerified => 'not verified';
+
+  @override
+  String get inviteTitle => 'INVITATION';
+
+  @override
+  String get inviteName => 'Who it is for (the name you will see)';
+
+  @override
+  String get inviteCreate => 'CREATE INVITATION';
+
+  @override
+  String get inviteBody =>
+      'Send this text through any channel. Whoever reads it on the way can answer in the person\'s name, so compare the safety number with them afterwards — in person or by voice.';
+
+  @override
+  String inviteExpires(String date) {
+    return 'Valid until $date.';
+  }
+
+  @override
+  String get inviteWithdraw => 'WITHDRAW';
+
+  @override
+  String get acceptPaste => 'Invitation text (apeiron:…)';
+
+  @override
+  String get acceptName => 'Name for this contact';
+
+  @override
+  String get acceptFirst => 'First message (optional)';
+
+  @override
+  String get acceptButton => 'ACCEPT';
+
+  @override
+  String get acceptNote =>
+      'The contact shows as waiting until the person who invited you takes your answer.';
+
+  @override
+  String get messageHint => 'Message';
+
+  @override
+  String get send => 'Send';
+
+  @override
+  String get msgQueued => 'not sent yet';
+
+  @override
+  String get msgSent => 'sent';
+
+  @override
+  String get msgDelivered => 'delivered';
+
+  @override
+  String get msgNotDelivered => 'not delivered';
+
+  @override
+  String get msgAddressTaken => 'not delivered: the address was taken';
+
+  @override
+  String get msgLost => 'Some of their messages were lost';
+
+  @override
+  String get chatWaitingNote =>
+      'They have not accepted yet. You can write: the messages will wait.';
+
+  @override
+  String get chatClosedNote => 'Nothing more will come of this conversation.';
+
+  @override
+  String get chatEmpty => 'No messages yet.';
+
+  @override
+  String get verifyAction => 'Verify';
+
+  @override
+  String get verifyTitle => 'SAFETY NUMBER';
+
+  @override
+  String verifyBody(String name) {
+    return 'Compare these digits with $name — in person or by voice, not through this chat. If even one differs, someone is between you.';
+  }
+
+  @override
+  String get verifyConfirm => 'THE NUMBERS MATCH';
+
+  @override
+  String get verifyUndo => 'TAKE THE MARK BACK';
+
+  @override
+  String get verifiedByYou => 'VERIFIED BY YOU';
 }

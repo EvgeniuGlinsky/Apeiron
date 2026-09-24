@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bare`, `create_identity`, `from_error`, `from_session`, `open_session`, `state`, `waiting`, `with_identity`, `writer`
+// These functions are ignored because they are not marked as `pub`: `bare`, `create_identity`, `from_error`, `from_session`, `open_session`, `state`, `waiting`, `with_identity`, `with_open`, `writer`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Session`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `eq`, `fmt`
 
@@ -24,6 +24,18 @@ Future<VaultStatus> unlockWithPin() =>
 /// Keeps the typed digits as the first entry of a new PIN. Returns their count.
 Future<int> pinSetupFirst() =>
     RustLib.instance.api.crateApiVaultPinSetupFirst();
+
+/// Keeps the typed digits as the current PIN, the first step of changing it. Nothing is
+/// checked yet: the current PIN is tried once, together with the new one, in
+/// [`pin_change_confirm`].
+Future<int> pinChangeCurrent() =>
+    RustLib.instance.api.crateApiVaultPinChangeCurrent();
+
+/// Changes the PIN: the kept current PIN, the new one from [`pin_setup_first`], and the typed
+/// confirmation. The data is not re-encrypted; the database key is sealed under the new PIN.
+/// A wrong current PIN is counted like any wrong PIN.
+Future<VaultStatus> pinChangeConfirm() =>
+    RustLib.instance.api.crateApiVaultPinChangeConfirm();
 
 /// Compares the confirmation with the first entry and, if they match, creates the vault.
 ///

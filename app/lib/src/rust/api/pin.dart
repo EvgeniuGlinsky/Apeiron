@@ -6,7 +6,19 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-/// Starts an attempt: a fresh random layout and an empty pad.
+/// The pad's settings. Readable while the vault is locked: they hold no secret.
+Future<PinPadPrefs> pinPadPrefs() =>
+    RustLib.instance.api.crateApiPinPinPadPrefs();
+
+/// Sets the pad's settings: a length of 4, 6 or 8 digits (0 keeps it unknown) and the layout.
+Future<void> setPinPadPrefs({required int digits, required bool scrambled}) =>
+    RustLib.instance.api.crateApiPinSetPinPadPrefs(
+      digits: digits,
+      scrambled: scrambled,
+    );
+
+/// Starts an attempt: a fresh layout — scrambled unless the owner chose the usual one — and
+/// an empty pad.
 ///
 /// Returns the digit shown at each of the ten positions, in reading order: three rows of
 /// three, then the middle of the bottom row.
@@ -22,3 +34,23 @@ Future<int> pinPadErase() => RustLib.instance.api.crateApiPinPinPadErase();
 
 /// Forgets everything typed, including a pending first entry of a new PIN.
 Future<void> pinPadClear() => RustLib.instance.api.crateApiPinPinPadClear();
+
+/// How the pad looks: the PIN's length, if known, and whether the keys are scrambled.
+class PinPadPrefs {
+  /// 0 when unknown (a PIN set by an earlier build): the pad waits for "done".
+  final int digits;
+  final bool scrambled;
+
+  const PinPadPrefs({required this.digits, required this.scrambled});
+
+  @override
+  int get hashCode => digits.hashCode ^ scrambled.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PinPadPrefs &&
+          runtimeType == other.runtimeType &&
+          digits == other.digits &&
+          scrambled == other.scrambled;
+}

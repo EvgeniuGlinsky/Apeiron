@@ -21,7 +21,7 @@ class PinPad extends StatelessWidget {
     required this.onPress,
     required this.onErase,
     required this.onSubmit,
-    this.minLength = 6,
+    this.minLength = 4,
     this.maxLength = 16,
     this.busy = false,
   });

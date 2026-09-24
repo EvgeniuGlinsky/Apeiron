@@ -67,6 +67,7 @@ void main() {
         PinPad(
           layout: layout,
           entered: entered,
+          minLength: 6,
           onPress: (_) {},
           onErase: () {},
           onSubmit: () => submitted++,

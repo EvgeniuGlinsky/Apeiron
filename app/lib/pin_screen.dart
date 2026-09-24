@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'l10n/app_localizations.dart';
+import 'pin_choice.dart';
 import 'pin_pad.dart';
 import 'src/rust/api/pin.dart';
 import 'src/rust/api/vault.dart';
@@ -15,6 +16,9 @@ import 'vault_status.dart';
 /// by Rust; taps go to Rust as positions; Rust compares the two entries of a
 /// new PIN and runs the hardware chain. What comes back is a [VaultStatus]:
 /// opened, wrong, or wait.
+///
+/// Before a PIN is set, the owner chooses its length and the keyboard
+/// ([PinChoice]). A PIN of known length is submitted at its last digit.
 class PinScreen extends StatefulWidget {
   const PinScreen({super.key, required this.status, required this.onDone});
 
@@ -37,6 +41,12 @@ class _PinScreenState extends State<PinScreen> {
   /// While a new PIN is being set: whether this is the second entry.
   bool _confirming = false;
 
+  /// The pad's settings; `null` until read.
+  PinPadPrefs? _prefs;
+
+  /// While a new PIN is being set: whether its length and keyboard are chosen.
+  bool _chosen = false;
+
   late VaultStatus _status = widget.status;
   String? _error;
 
@@ -45,11 +55,14 @@ class _PinScreenState extends State<PinScreen> {
 
   bool get _setup => needsPinSetup(_status);
 
+  /// Digits of the PIN, 0 if unknown (a PIN set by an earlier build).
+  int get _digits => _prefs?.digits ?? 0;
+
   @override
   void initState() {
     super.initState();
     _startWait(widget.status.waitSeconds);
-    _begin();
+    _load();
   }
 
   @override
@@ -58,6 +71,30 @@ class _PinScreenState extends State<PinScreen> {
     // Whatever was typed and not submitted must not outlive the screen.
     pinPadClear();
     super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final prefs = await pinPadPrefs();
+      if (mounted) setState(() => _prefs = prefs);
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    }
+    if (!_setup) await _begin();
+  }
+
+  Future<void> _choose(int digits, bool scrambled) async {
+    try {
+      await setPinPadPrefs(digits: digits, scrambled: scrambled);
+      if (!mounted) return;
+      setState(() {
+        _prefs = PinPadPrefs(digits: digits, scrambled: scrambled);
+        _chosen = true;
+      });
+      await _begin();
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    }
   }
 
   Future<void> _begin() async {
@@ -87,7 +124,9 @@ class _PinScreenState extends State<PinScreen> {
 
   Future<void> _press(int position) async {
     final n = await pinPadPress(position: position);
-    if (mounted) setState(() => _entered = n);
+    if (!mounted) return;
+    setState(() => _entered = n);
+    if (_digits > 0 && n == _digits && !_busy) await _submit();
   }
 
   Future<void> _erase() async {
@@ -142,6 +181,7 @@ class _PinScreenState extends State<PinScreen> {
     final heading = _setup
         ? (_confirming ? l.pinRepeat : l.pinNew)
         : l.pinEnter;
+    final choosing = _setup && !_chosen;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -161,18 +201,28 @@ class _PinScreenState extends State<PinScreen> {
           Text(_error!, style: t.bodySmall?.copyWith(color: Ap.rust500)),
         ],
         const SizedBox(height: Ap.s28),
-        Text(heading, style: t.labelMedium, textAlign: TextAlign.center),
-        const SizedBox(height: Ap.s16),
-        PinPad(
-          layout: _layout,
-          entered: _entered,
-          busy: _busy || waiting,
-          onPress: _press,
-          onErase: _erase,
-          onSubmit: _submit,
-        ),
-        const SizedBox(height: Ap.s16),
-        Text(l.pinLayoutNote, style: t.bodySmall, textAlign: TextAlign.center),
+        if (choosing)
+          PinChoice(onChosen: _choose)
+        else ...[
+          Text(heading, style: t.labelMedium, textAlign: TextAlign.center),
+          const SizedBox(height: Ap.s16),
+          PinPad(
+            layout: _layout,
+            entered: _entered,
+            busy: _busy || waiting,
+            minLength: _digits > 0 ? _digits : 4,
+            maxLength: _digits > 0 ? _digits : 16,
+            onPress: _press,
+            onErase: _erase,
+            onSubmit: _submit,
+          ),
+          const SizedBox(height: Ap.s16),
+          Text(
+            (_prefs?.scrambled ?? true) ? l.pinLayoutNote : l.pinOrderedNote,
+            style: t.bodySmall,
+            textAlign: TextAlign.center,
+          ),
+        ],
       ],
     );
   }

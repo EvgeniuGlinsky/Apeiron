@@ -185,13 +185,13 @@ abstract class AppLocalizations {
   /// No description provided for @notYetTitle.
   ///
   /// In en, this message translates to:
-  /// **'WHAT IS NOT HERE YET'**
+  /// **'HOW MESSAGES TRAVEL'**
   String get notYetTitle;
 
   /// No description provided for @notYetBody.
   ///
   /// In en, this message translates to:
-  /// **'There are no conversations yet. The app goes online only for the DHT measurement on the self-check screen: test envelopes with no content.'**
+  /// **'Messages travel through Mainline DHT, the network BitTorrent uses: nobody owns it and no server of ours is in the way. The content is protected; who talks to whom is visible to the network.'**
   String get notYetBody;
 
   /// No description provided for @lockExplainMobile.
@@ -601,6 +601,384 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'There are no secrets here. This is what can be sent as a whole.'**
   String get platformBody;
+
+  /// No description provided for @pinChoiceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'HOW THE PIN WILL BE'**
+  String get pinChoiceTitle;
+
+  /// No description provided for @pinChoiceLength.
+  ///
+  /// In en, this message translates to:
+  /// **'LENGTH'**
+  String get pinChoiceLength;
+
+  /// No description provided for @pinDigits.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} digit} other{{count} digits}}'**
+  String pinDigits(int count);
+
+  /// No description provided for @pinChoiceKeyboard.
+  ///
+  /// In en, this message translates to:
+  /// **'KEYBOARD'**
+  String get pinChoiceKeyboard;
+
+  /// No description provided for @pinKeyboardScrambled.
+  ///
+  /// In en, this message translates to:
+  /// **'Scrambled'**
+  String get pinKeyboardScrambled;
+
+  /// No description provided for @pinKeyboardOrdered.
+  ///
+  /// In en, this message translates to:
+  /// **'Usual'**
+  String get pinKeyboardOrdered;
+
+  /// No description provided for @pinRecommendedTag.
+  ///
+  /// In en, this message translates to:
+  /// **'recommended'**
+  String get pinRecommendedTag;
+
+  /// No description provided for @pinChoiceRecommend.
+  ///
+  /// In en, this message translates to:
+  /// **'We recommend 8 digits and the scrambled keyboard: it is the most reliable choice.'**
+  String get pinChoiceRecommend;
+
+  /// No description provided for @pinChoiceHonest.
+  ///
+  /// In en, this message translates to:
+  /// **'Someone who takes this phone and gets root on it can try PINs in its secure chip: 4 digits fall in minutes, 6 in about half a day, 8 in about a month. The scrambled keyboard hides the PIN from someone who sees only your finger.'**
+  String get pinChoiceHonest;
+
+  /// No description provided for @pinChoiceContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'CONTINUE'**
+  String get pinChoiceContinue;
+
+  /// No description provided for @pinOrderedNote.
+  ///
+  /// In en, this message translates to:
+  /// **'The screen is closed to screenshots and recording.'**
+  String get pinOrderedNote;
+
+  /// No description provided for @settingsTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get settingsTooltip;
+
+  /// No description provided for @settingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'SETTINGS'**
+  String get settingsTitle;
+
+  /// No description provided for @settingsPin.
+  ///
+  /// In en, this message translates to:
+  /// **'PIN'**
+  String get settingsPin;
+
+  /// No description provided for @settingsKeyboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Scrambled keyboard'**
+  String get settingsKeyboard;
+
+  /// No description provided for @settingsKeyboardNote.
+  ///
+  /// In en, this message translates to:
+  /// **'A new layout for every attempt. Recommended.'**
+  String get settingsKeyboardNote;
+
+  /// No description provided for @settingsChangePin.
+  ///
+  /// In en, this message translates to:
+  /// **'Change PIN'**
+  String get settingsChangePin;
+
+  /// No description provided for @settingsChangePinNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing is re-encrypted: only the key of the data is sealed under the new PIN.'**
+  String get settingsChangePinNote;
+
+  /// No description provided for @settingsIdentity.
+  ///
+  /// In en, this message translates to:
+  /// **'MY IDENTITY'**
+  String get settingsIdentity;
+
+  /// No description provided for @settingsSelfCheck.
+  ///
+  /// In en, this message translates to:
+  /// **'Self-check'**
+  String get settingsSelfCheck;
+
+  /// No description provided for @changePinTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'CHANGE PIN'**
+  String get changePinTitle;
+
+  /// No description provided for @pinCurrent.
+  ///
+  /// In en, this message translates to:
+  /// **'CURRENT PIN'**
+  String get pinCurrent;
+
+  /// No description provided for @pinChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'The PIN is changed'**
+  String get pinChanged;
+
+  /// No description provided for @chatsEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'NO CONVERSATIONS YET'**
+  String get chatsEmptyTitle;
+
+  /// No description provided for @chatsEmptyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite someone, or accept an invitation someone sent you. Messages go through the BitTorrent DHT: no server of ours holds them.'**
+  String get chatsEmptyBody;
+
+  /// No description provided for @invite.
+  ///
+  /// In en, this message translates to:
+  /// **'INVITE'**
+  String get invite;
+
+  /// No description provided for @acceptInvitation.
+  ///
+  /// In en, this message translates to:
+  /// **'ACCEPT AN INVITATION'**
+  String get acceptInvitation;
+
+  /// No description provided for @invitationsWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'INVITATIONS WAITING FOR AN ANSWER'**
+  String get invitationsWaiting;
+
+  /// No description provided for @invitationUntil.
+  ///
+  /// In en, this message translates to:
+  /// **'until {date}'**
+  String invitationUntil(String date);
+
+  /// No description provided for @contactWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'waiting for them to accept'**
+  String get contactWaiting;
+
+  /// No description provided for @contactNotAccepted.
+  ///
+  /// In en, this message translates to:
+  /// **'the invitation was not accepted'**
+  String get contactNotAccepted;
+
+  /// No description provided for @contactTaken.
+  ///
+  /// In en, this message translates to:
+  /// **'someone else answered the invitation first'**
+  String get contactTaken;
+
+  /// No description provided for @contactDamaged.
+  ///
+  /// In en, this message translates to:
+  /// **'the conversation is damaged'**
+  String get contactDamaged;
+
+  /// No description provided for @contactVerified.
+  ///
+  /// In en, this message translates to:
+  /// **'verified'**
+  String get contactVerified;
+
+  /// No description provided for @contactNotVerified.
+  ///
+  /// In en, this message translates to:
+  /// **'not verified'**
+  String get contactNotVerified;
+
+  /// No description provided for @inviteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'INVITATION'**
+  String get inviteTitle;
+
+  /// No description provided for @inviteName.
+  ///
+  /// In en, this message translates to:
+  /// **'Who it is for (the name you will see)'**
+  String get inviteName;
+
+  /// No description provided for @inviteCreate.
+  ///
+  /// In en, this message translates to:
+  /// **'CREATE INVITATION'**
+  String get inviteCreate;
+
+  /// No description provided for @inviteBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Send this text through any channel. Whoever reads it on the way can answer in the person\'s name, so compare the safety number with them afterwards — in person or by voice.'**
+  String get inviteBody;
+
+  /// No description provided for @inviteExpires.
+  ///
+  /// In en, this message translates to:
+  /// **'Valid until {date}.'**
+  String inviteExpires(String date);
+
+  /// No description provided for @inviteWithdraw.
+  ///
+  /// In en, this message translates to:
+  /// **'WITHDRAW'**
+  String get inviteWithdraw;
+
+  /// No description provided for @acceptPaste.
+  ///
+  /// In en, this message translates to:
+  /// **'Invitation text (apeiron:…)'**
+  String get acceptPaste;
+
+  /// No description provided for @acceptName.
+  ///
+  /// In en, this message translates to:
+  /// **'Name for this contact'**
+  String get acceptName;
+
+  /// No description provided for @acceptFirst.
+  ///
+  /// In en, this message translates to:
+  /// **'First message (optional)'**
+  String get acceptFirst;
+
+  /// No description provided for @acceptButton.
+  ///
+  /// In en, this message translates to:
+  /// **'ACCEPT'**
+  String get acceptButton;
+
+  /// No description provided for @acceptNote.
+  ///
+  /// In en, this message translates to:
+  /// **'The contact shows as waiting until the person who invited you takes your answer.'**
+  String get acceptNote;
+
+  /// No description provided for @messageHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Message'**
+  String get messageHint;
+
+  /// No description provided for @send.
+  ///
+  /// In en, this message translates to:
+  /// **'Send'**
+  String get send;
+
+  /// No description provided for @msgQueued.
+  ///
+  /// In en, this message translates to:
+  /// **'not sent yet'**
+  String get msgQueued;
+
+  /// No description provided for @msgSent.
+  ///
+  /// In en, this message translates to:
+  /// **'sent'**
+  String get msgSent;
+
+  /// No description provided for @msgDelivered.
+  ///
+  /// In en, this message translates to:
+  /// **'delivered'**
+  String get msgDelivered;
+
+  /// No description provided for @msgNotDelivered.
+  ///
+  /// In en, this message translates to:
+  /// **'not delivered'**
+  String get msgNotDelivered;
+
+  /// No description provided for @msgAddressTaken.
+  ///
+  /// In en, this message translates to:
+  /// **'not delivered: the address was taken'**
+  String get msgAddressTaken;
+
+  /// No description provided for @msgLost.
+  ///
+  /// In en, this message translates to:
+  /// **'Some of their messages were lost'**
+  String get msgLost;
+
+  /// No description provided for @chatWaitingNote.
+  ///
+  /// In en, this message translates to:
+  /// **'They have not accepted yet. You can write: the messages will wait.'**
+  String get chatWaitingNote;
+
+  /// No description provided for @chatClosedNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing more will come of this conversation.'**
+  String get chatClosedNote;
+
+  /// No description provided for @chatEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No messages yet.'**
+  String get chatEmpty;
+
+  /// No description provided for @verifyAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Verify'**
+  String get verifyAction;
+
+  /// No description provided for @verifyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'SAFETY NUMBER'**
+  String get verifyTitle;
+
+  /// No description provided for @verifyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Compare these digits with {name} — in person or by voice, not through this chat. If even one differs, someone is between you.'**
+  String verifyBody(String name);
+
+  /// No description provided for @verifyConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'THE NUMBERS MATCH'**
+  String get verifyConfirm;
+
+  /// No description provided for @verifyUndo.
+  ///
+  /// In en, this message translates to:
+  /// **'TAKE THE MARK BACK'**
+  String get verifyUndo;
+
+  /// No description provided for @verifiedByYou.
+  ///
+  /// In en, this message translates to:
+  /// **'VERIFIED BY YOU'**
+  String get verifiedByYou;
 }
 
 class _AppLocalizationsDelegate
