@@ -1,32 +1,33 @@
-/// Что говорить человеку про хранилище ключа.
+/// What to tell a person about the key vault.
 ///
-/// Логика вынесена из виджета по образцу [lock_policy.dart] и по той же
-/// причине: она проверяется тестами, а экран без собранной нативной библиотеки
-/// не проверить вовсе. Правило оттуда же переносится буквально — **текст обязан
-/// совпадать с поведением**.
+/// The logic is split out of the widget following [lock_policy.dart] and for
+/// the same reason: it is checked by tests, while the screen cannot be checked
+/// at all without a built native library. The rule from there carries over
+/// literally — **the text must match the behaviour**.
 ///
-/// Формулировки здесь не украшение. Таблица в `docs/threat-log.md` прямо
-/// запрещает обещать больше, чем сделано, и эта задача закрывает меньше, чем
-/// кажется: она даёт привязку к устройству и непригодность скопированного
-/// каталога данных, но **не** защищает от телефона, отобранного
-/// разблокированным. Это закроет пин, и до тех пор так и надо говорить.
+/// The wording here is not decoration. The table in `docs/threat-log.md`
+/// explicitly forbids promising more than has been done, and this task covers
+/// less than it seems: it gives binding to the device and makes a copied data
+/// directory useless, but does **not** protect against a phone taken away
+/// while unlocked. The PIN will cover that, and until then that is what must
+/// be said.
 library;
 
 import 'src/rust/api/vault.dart' show VaultState, VaultStatus;
 
-/// Насколько серьёзно положение.
+/// How serious the state is.
 enum VaultTone {
-  /// Всё как задумано.
+  /// Everything as designed.
   good,
 
-  /// Работает, но слабее обещанного. Молчать об этом нельзя.
+  /// Works, but weaker than promised. Staying silent about it is not allowed.
   warning,
 
-  /// Дальше без решения человека не продолжить.
+  /// Cannot go further without the person's decision.
   blocked,
 }
 
-/// Готовый текст для экрана.
+/// Ready-made text for the screen.
 class VaultMessage {
   const VaultMessage({
     required this.tone,
@@ -35,27 +36,28 @@ class VaultMessage {
     required this.action,
   });
 
-  /// Тон: зелёное, предупреждение или тупик.
+  /// Tone: green, warning or dead end.
   final VaultTone tone;
 
-  /// Заголовок в одну строку.
+  /// A one-line heading.
   final String title;
 
-  /// Объяснение. Не смягчает и не обещает лишнего.
+  /// Explanation. Neither softens nor over-promises.
   final String detail;
 
-  /// Что человек может сделать. Пустая строка, если делать нечего.
+  /// What the person can do. Empty string if there is nothing to do.
   final String action;
 }
 
-/// Название уровня вместе с сырым числом.
+/// Level name together with the raw number.
 ///
-/// Сырое число показывается рядом намеренно: значений у системы пять, а не три,
-/// и незнакомое должно быть видно, а не подменяться ближайшим знакомым.
+/// The raw number is shown alongside on purpose: the system has five values,
+/// not three, and an unfamiliar one must be visible rather than replaced by
+/// the nearest familiar one.
 String levelLabel(VaultStatus status) =>
     '${status.levelName} (${status.levelRaw})';
 
-/// Что показывать при текущем положении хранилища.
+/// What to show for the current state of the vault.
 VaultMessage describeVault(VaultStatus status) {
   switch (status.state) {
     case VaultState.keyGone:
@@ -110,8 +112,8 @@ VaultMessage describeVault(VaultStatus status) {
 
 VaultMessage _opened(VaultStatus status) {
   if (!status.hardwareBacked) {
-    // R-002 прямо требует: где аппаратного хранилища нет — честное
-    // предупреждение, а не молчаливый откат к слабой схеме.
+    // R-002 explicitly requires: where there is no hardware keystore — an
+    // honest warning, not a silent fallback to a weak scheme.
     return VaultMessage(
       tone: VaultTone.warning,
       title: 'Ключ не в железе',
@@ -136,13 +138,14 @@ VaultMessage _opened(VaultStatus status) {
   );
 }
 
-/// Можно ли предлагать «начать заново».
+/// Whether "start over" may be offered.
 ///
-/// Ровно одно положение даёт на это право. Предложить стереть всё при
-/// преходящем сбое прошивки — значит уничтожить переписку владельца за него.
+/// Exactly one state gives the right to it. Offering to erase everything on a
+/// transient firmware failure means destroying the owner's messages on their
+/// behalf.
 bool mayOfferFreshStart(VaultStatus status) =>
     status.state == VaultState.keyGone;
 
-/// Надо ли показывать предупреждение рядом с обычным экраном.
+/// Whether to show a warning next to the normal screen.
 bool needsHonestWarning(VaultStatus status) =>
     describeVault(status).tone != VaultTone.good;

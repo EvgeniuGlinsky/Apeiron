@@ -1,39 +1,40 @@
-/// Сборка ресурсов иконки запуска Android из того же контура, что и в приложении.
+/// Builds the Android launcher icon resources from the same outline as the app.
 ///
-/// Здесь только чистые функции, возвращающие содержимое файлов; запись —
-/// в `gen_android_icon.dart`, проверка — в `test/android_icon_test.dart`.
-/// Разделение нужно ровно для того, чтобы тест мог сверить лежащие в репозитории
-/// ресурсы с тем, что генератор выдал бы сейчас.
+/// Only pure functions returning file contents live here; writing is in
+/// `gen_android_icon.dart`, checking is in `test/android_icon_test.dart`.
+/// The split exists precisely so that the test can compare the resources in the
+/// repository against what the generator would produce now.
 ///
-/// **Растеризации нет.** Android принимает тот же синтаксис `pathData`, что и
-/// SVG, поэтому иконка — это те же координаты, пересчитанные один раз.
-/// Прошлые два подхода (генератор на `flutter_test`, headless-браузер) ломались
-/// именно на растеризации и масштабе; здесь ломаться нечему.
+/// **There is no rasterisation.** Android accepts the same `pathData` syntax as
+/// SVG, so the icon is the same coordinates, recomputed once.
+/// The previous two approaches (a `flutter_test` generator, a headless browser)
+/// broke precisely on rasterisation and scale; here there is nothing to break.
 library;
 
 import 'package:apeiron/brand/mark_geometry.dart';
 import 'package:apeiron/brand/raven_path.dart';
 import 'package:apeiron/path_data.dart';
 
-/// Поле адаптивной иконки — 108 dp.
+/// The adaptive icon field is 108 dp.
 const double adaptiveViewport = 108;
 
-/// Из поля система показывает центральные 72 dp: под круглой маской —
-/// круг того же диаметра. Это и есть подложка, роль которой в приложении
-/// играет круг `ApeironAppIcon`.
+/// Of the field the system shows the central 72 dp: under a round mask, a
+/// circle of that diameter. This is the backplate, whose role in the app is
+/// played by the `ApeironAppIcon` circle.
 const double adaptiveMask = 72;
 
-/// Цвета марки в записи Android.
+/// Brand mark colours in Android notation.
 ///
-/// Дублируют `Ap.basalt900` и `Ap.bone100` из `theme/tokens.dart`: тот файл
-/// тянет Flutter, а генератор работает без него. Расхождение ловит тест
-/// `android_icon_test.dart` — дублирование здесь объявленное, не случайное.
+/// They duplicate `Ap.basalt900` and `Ap.bone100` from `theme/tokens.dart`:
+/// that file pulls in Flutter, and the generator works without it. A mismatch
+/// is caught by the `android_icon_test.dart` test — the duplication here is
+/// declared, not accidental.
 const String basaltHex = '#FF12161A';
 const String boneHex = '#FFE8E6E1';
 
-/// Ворон в том же положении, в каком его рисует `ApeironRaven`:
-/// флип вывода potrace, затем зеркало, затем разворот. Порядок обязателен —
-/// зеркало меняет направление вращения на обратное.
+/// The raven in the same position `ApeironRaven` draws it in:
+/// the potrace output flip, then the mirror, then the rotation. The order is
+/// mandatory — the mirror reverses the direction of rotation.
 List<PathSeg> ravenShape() {
   var s = parsePathData(ravenPathData);
   s = transformPathData(s, const Aff.scale(1, ravenSourceFlipY));
@@ -41,28 +42,30 @@ List<PathSeg> ravenShape() {
   return rotateData(s, ravenDefaultPitch);
 }
 
-/// Квадрат, в который вписана птица на подложке диаметра [shellDiameter].
+/// The square the bird is fitted into on a backplate of diameter
+/// [shellDiameter].
 ///
-/// То же, что делает `ApeironAppIcon`: он кладёт `ApeironRaven` размером
-/// `iconGlyphScale` от подложки по её центру.
+/// Same as what `ApeironAppIcon` does: it places `ApeironRaven` at
+/// `iconGlyphScale` of the backplate, at its centre.
 Box glyphBox(double shellDiameter) => Box.square(
   adaptiveViewport / 2,
   adaptiveViewport / 2,
   iconGlyphScale * shellDiameter,
 );
 
-/// Ворон, вписанный в подложку диаметра [shellDiameter] по центру поля
-/// [adaptiveViewport], — ровно как `ApeironAppIcon` вписывает его в круг.
+/// The raven fitted into a backplate of diameter [shellDiameter] at the centre
+/// of the [adaptiveViewport] field — exactly as `ApeironAppIcon` fits it into
+/// the circle.
 List<PathSeg> ravenFittedToShell(double shellDiameter) =>
     fitData(ravenShape(), glyphBox(shellDiameter));
 
-/// Круг подложки на всё поле — для устройств до Android 8, где маски нет
-/// и рисовать её приходится самому.
+/// The backplate circle over the whole field — for devices before Android 8,
+/// where there is no mask and it has to be drawn by hand.
 List<PathSeg> shellCircle() {
   const r = adaptiveViewport / 2;
   const c = adaptiveViewport / 2;
-  // Четверть окружности приближается кубикой с плечом k·r; k = 0,5523 —
-  // классическое значение, ошибка меньше 0,02 % радиуса.
+  // A quarter circle is approximated by a cubic with handle k·r; k = 0.5523 is
+  // the classic value, error under 0.02 % of the radius.
   const k = 0.5522847498307936 * r;
   return const [
     MoveSeg(c, 0),
@@ -82,8 +85,8 @@ List<PathSeg> shellCircle() {
 }
 
 const String _warning =
-    '<!-- СГЕНЕРИРОВАНО из assets/brand/raven-corvus-corax-cc0.svg — руками не править.\n'
-    '     Пересобрать: cd app && dart run tool/gen_android_icon.dart -->';
+    '<!-- GENERATED from assets/brand/raven-corvus-corax-cc0.svg — do not edit by hand.\n'
+    '     Regenerate: cd app && dart run tool/gen_android_icon.dart -->';
 
 String _vector(String body) =>
     '''<?xml version="1.0" encoding="utf-8"?>
@@ -102,18 +105,18 @@ String _path(List<PathSeg> segs, String fill) =>
     '        android:fillColor="$fill"\n'
     '        android:pathData="${formatPathData(segs)}" />';
 
-/// Передний слой адаптивной иконки: одна птица на прозрачном поле.
-/// Подложку рисует система из цвета, маску накладывает тоже она.
+/// Foreground layer of the adaptive icon: a single bird on a transparent field.
+/// The system draws the backplate from the colour, and applies the mask too.
 String foregroundXml() =>
     _vector(_path(ravenFittedToShell(adaptiveMask), boneHex));
 
-/// Монохромный слой (Android 13 и новее, «тематические иконки»):
-/// та же геометрия, цвет система заменит своим.
+/// Monochrome layer (Android 13 and newer, "themed icons"):
+/// the same geometry; the system replaces the colour with its own.
 String monochromeXml() =>
     _vector(_path(ravenFittedToShell(adaptiveMask), '#FFFFFFFF'));
 
-/// Иконка целиком для Android 7, где адаптивных иконок ещё нет:
-/// круг подложки и птица на нём.
+/// The whole icon for Android 7, where there are no adaptive icons yet:
+/// the backplate circle and the bird on it.
 String legacyXml() => _vector(
   '${_path(shellCircle(), basaltHex)}\n'
   '${_path(ravenFittedToShell(adaptiveViewport), boneHex)}',
@@ -137,8 +140,8 @@ $_warning
 </resources>
 ''';
 
-/// Заставка запуска: тот же басальт. Белая заставка Flutter по умолчанию
-/// вспыхивает перед тёмным приложением — это видно и это дефект.
+/// Launch screen: the same basalt. Flutter's default white launch screen
+/// flashes before the dark app — it is visible, and it is a defect.
 String launchBackgroundXml() =>
     '''<?xml version="1.0" encoding="utf-8"?>
 $_warning
@@ -147,7 +150,7 @@ $_warning
 </layer-list>
 ''';
 
-/// Что и куда кладём. Путь — от каталога `app/`.
+/// What goes where. Paths are relative to the `app/` directory.
 Map<String, String> androidIconFiles() => {
   'android/app/src/main/res/values/ic_launcher_background.xml':
       backgroundColorXml(),
@@ -156,8 +159,8 @@ Map<String, String> androidIconFiles() => {
   'android/app/src/main/res/drawable/ic_launcher_monochrome.xml':
       monochromeXml(),
   'android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml': adaptiveXml(),
-  // Без `-v26`: квалификатор `anydpi` понимают с Android 5, а нижняя
-  // граница проекта — Android 7. Плотностные PNG не нужны вовсе.
+  // No `-v26`: the `anydpi` qualifier is understood since Android 5, and the
+  // project's lower bound is Android 7. Density-specific PNGs are not needed.
   'android/app/src/main/res/mipmap-anydpi/ic_launcher.xml': legacyXml(),
   'android/app/src/main/res/drawable/launch_background.xml':
       launchBackgroundXml(),

@@ -8,16 +8,16 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart' show FontLoader, rootBundle;
 import 'package:flutter_test/flutter_test.dart';
 
-/// Инструмент, а не тест: выкладывает надпись APEIRON в разных размерах и на
-/// разных фонах.
+/// A tool, not a test: lays out the APEIRON wordmark at various sizes and on
+/// various backgrounds.
 ///
 ///     flutter test test/wordmark_sheet.dart
 ///
-/// Результат — `build/mark/wordmark-sheet.png`.
+/// Output — `build/mark/wordmark-sheet.png`.
 ///
-/// Имя без суффикса `_test` намеренно — см. `mark_sheet.dart`.
+/// The name lacks the `_test` suffix on purpose — see `mark_sheet.dart`.
 void main() {
-  testWidgets('лист логотипа-надписи', (tester) async {
+  testWidgets('wordmark sheet', (tester) async {
     await (FontLoader(
       'Inter',
     )..addFont(rootBundle.load('assets/fonts/Inter-SemiBold.otf'))).load();
@@ -52,7 +52,7 @@ void main() {
 
     expect(out.lengthSync(), greaterThan(0));
     // ignore: avoid_print
-    print('Лист надписи: ${out.absolute.path}');
+    print('Wordmark sheet: ${out.absolute.path}');
   });
 }
 
@@ -76,12 +76,12 @@ class _Sheet extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('КРУПНО — ФОРМА БУКВ', style: _label),
+            const Text('LARGE — LETTER SHAPES', style: _label),
             const SizedBox(height: 16),
             const ApeironWordmark(height: 96),
             const SizedBox(height: 34),
 
-            const Text('РАБОЧИЕ РАЗМЕРЫ', style: _label),
+            const Text('WORKING SIZES', style: _label),
             const SizedBox(height: 16),
             for (final h in [44.0, 28.0, 20.0, 14.0]) ...[
               Row(
@@ -95,11 +95,11 @@ class _Sheet extends StatelessWidget {
             ],
             const SizedBox(height: 16),
 
-            const Text('ФОНЫ И ТОЛЩИНА ШТРИХА', style: _label),
+            const Text('BACKGROUNDS AND STROKE WEIGHT', style: _label),
             const SizedBox(height: 16),
             Row(
               children: [
-                // Светлый: печать и светлая тема — половина применений.
+                // Light: print and the light theme — half of all uses.
                 Container(
                   width: 360,
                   height: 110,
@@ -108,7 +108,7 @@ class _Sheet extends StatelessWidget {
                   child: const ApeironWordmark(height: 34, color: Ap.basalt900),
                 ),
                 const SizedBox(width: 22),
-                // Акцентный — как в шапке приложения.
+                // Accent — as in the app bar.
                 Container(
                   width: 360,
                   height: 110,
@@ -120,8 +120,8 @@ class _Sheet extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 22),
-                // Тоньше и толще: проверка, при какой толщине заплывают
-                // внутренние просветы P, R и O.
+                // Thinner and thicker: checking at what weight the counters
+                // of P, R and O fill in.
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: const [

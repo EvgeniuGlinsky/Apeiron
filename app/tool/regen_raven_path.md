@@ -1,12 +1,12 @@
-# Как пересобрать `lib/brand/raven_path.dart`
+# How to regenerate `lib/brand/raven_path.dart`
 
-Файл сгенерирован из `assets/brand/raven-corvus-corax-cc0.svg` и правиться руками не должен:
-любая ручная правка потеряется при следующей пересборке и, что хуже, разойдётся с исходником,
-на который ссылается `PROVENANCE.md`.
+The file is generated from `assets/brand/raven-corvus-corax-cc0.svg` and must not be edited by hand:
+any manual edit will be lost on the next regeneration and, worse, will diverge from the source
+that `PROVENANCE.md` refers to.
 
-## Что внутри исходного SVG
+## What is inside the source SVG
 
-Это вывод potrace, и устроен он всегда одинаково:
+It is potrace output, and it is always structured the same way:
 
 ```xml
 <svg width="1247.000000pt" height="1451.000000pt" viewBox="0 0 1247.000000 1451.000000">
@@ -16,27 +16,27 @@
 </svg>
 ```
 
-Существенны две вещи:
+Two things matter:
 
-1. **атрибут `d` единственного `<path>`** — он и становится константой `ravenPathData`;
-2. **знак масштаба по Y в `transform` группы** — у potrace он отрицательный, и без обратного
-   флипа птица летит вверх ногами. Это константа `ravenSourceFlipY`.
+1. **the `d` attribute of the single `<path>`** — it becomes the `ravenPathData` constant;
+2. **the sign of the Y scale in the group `transform`** — potrace makes it negative, and without
+   flipping it back the bird flies upside down. This is the `ravenSourceFlipY` constant.
 
-Всё остальное из `transform` (сдвиг и величина масштаба) не нужно: `fitPath` вписывает контур
-в поле и пересчитывает их сам. Размеры в **пунктах**, а не в пикселях, — именно на этом
-споткнулся подход с headless-браузером, получивший неверный масштаб.
+Everything else in the `transform` (the translation and the scale magnitude) is not needed:
+`fitPath` fits the outline into the field and recomputes them itself. Sizes are in **points**, not
+pixels — this is exactly what tripped up the headless-browser approach, which got the wrong scale.
 
-## Порядок
+## Procedure
 
-1. Положить новый SVG в `assets/brand/`, обновить `PROVENANCE.md` (источник, автор, лицензия,
-   дата проверки). Лицензию сверять на странице самого изображения, а не подборки.
-2. Проверить, что путь состоит только из команд `M m L l H h V v C c Z z`. Разбор
-   (`lib/path_data.dart`) остальные бросает с `FormatException`, а не рисует молча неверное.
-   Inkscape умеет упрощать до кубик: «Путь → Упростить» с последующим сохранением как
-   «Обычный SVG».
-3. Перенести `d` в `ravenPathData`, знак масштаба по Y — в `ravenSourceFlipY`, шапку файла
-   оставить как есть.
-4. Пересобрать иконку запуска: `dart run tool/gen_android_icon.dart`.
-5. Прогнать `flutter test` и посмотреть глазами:
-   `flutter test test/raven_sheet.dart` и `flutter test test/android_icon_sheet.dart`
-   (эти два процесса не завершаются — ждать появления PNG в `build/mark/`, а не выхода).
+1. Put the new SVG into `assets/brand/`, update `PROVENANCE.md` (source, author, licence,
+   date checked). Verify the licence on the page of the image itself, not of the collection.
+2. Check that the path consists only of the commands `M m L l H h V v C c Z z`. The parser
+   (`lib/path_data.dart`) throws `FormatException` on the others rather than silently drawing
+   something wrong. Inkscape can simplify down to cubics: "Path → Simplify", then save as
+   "Plain SVG".
+3. Move `d` into `ravenPathData` and the sign of the Y scale into `ravenSourceFlipY`; leave the
+   file header as is.
+4. Regenerate the launcher icon: `dart run tool/gen_android_icon.dart`.
+5. Run `flutter test` and look with your own eyes:
+   `flutter test test/raven_sheet.dart` and `flutter test test/android_icon_sheet.dart`
+   (these two processes do not exit — wait for the PNGs to appear in `build/mark/`, not for the exit).

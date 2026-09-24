@@ -2,11 +2,11 @@ import 'package:apeiron/lock_policy.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Проверка того, когда личность запирается сама.
+/// Test of when the identity locks by itself.
 ///
-/// Логика короткая, но ошибка в ней не видна: незапертая личность выглядит
-/// точно так же, как запертая вовремя. Поэтому она отделена от виджета
-/// и проверяется здесь целиком.
+/// The logic is short, but a mistake in it is invisible: an unlocked identity
+/// looks exactly like one locked on time. So it is separated from the widget
+/// and tested here in full.
 void main() {
   const mobile = [
     TargetPlatform.android,
@@ -19,8 +19,8 @@ void main() {
     TargetPlatform.linux,
   ];
 
-  group('телефон', () {
-    test('запирается при потере фокуса — решение R-001', () {
+  group('phone', () {
+    test('locks on focus loss — decision R-001', () {
       for (final p in mobile) {
         final policy = LockPolicy.of(p);
         expect(
@@ -38,15 +38,15 @@ void main() {
       }
     });
 
-    test('таймера бездействия нет: его роль играет гашение экрана', () {
+    test('no idle timer: the screen turning off plays its role', () {
       for (final p in mobile) {
         expect(LockPolicy.of(p).idleTimeout, isNull, reason: '$p');
       }
     });
   });
 
-  group('рабочий стол', () {
-    test('переключение на другое окно личность не трогает', () {
+  group('desktop', () {
+    test('switching to another window leaves the identity alone', () {
       for (final p in desktop) {
         expect(
           LockPolicy.of(p).locksOn(AppLifecycleState.inactive),
@@ -56,7 +56,7 @@ void main() {
       }
     });
 
-    test('свёрнутое окно и уход приложения запирают', () {
+    test('a minimised window and the app leaving both lock', () {
       for (final p in desktop) {
         final policy = LockPolicy.of(p);
         expect(policy.locksOn(AppLifecycleState.hidden), isTrue, reason: '$p');
@@ -69,17 +69,17 @@ void main() {
       }
     });
 
-    test('вместо фокуса — таймер бездействия', () {
+    test('an idle timer instead of focus', () {
       for (final p in desktop) {
         final timeout = LockPolicy.of(p).idleTimeout;
         expect(timeout, isNotNull, reason: '$p');
-        // Не «какое-нибудь» время: минуты, а не часы и не секунды.
+        // Not "just any" time: minutes, not hours and not seconds.
         expect(timeout!.inMinutes, inInclusiveRange(1, 15), reason: '$p');
       }
     });
   });
 
-  test('возврат в работу не запирает ни на одной платформе', () {
+  test('resuming does not lock on any platform', () {
     for (final p in [...mobile, ...desktop]) {
       expect(
         LockPolicy.of(p).locksOn(AppLifecycleState.resumed),
@@ -89,21 +89,21 @@ void main() {
     }
   });
 
-  group('объяснение совпадает с поведением', () {
-    test('на телефоне обещан фон', () {
+  group('explanation matches behaviour', () {
+    test('on the phone, background is promised', () {
       expect(
         LockPolicy.of(TargetPlatform.android).explanation,
         contains('фон'),
       );
     });
 
-    test('на рабочем столе обещаны окно и срок, и он назван честно', () {
+    test('desktop: window and timeout promised, timeout named honestly', () {
       final policy = LockPolicy.of(TargetPlatform.windows);
       expect(policy.explanation, contains('свёрнут'));
       expect(
         policy.explanation,
         contains('${policy.idleTimeout!.inMinutes} минут'),
-        reason: 'в тексте должен стоять тот же срок, что и в коде',
+        reason: 'the text must state the same timeout as the code',
       );
       expect(policy.explanation, isNot(contains('в фон')));
     });

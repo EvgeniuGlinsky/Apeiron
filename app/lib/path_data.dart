@@ -1,23 +1,25 @@
-/// Атрибут `d` как числа: разбор, преобразования, обратная запись.
+/// The `d` attribute as numbers: parsing, transforms, writing back.
 ///
-/// Зачем отдельно от `svg_path.dart`: Android принимает **тот же синтаксис**
-/// в `android:pathData`, поэтому иконку запуска не нужно растеризовать —
-/// достаточно повторить те же преобразования и выписать координаты обратно.
-/// Для этого путь нужен списком чисел, а не непрозрачным `Path`, и без
-/// `dart:ui`: генератор иконки запускается обычным `dart run`, вне Flutter.
+/// Why separate from `svg_path.dart`: Android accepts **the same syntax** in
+/// `android:pathData`, so the launcher icon does not need rasterising — it is
+/// enough to repeat the same transforms and write the coordinates back out.
+/// For that the path is needed as a list of numbers, not an opaque `Path`, and
+/// without `dart:ui`: the icon generator runs under plain `dart run`, outside
+/// Flutter.
 ///
-/// `svg_path.dart` построен поверх этого файла, так что разбор один на всех:
-/// то, что рисует приложение, и то, что уходит в иконку, читается из одной
-/// строки одним кодом. Разойтись они не могут.
+/// `svg_path.dart` is built on top of this file, so there is one parser for
+/// all: what the app draws and what goes into the icon are read from one
+/// string by one piece of code. They cannot diverge.
 ///
-/// Поддержаны команды `M m L l H h V v C c Z z` — этого хватает для вывода
-/// potrace и Inkscape. Встретив неподдержанную (`S Q T A`), разбор бросает
-/// [FormatException] с указанием команды, а не рисует молча неправильное.
+/// Supported commands are `M m L l H h V v C c Z z` — enough for potrace and
+/// Inkscape output. On meeting an unsupported one (`S Q T A`), the parser
+/// throws [FormatException] naming the command, rather than silently drawing
+/// something wrong.
 library;
 
 import 'dart:math' as math;
 
-/// Сегмент пути в абсолютных координатах.
+/// A path segment in absolute coordinates.
 sealed class PathSeg {
   const PathSeg();
 }
@@ -46,19 +48,19 @@ final _token = RegExp(
 );
 final _letter = RegExp(r'^[A-Za-z]$');
 
-/// Разбирает `d` в список сегментов, переводя всё в абсолютные координаты.
+/// Parses `d` into a list of segments, converting all to absolute coordinates.
 List<PathSeg> parsePathData(String d) {
   final t = _token.allMatches(d).map((m) => m[0]!).toList();
   final out = <PathSeg>[];
 
   var i = 0;
-  double cx = 0, cy = 0; // текущая точка
-  double sx = 0, sy = 0; // начало подпути, куда возвращает Z
+  double cx = 0, cy = 0; // current point
+  double sx = 0, sy = 0; // start of the subpath, where Z returns to
   var cmd = '';
 
   double n() {
     if (i >= t.length) {
-      throw const FormatException('путь оборван: не хватает координат');
+      throw const FormatException('path truncated: missing coordinates');
     }
     return double.parse(t[i++]);
   }
@@ -74,7 +76,7 @@ List<PathSeg> parsePathData(String d) {
         out.add(MoveSeg(cx, cy));
         sx = cx;
         sy = cy;
-        cmd = 'L'; // повтор координат после M означает линии
+        cmd = 'L'; // repeated coordinates after M mean lines
       case 'm':
         cx += n();
         cy += n();
@@ -108,8 +110,8 @@ List<PathSeg> parsePathData(String d) {
         cy = n();
         out.add(CubicSeg(x1, y1, x2, y2, cx, cy));
       case 'c':
-        // Все шесть чисел отсчитываются от точки НА НАЧАЛО команды,
-        // поэтому cx/cy обновляются последними.
+        // All six numbers are relative to the point AT THE START of the
+        // command, so cx/cy are updated last.
         final x1 = cx + n(), y1 = cy + n();
         final x2 = cx + n(), y2 = cy + n();
         final ex = cx + n(), ey = cy + n();
@@ -122,17 +124,17 @@ List<PathSeg> parsePathData(String d) {
         cx = sx;
         cy = sy;
       default:
-        throw FormatException('команда пути «$cmd» не поддержана');
+        throw FormatException('path command "$cmd" is not supported');
     }
   }
   return out;
 }
 
-/// Прямоугольник без `dart:ui`.
+/// A rectangle without `dart:ui`.
 class Box {
   const Box(this.left, this.top, this.right, this.bottom);
 
-  /// Квадрат со стороной [side] с центром в ([cx], [cy]).
+  /// A square with side [side] centred at ([cx], [cy]).
   factory Box.square(double cx, double cy, double side) =>
       Box(cx - side / 2, cy - side / 2, cx + side / 2, cy + side / 2);
 
@@ -150,12 +152,12 @@ class Box {
   String toString() => 'Box($left, $top, $right, $bottom)';
 }
 
-/// Границы пути **по всем точкам, включая контрольные**.
+/// Path bounds **over all points, including control points**.
 ///
-/// Именно так считает `Path.getBounds()` в `dart:ui` (проверено тестом:
-/// у кубики `M0,0 C0,100 100,100 100,0` высота выходит 100, а не 75).
-/// Совпадение обязательно: иначе иконка и то, что рисует приложение,
-/// разъедутся по масштабу — ровно на это налетел прошлый подход.
+/// This is exactly how `Path.getBounds()` in `dart:ui` computes them (checked
+/// by a test: for the cubic `M0,0 C0,100 100,100 100,0` the height comes out
+/// 100, not 75). The match is mandatory: otherwise the icon and what the app
+/// draws drift apart in scale — exactly what the previous approach ran into.
 Box boundsOfPathData(List<PathSeg> segs) {
   var l = double.infinity, t = double.infinity;
   var r = double.negativeInfinity, b = double.negativeInfinity;
@@ -193,7 +195,7 @@ Box boundsOfPathData(List<PathSeg> segs) {
   return seen ? Box(l, t, r, b) : const Box(0, 0, 0, 0);
 }
 
-/// Плоское аффинное преобразование в порядке SVG `matrix(a b c d e f)`:
+/// A planar affine transform in SVG `matrix(a b c d e f)` order:
 /// `x' = a·x + c·y + e`, `y' = b·x + d·y + f`.
 class Aff {
   const Aff(this.a, this.b, this.c, this.d, this.e, this.f);
@@ -201,10 +203,10 @@ class Aff {
   const Aff.scale(double sx, double sy) : this(sx, 0, 0, sy, 0, 0);
   const Aff.translate(double tx, double ty) : this(1, 0, 0, 1, tx, ty);
 
-  /// Поворот вокруг точки ([cx], [cy]).
+  /// Rotation about the point ([cx], [cy]).
   ///
-  /// Ось Y направлена вниз, поэтому **положительный угол вращает по часовой
-  /// стрелке**, а отрицательный — против.
+  /// The Y axis points down, so **a positive angle rotates clockwise**, and a
+  /// negative one counter-clockwise.
   factory Aff.rotationAbout(double degrees, double cx, double cy) {
     final r = degrees * math.pi / 180;
     final cos = math.cos(r), sin = math.sin(r);
@@ -222,7 +224,7 @@ class Aff {
 
   final double a, b, c, d, e, f;
 
-  /// Сначала `this`, затем [next].
+  /// First `this`, then [next].
   Aff then(Aff next) => Aff(
     next.a * a + next.c * b,
     next.b * a + next.d * b,
@@ -261,15 +263,15 @@ List<PathSeg> transformPathData(List<PathSeg> segs, Aff m) => [
     },
 ];
 
-/// Отражает путь по горизонтали относительно собственных границ.
-/// Двойник `mirrorPathX` из `svg_path.dart`.
+/// Mirrors the path horizontally relative to its own bounds.
+/// Twin of `mirrorPathX` from `svg_path.dart`.
 List<PathSeg> mirrorDataX(List<PathSeg> segs) {
   final b = boundsOfPathData(segs);
   return transformPathData(segs, Aff(-1, 0, 0, 1, b.left + b.right, 0));
 }
 
-/// Поворачивает путь вокруг центра его границ.
-/// Двойник `rotatePath` из `svg_path.dart`.
+/// Rotates the path about the centre of its bounds.
+/// Twin of `rotatePath` from `svg_path.dart`.
 List<PathSeg> rotateData(List<PathSeg> segs, double degrees) {
   if (degrees == 0) return segs;
   final b = boundsOfPathData(segs);
@@ -279,8 +281,8 @@ List<PathSeg> rotateData(List<PathSeg> segs, double degrees) {
   );
 }
 
-/// Вписывает путь в прямоугольник, сохраняя пропорции.
-/// Двойник `fitPath` из `svg_path.dart`.
+/// Fits the path into a rectangle, preserving proportions.
+/// Twin of `fitPath` from `svg_path.dart`.
 List<PathSeg> fitData(List<PathSeg> segs, Box box, {double inset = 0}) {
   final b = boundsOfPathData(segs);
   if (b.isEmpty) return segs;
@@ -302,12 +304,12 @@ List<PathSeg> fitData(List<PathSeg> segs, Box box, {double inset = 0}) {
   );
 }
 
-/// Записывает сегменты обратно в атрибут `d`.
+/// Writes the segments back into a `d` attribute.
 ///
-/// Буква команды опускается там, где повторяется — так делает любой SVG-экспорт,
-/// и `PathParser` в Android это понимает. [precision] знаков после запятой;
-/// в поле 108 единиц двух хватает с запасом: 0,01 единицы — это 0,04 пикселя
-/// на самой крупной плотности.
+/// The command letter is omitted where it repeats — every SVG export does this,
+/// and Android's `PathParser` understands it. [precision] digits after the
+/// decimal point; in a 108-unit field two are more than enough: 0.01 unit is
+/// 0.04 pixel at the highest density.
 String formatPathData(List<PathSeg> segs, {int precision = 2}) {
   final buf = StringBuffer();
   var last = '';
@@ -343,7 +345,7 @@ String formatPathData(List<PathSeg> segs, {int precision = 2}) {
         cmd('C', [x1, y1, x2, y2, x, y]);
       case CloseSeg():
         cmd('Z', const []);
-        last = ''; // после Z следующая команда пишется буквой
+        last = ''; // after Z the next command is written with its letter
     }
   }
   return buf.toString();

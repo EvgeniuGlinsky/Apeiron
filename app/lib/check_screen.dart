@@ -4,15 +4,15 @@ import 'package:flutter/services.dart';
 import 'src/rust/api/vault.dart';
 import 'theme/tokens.dart';
 
-/// Экран самопроверки: список «прошло / НЕ ПРОШЛО» и отчёт о платформе.
+/// Self-check screen: a "passed / FAILED" list and a platform report.
 ///
-/// Существует затем, что проверка на живом устройстве одна. Экран обязан
-/// ответить на все вопросы сразу, а не на тот, который догадались задать, —
-/// поэтому вместе с проверками показывается полная диагностика, которую можно
-/// сфотографировать или скопировать целиком.
+/// It exists because there is only one check on a live device. The screen
+/// must answer every question at once, not just the one someone thought to
+/// ask — so the checks are shown together with full diagnostics that can be
+/// photographed or copied in one piece.
 ///
-/// Проверки ничего не разрушают. Стирания здесь нет: оно уничтожает данные
-/// владельца, и вызывать его под видом проверки нельзя.
+/// The checks destroy nothing. There is no erasure here: it destroys the
+/// owner's data, and must not be invoked under the guise of a check.
 class CheckScreen extends StatefulWidget {
   const CheckScreen({super.key});
 
@@ -53,7 +53,7 @@ class _CheckScreenState extends State<CheckScreen> {
     }
   }
 
-  /// Всё разом, в виде текста — чтобы отправить одним сообщением.
+  /// Everything at once, as text — to send in a single message.
   String _asText() {
     final buffer = StringBuffer('Apeiron — самопроверка\n\n');
     for (final c in _checks ?? const <CheckLine>[]) {

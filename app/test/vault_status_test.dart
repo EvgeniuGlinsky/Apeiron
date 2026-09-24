@@ -1,9 +1,9 @@
-/// Текст про хранилище обязан совпадать с поведением.
+/// The text about the vault must match the behaviour.
 ///
-/// Тот же приём, что в `lock_policy_test.dart`, и по той же причине: экран без
-/// собранной нативной библиотеки не проверить, а вот правила, по которым
-/// выбирается текст, — вполне. Здесь же ловится самое опасное: предложение
-/// «начать заново» там, где данные на самом деле целы.
+/// The same technique as in `lock_policy_test.dart`, and for the same reason:
+/// the screen cannot be checked without a built native library, but the rules
+/// by which the text is chosen can. This is also where the most dangerous case
+/// is caught: offering to "start over" where the data is in fact intact.
 library;
 
 import 'package:apeiron/src/rust/api/vault.dart';
@@ -27,33 +27,33 @@ VaultStatus status(
 );
 
 void main() {
-  group('предложение начать заново', () {
-    test('даётся только когда ключ действительно исчез', () {
+  group('offer to start over', () {
+    test('is made only when the key is really gone', () {
       expect(mayOfferFreshStart(status(VaultState.keyGone)), isTrue);
     });
 
-    test('не даётся ни в одном другом положении', () {
+    test('is not made in any other state', () {
       for (final state in VaultState.values) {
         if (state == VaultState.keyGone) continue;
         expect(
           mayOfferFreshStart(status(state)),
           isFalse,
           reason:
-              'при $state предложено стереть всё, хотя данные целы — это '
-              'уничтожение переписки владельца за него',
+              'in $state erasing everything is offered although the data is '
+              "intact — that destroys the owner's messages on their behalf",
         );
       }
     });
 
-    test('преходящий отказ прямо говорит, что данные целы', () {
+    test('a transient failure says outright that the data is intact', () {
       final message = describeVault(status(VaultState.retry));
       expect(message.tone, VaultTone.warning);
       expect(message.action, contains('целы'));
     });
   });
 
-  group('уровень защиты', () {
-    test('сырое число показывается рядом с названием', () {
+  group('protection level', () {
+    test('the raw number is shown next to the name', () {
       final s = status(
         VaultState.opened,
         levelName: 'железо без уточнения',
@@ -63,9 +63,9 @@ void main() {
       expect(describeVault(s).detail, contains('(-1)'));
     });
 
-    test('говорится «система сообщает», а не «проверено»', () {
-      // Для симметричных ключей аттестации не существует: KeyInfo — самоотчёт
-      // фреймворка в нашем же процессе. Называть это проверкой нельзя.
+    test('it says "the system reports", not "verified"', () {
+      // There is no attestation for symmetric keys: KeyInfo is the framework's
+      // self-report within our own process. Calling it verification is wrong.
       for (final backed in [true, false]) {
         final detail = describeVault(
           status(VaultState.opened, hardwareBacked: backed),
@@ -75,7 +75,7 @@ void main() {
       }
     });
 
-    test('программный ключ вызывает предупреждение, а не тишину', () {
+    test('a software key triggers a warning, not silence', () {
       final s = status(
         VaultState.opened,
         levelName: 'программный',
@@ -87,39 +87,39 @@ void main() {
       expect(describeVault(s).detail, contains('слабее'));
     });
 
-    test('железо не вызывает предупреждения', () {
+    test('hardware triggers no warning', () {
       final s = status(VaultState.opened);
       expect(describeVault(s).tone, VaultTone.good);
       expect(needsHonestWarning(s), isFalse);
     });
   });
 
-  group('честность формулировок', () {
-    test('успех не обещает того, чего эта задача не даёт', () {
-      // Телефон, отобранный разблокированным, закроет пин (R-001), а не
-      // аппаратный ключ. Обещать это сейчас — ровно то преувеличение, которое
-      // запрещено таблицей формулировок в docs/threat-log.md.
+  group('honesty of wording', () {
+    test('success does not promise what this task does not deliver', () {
+      // A phone taken away while unlocked will be covered by the PIN (R-001),
+      // not the hardware key. Promising it now is exactly the overstatement
+      // forbidden by the wording table in docs/threat-log.md.
       final detail = describeVault(status(VaultState.opened)).detail;
       expect(detail, contains('разблокированным'));
       expect(detail, contains('пин'));
     });
 
-    test('исчезнувший ключ объясняет, почему восстановить нельзя', () {
+    test('a vanished key explains why recovery is impossible', () {
       final message = describeVault(status(VaultState.keyGone));
       expect(message.tone, VaultTone.blocked);
       expect(message.detail, contains('не выгружался'));
       expect(message.action, contains('не вернётся'));
     });
 
-    test('у каждого положения есть заголовок и объяснение', () {
+    test('every state has a title and an explanation', () {
       for (final state in VaultState.values) {
         final message = describeVault(status(state));
-        expect(message.title, isNotEmpty, reason: 'у $state нет заголовка');
-        expect(message.detail, isNotEmpty, reason: 'у $state нет объяснения');
+        expect(message.title, isNotEmpty, reason: '$state has no title');
+        expect(message.detail, isNotEmpty, reason: '$state has no explanation');
       }
     });
 
-    test('преходящий отказ показывает то, что сказала платформа', () {
+    test('a transient failure shows what the platform said', () {
       final message = describeVault(
         status(VaultState.retry, message: 'устройство заперто'),
       );

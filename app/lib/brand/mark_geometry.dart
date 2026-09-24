@@ -1,25 +1,25 @@
-/// Числа марки, общие для приложения и для генератора иконки запуска.
+/// Brand mark numbers shared by the app and the launcher icon generator.
 ///
-/// Файл намеренно **без `dart:ui` и без Flutter**: его читает и виджет, и
-/// `tool/gen_android_icon.dart`, который запускается обычным `dart run`.
-/// Пока эти числа лежат в одном месте, иконка в лаунчере и птица в интерфейсе
-/// не могут разъехаться — а разъехались бы незаметно.
+/// The file is deliberately **free of `dart:ui` and Flutter**: it is read both
+/// by the widget and by `tool/gen_android_icon.dart`, which runs under plain
+/// `dart run`. As long as these numbers live in one place, the launcher icon
+/// and the bird in the UI cannot drift apart — and they would drift unnoticed.
 library;
 
-/// Разворот силуэта по умолчанию, в градусах.
+/// Default rotation of the silhouette, in degrees.
 ///
-/// Исходник держит клюв чуть ниже горизонта; поднятый клюв читается как
-/// набор высоты, а не как снижение. Отрицательный угол — против часовой
-/// (ось Y экрана направлена вниз). Выбрано по контактному листу из ряда
-/// 0 / −20 / −32 / −45.
+/// The source holds the beak slightly below the horizon; a raised beak reads
+/// as climbing rather than descending. A negative angle is counter-clockwise
+/// (the screen's Y axis points down). Chosen from a contact sheet of the
+/// series 0 / −20 / −32 / −45.
 const double ravenDefaultPitch = -45;
 
-/// Исходный силуэт летит влево. В интерфейсе с письмом слева направо
-/// отправка читается движением вправо, поэтому по умолчанию отражаем.
+/// The source silhouette flies left. In a left-to-right interface, sending
+/// reads as movement to the right, so we mirror by default.
 const bool ravenFacesRight = true;
 
-/// Доля подложки, которую занимает птица.
+/// Share of the backplate taken by the bird.
 ///
-/// Меньше 0,55 — иконка выглядит пустой, больше 0,7 — силуэт упирается
-/// в края и теряет очертания.
+/// Below 0.55 the icon looks empty; above 0.7 the silhouette runs into the
+/// edges and loses its outline.
 const double iconGlyphScale = 0.70;

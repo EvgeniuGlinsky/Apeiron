@@ -1,13 +1,14 @@
-/// Пересобирает ресурсы иконки запуска Android.
+/// Regenerates the Android launcher icon resources.
 ///
 ///     cd app && dart run tool/gen_android_icon.dart
 ///
-/// Именно `dart run`, не `flutter test`: генератор не трогает `dart:ui`
-/// и потому не зависит от движка. Запускать после любой правки контура
-/// (`lib/brand/raven_path.dart`) или чисел марки (`lib/brand/mark_geometry.dart`).
+/// Specifically `dart run`, not `flutter test`: the generator does not touch
+/// `dart:ui` and so does not depend on the engine. Run it after any change to
+/// the outline (`lib/brand/raven_path.dart`) or to the brand mark numbers
+/// (`lib/brand/mark_geometry.dart`).
 ///
-/// Расхождение между тем, что лежит в репозитории, и тем, что выдал бы
-/// генератор сейчас, ловит `flutter test test/android_icon_test.dart`.
+/// A mismatch between what is in the repository and what the generator would
+/// produce now is caught by `flutter test test/android_icon_test.dart`.
 library;
 
 import 'dart:io';
@@ -17,7 +18,7 @@ import 'android_icon.dart';
 void main(List<String> args) {
   final root = Directory.current;
   if (!File('${root.path}/pubspec.yaml').existsSync()) {
-    stderr.writeln('Запускать из каталога app/: там лежит pubspec.yaml.');
+    stderr.writeln('Run from the app/ directory: pubspec.yaml lives there.');
     exitCode = 2;
     return;
   }
@@ -27,12 +28,12 @@ void main(List<String> args) {
     final out = File('${root.path}/${entry.key}');
     out.parent.createSync(recursive: true);
     out.writeAsStringSync(entry.value);
-    stdout.writeln('записан  ${entry.key}  (${entry.value.length} Б)');
+    stdout.writeln('written  ${entry.key}  (${entry.value.length} B)');
   }
 
-  // Штатные PNG Flutter — это его синий логотип. Пока они лежат рядом,
-  // ничего не ломается (квалификатор `anydpi` старше плотностных), но в
-  // сборку они попадают и вводят в заблуждение при разборе APK.
+  // Flutter's stock PNGs are its blue logo. While they sit alongside, nothing
+  // breaks (the `anydpi` qualifier outranks density ones), but they end up in
+  // the build and mislead anyone inspecting the APK.
   for (final d in const ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi']) {
     final png = File(
       '${root.path}/android/app/src/main/res/mipmap-$d/ic_launcher.png',
@@ -40,7 +41,7 @@ void main(List<String> args) {
     if (png.existsSync()) {
       final dir = png.parent;
       png.deleteSync();
-      stdout.writeln('удалён   mipmap-$d/ic_launcher.png');
+      stdout.writeln('deleted  mipmap-$d/ic_launcher.png');
       if (dir.listSync().isEmpty) dir.deleteSync();
     }
   }

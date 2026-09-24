@@ -5,22 +5,22 @@ import 'brand/raven_path.dart';
 import 'svg_path.dart';
 import 'theme/tokens.dart';
 
-/// Иконка Apeiron: ворон в полёте.
+/// The Apeiron icon: a raven in flight.
 ///
-/// Хугин и Мунин — вороны Одина, облетающие мир и возвращающиеся рассказать
-/// увиденное. Гонцы в прямом смысле; ближе к мессенджеру в скандинавском круге
-/// образов нет ничего. Имена переводятся как **«мысль»** и **«память»**, что
-/// совпадает с расслоением системы: доставка отвечает за «сейчас», архив —
-/// за сохранённое.
+/// Huginn and Muninn are Odin's ravens, who fly around the world and come back
+/// to tell what they saw. Messengers in the literal sense; nothing in the Norse
+/// set of images is closer to a messenger app. The names translate as
+/// **"thought"** and **"memory"**, which matches the layering of the system:
+/// delivery handles "now", the archive handles what is kept.
 ///
-/// **Силуэт не нарисован здесь, а взят готовым.** Шесть итераций ручного
-/// подбора контрольных точек безье дали птицу, но не реалистичную: у слепого
-/// набора координат низкий потолок. Исходник — CC0 с PhyloPic, происхождение
-/// и обоснование в `assets/brand/PROVENANCE.md`.
+/// **The silhouette is not drawn here but taken ready-made.** Six iterations of
+/// hand-picking Bézier control points produced a bird, but not a realistic one:
+/// blindly typing coordinates has a low ceiling. The source is CC0 from
+/// PhyloPic; provenance and rationale in `assets/brand/PROVENANCE.md`.
 ///
-/// **Кривые здесь разрешены.** Это исключение из правила системы: надпись
-/// ([ApeironWordmark]) и интерфейсные иконки остаются на прямых с плоскими
-/// торцами — руническая резьба, — а птица живая.
+/// **Curves are allowed here.** This is an exception to the system rule: the
+/// wordmark ([ApeironWordmark]) and the interface icons stay on straight lines
+/// with flat ends — runic carving — while the bird is alive.
 class ApeironRaven extends StatelessWidget {
   const ApeironRaven({
     super.key,
@@ -31,20 +31,20 @@ class ApeironRaven extends StatelessWidget {
     this.inset = 0,
   });
 
-  /// Разворот по умолчанию — обоснование при [ravenDefaultPitch].
+  /// Default rotation — rationale at [ravenDefaultPitch].
   static const double defaultPitch = ravenDefaultPitch;
 
   final double size;
   final Color color;
 
-  /// Исходный силуэт летит влево. В интерфейсе с письмом слева направо
-  /// отправка читается движением вправо, поэтому по умолчанию отражаем.
+  /// The source silhouette flies left. In a left-to-right interface, sending
+  /// reads as movement to the right, so we mirror by default.
   final bool facingRight;
 
-  /// Поворот силуэта в градусах, применяется после отражения.
+  /// Rotation of the silhouette in degrees, applied after mirroring.
   final double pitchDegrees;
 
-  /// Отступ от краёв поля в логических пикселях.
+  /// Inset from the edges of the field, in logical pixels.
   final double inset;
 
   @override
@@ -66,13 +66,13 @@ class _RavenPainter extends CustomPainter {
   final double pitch;
   final double inset;
 
-  /// Контур разбирается один раз на весь процесс: разбор строки в четыре
-  /// тысячи символов на каждой перерисовке — пустая трата на ровном месте.
+  /// The outline is parsed once per process: parsing a four-thousand-character
+  /// string on every repaint is a pointless waste.
   static final Path _source = _buildSource();
 
   static Path _buildSource() {
     final raw = parseSvgPath(ravenPathData);
-    // Вывод potrace перевёрнут по вертикали — возвращаем на место.
+    // potrace output is flipped vertically — put it back.
     return raw.transform(affine(scaleY: ravenSourceFlipY));
   }
 
@@ -82,8 +82,8 @@ class _RavenPainter extends CustomPainter {
       ..color = color
       ..style = PaintingStyle.fill
       ..isAntiAlias = true;
-    // Порядок обязателен: сначала зеркало, потом поворот. Зеркало меняет
-    // направление вращения на обратное, и поворот до него уводит клюв не туда.
+    // The order is mandatory: mirror first, then rotate. The mirror reverses
+    // the direction of rotation, and rotating before it sends the beak astray.
     var shape = _source;
     if (facingRight) shape = mirrorPathX(shape);
     shape = rotatePath(shape, pitch);

@@ -35,10 +35,11 @@ class ApeironApp extends StatelessWidget {
   }
 }
 
-/// Экран личности — он же проверка критерия этапа 1.
+/// Identity screen — which is also the check of the stage 1 criterion.
 ///
-/// Показывает, что Flutter дошёл до Rust, Rust породил пару Ed25519 + X25519,
-/// а наружу вернулось только публичное: секретные ключи остались в Rust (R-004).
+/// Shows that Flutter reached Rust, Rust generated an Ed25519 + X25519 pair,
+/// and only the public part came back out: the secret keys stayed in Rust
+/// (R-004).
 class IdentityScreen extends StatefulWidget {
   const IdentityScreen({super.key});
 
@@ -50,12 +51,12 @@ class _IdentityScreenState extends State<IdentityScreen>
     with WidgetsBindingObserver {
   PublicIdentityView? _identity;
 
-  /// Положение хранилища ключа. `null` — ещё не спрашивали.
+  /// State of the key vault. `null` — not asked yet.
   VaultStatus? _vault;
   String? _error;
   bool _busy = false;
 
-  /// Правила запирания у телефона и у рабочего стола разные — см. [LockPolicy].
+  /// Locking rules differ between the phone and the desktop — see [LockPolicy].
   final LockPolicy _policy = LockPolicy.of(defaultTargetPlatform);
   Timer? _idle;
 
@@ -75,10 +76,11 @@ class _IdentityScreenState extends State<IdentityScreen>
     super.dispose();
   }
 
-  /// Решение R-001: личность запирается сама. Rust уничтожает ключи и затирает
-  /// их — в Dart их и не было. Что считать поводом, решает [LockPolicy]:
-  /// на телефоне это уход с переднего плана, на рабочем столе — свёрнутое окно
-  /// или бездействие, но не переключение на другое окно.
+  /// Decision R-001: the identity locks by itself. Rust destroys the keys and
+  /// overwrites them — they were never in Dart. What counts as a trigger is
+  /// decided by [LockPolicy]: on the phone it is leaving the foreground, on the
+  /// desktop a minimised window or inactivity, but not switching to another
+  /// window.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (_policy.locksOn(state)) _lock();
@@ -86,10 +88,10 @@ class _IdentityScreenState extends State<IdentityScreen>
 
   bool _onKey(KeyEvent event) {
     _noteActivity();
-    return false; // событие не наше, дальше по цепочке
+    return false; // not our event, pass it down the chain
   }
 
-  /// Любое действие пользователя отодвигает таймер бездействия.
+  /// Any user action pushes back the idle timer.
   void _noteActivity() {
     final timeout = _policy.idleTimeout;
     if (timeout == null || _identity == null) return;
@@ -111,11 +113,11 @@ class _IdentityScreenState extends State<IdentityScreen>
     }
   }
 
-  /// Открывает хранилище и читает из него личность.
+  /// Opens the vault and reads the identity from it.
   ///
-  /// Разблокировка идёт первой и всегда: ключ базы разворачивается аппаратным
-  /// хранилищем устройства, и без него читать нечего. На запертом телефоне
-  /// железо этого не сделает — так и задумано (R-001).
+  /// Unlocking always comes first: the database key (DEK) is unwrapped by the
+  /// device's hardware keystore, and without it there is nothing to read. On a
+  /// locked phone the hardware will not do this — by design (R-001).
   Future<void> _refresh() => _run(() async {
     final vault = await unlockVault();
     final id = vault.state == VaultState.opened
@@ -130,11 +132,12 @@ class _IdentityScreenState extends State<IdentityScreen>
     _noteActivity();
   });
 
-  /// Стирает всё криптографически (R-005): уничтожается ключ, а не данные.
+  /// Erases everything cryptographically (R-005): the key is destroyed, not
+  /// the data.
   ///
-  /// Предлагается ровно в одном положении — когда ключ действительно исчез и
-  /// расшифровать нечем. Во всех остальных данные целы, и стирать их за
-  /// владельца нельзя.
+  /// Offered in exactly one state — when the key is really gone and there is
+  /// nothing to decrypt with. In all others the data is intact, and erasing it
+  /// on the owner's behalf is not allowed.
   Future<void> _freshStart() => _run(() async {
     await wipeEverything();
     if (mounted) {
@@ -170,8 +173,8 @@ class _IdentityScreenState extends State<IdentityScreen>
     final id = _identity;
     final vault = _vault;
     return Listener(
-      // Отодвигаем таймер бездействия. `translucent`, чтобы события доходили
-      // и до виджетов под нами: мы слушаем, а не перехватываем.
+      // Push back the idle timer. `translucent` so that events also reach
+      // the widgets beneath us: we listen, we do not intercept.
       behavior: HitTestBehavior.translucent,
       onPointerDown: (_) => _noteActivity(),
       onPointerMove: (_) => _noteActivity(),
@@ -306,8 +309,8 @@ class _IdentityView extends StatelessWidget {
         ),
         const SizedBox(height: Ap.s16),
 
-        // Медный акцент — только здесь. Сверка ключей не похожа ни на что
-        // другое в приложении, и это намеренно: на неё должны смотреть.
+        // The copper accent is used only here. Key verification looks like
+        // nothing else in the app, on purpose: people must look at it.
         Container(
           decoration: const BoxDecoration(
             color: Ap.basalt800,
@@ -322,9 +325,10 @@ class _IdentityView extends StatelessWidget {
             vertical: Ap.s28,
             horizontal: Ap.s16,
           ),
-          // Жёсткая сетка 3 × 2, а не Wrap: разбивка обязана быть одинаковой
-          // на всех экранах. При сверке голосом плавающая раскладка —
-          // источник ошибок, а ошибка здесь означает пропущенного посредника.
+          // A rigid 3 × 2 grid, not Wrap: the split must be the same on
+          // every screen. When verifying by voice, a shifting layout is a
+          // source of errors, and an error here means a missed man in the
+          // middle.
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

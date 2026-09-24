@@ -1,12 +1,12 @@
-// СГЕНЕРИРОВАНО из assets/brand/raven-corvus-corax-cc0.svg — руками не править.
-// Пересобрать: см. tool/regen_raven_path.md
+// GENERATED from assets/brand/raven-corvus-corax-cc0.svg — do not edit by hand.
+// Regenerate: see tool/regen_raven_path.md
 //
-// Силуэт ворона (Corvus corax) в полёте. Автор Andy Wilson, PhyloPic,
-// лицензия CC0 1.0 Universal. Подробности и обоснование выбора —
+// Silhouette of a raven (Corvus corax) in flight. Author Andy Wilson, PhyloPic,
+// licence CC0 1.0 Universal. Details and rationale for the choice —
 // assets/brand/PROVENANCE.md
 library;
 
-/// Атрибут `d` исходного контура, как в файле.
+/// The `d` attribute of the source outline, as in the file.
 const String ravenPathData =
     'M6274 14437 c-118 -73 -292 -201 -384 -282 -286 -255 -466 -433 -629 -623 -35 -40 -65 -71 -67 '
     '-69 -3 3 11 33 30 68 19 35 44 93 56 129 12 36 61 149 110 251 97 204 133 308 128 372 -2 35 -7 '
@@ -57,9 +57,9 @@ const String ravenPathData =
     '-87 -69 -74 -49 5 8 36 60 68 114 33 55 80 132 106 170 114 172 252 449 275 553 7 34 -6 63 -29 '
     '61 -6 0 -56 -28 -112 -62z ';
 
-/// Преобразование группы из того же SVG: `translate(0.000000,1451.000000) scale(0.100000,-0.100000)`.
+/// The group transform from the same SVG: `translate(0.000000,1451.000000) scale(0.100000,-0.100000)`.
 ///
-/// Существенен здесь только **отрицательный масштаб по Y**: вывод potrace
-/// перевёрнут, и без флипа птица летит вверх ногами. Сдвиг и величина
-/// масштаба роли не играют — вписывание в поле их всё равно пересчитывает.
+/// Only the **negative Y scale** matters here: potrace output is flipped, and
+/// without the flip the bird flies upside down. The translation and the scale
+/// magnitude play no role — fitting into the field recomputes them anyway.
 const double ravenSourceFlipY = -1;

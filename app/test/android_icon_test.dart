@@ -10,45 +10,45 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../tool/android_icon.dart';
 
-/// Проверка иконки запуска Android.
+/// Test of the Android launcher icon.
 ///
-/// Главное здесь — сравнение контуров. Оба прошлых подхода к иконке ломались
-/// на масштабе: птица оказывалась не того размера, и увидеть это можно было
-/// только глазами на устройстве. Теперь берётся тот самый [Path], который
-/// рисует `ApeironRaven`, и сверяется с контуром из сгенерированного
-/// `pathData` — по длине, границам и точкам вдоль обвода.
+/// The main thing here is comparing outlines. Both previous approaches to the
+/// icon broke on scale: the bird came out the wrong size, and that could only
+/// be seen by eye on a device. Now the very [Path] that `ApeironRaven` draws
+/// is taken and compared against the outline from the generated `pathData` —
+/// by length, bounds and points along the contour.
 ///
-/// Растеризации здесь нет намеренно: `toImage()` внутри `testWidgets` на этой
-/// машине не даёт процессу завершиться (та же грабля, что у контактных листов).
-/// Сравнение по точкам всё равно строже пиксельного — оно не зависит от
-/// сглаживания.
+/// There is deliberately no rasterisation here: `toImage()` inside
+/// `testWidgets` on this machine keeps the process from exiting (the same
+/// pitfall as with the contact sheets). Point comparison is stricter than
+/// pixel comparison anyway — it does not depend on anti-aliasing.
 void main() {
-  test('ресурсы в репозитории совпадают с выводом генератора', () {
+  test('resources in the repository match the generator output', () {
     for (final entry in androidIconFiles().entries) {
       final f = File(entry.key);
       expect(
         f.existsSync(),
         isTrue,
         reason:
-            '${entry.key} нет — '
-            'запустите dart run tool/gen_android_icon.dart',
+            '${entry.key} is missing — '
+            'run dart run tool/gen_android_icon.dart',
       );
       expect(
         f.readAsStringSync().replaceAll('\r\n', '\n'),
         entry.value,
         reason:
-            '${entry.key} правлен руками или устарел; '
-            'пересоберите: dart run tool/gen_android_icon.dart',
+            '${entry.key} was edited by hand or is stale; '
+            'regenerate: dart run tool/gen_android_icon.dart',
       );
     }
   });
 
-  test('цвета генератора совпадают с токенами оформления', () {
+  test('generator colours match the design tokens', () {
     expect(basaltHex, _hex(Ap.basalt900));
     expect(boneHex, _hex(Ap.bone100));
   });
 
-  test('штатных PNG Flutter в проекте не осталось', () {
+  test('no stock Flutter PNGs are left in the project', () {
     for (final d in const ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi']) {
       expect(
         File('android/app/src/main/res/mipmap-$d/ic_launcher.png').existsSync(),
@@ -57,12 +57,12 @@ void main() {
     }
   });
 
-  test('в поле иконки помещается только то, что должно', () {
+  test('the icon field holds only what it should', () {
     final fore = _iconPathData(foregroundXml());
     expect(
       fore.length,
       1,
-      reason: 'передний слой — одна птица и ничего больше',
+      reason: 'the foreground layer is one bird and nothing else',
     );
 
     final box = boundsOfPathData(parsePathData(fore.single));
@@ -70,18 +70,19 @@ void main() {
     expect(box.top, greaterThanOrEqualTo(0));
     expect(box.right, lessThanOrEqualTo(adaptiveViewport));
     expect(box.bottom, lessThanOrEqualTo(adaptiveViewport));
-    // Птица стоит по центру поля: смещение сломало бы маску лаунчера.
+    // The bird sits at the centre of the field: an offset would break the
+    // launcher mask.
     expect(box.centerX, closeTo(adaptiveViewport / 2, 0.02));
     expect(box.centerY, closeTo(adaptiveViewport / 2, 0.02));
 
     expect(
       _iconPathData(legacyXml()).length,
       2,
-      reason: 'иконка для Android 7 — подложка и птица',
+      reason: 'the Android 7 icon is the backplate and the bird',
     );
   });
 
-  testWidgets('передний слой — тот же контур, что рисует ApeironRaven', (
+  testWidgets('the foreground layer is the same outline ApeironRaven draws', (
     tester,
   ) async {
     const side = 216.0;
@@ -107,11 +108,12 @@ void main() {
     painter.paint(capture, const Size(side, side));
     final drawn = capture.path!;
 
-    // Поле птицы в иконке — квадрат iconGlyphScale × 72 по центру 108;
-    // в виджете тот же квадрат равен всему его размеру. Растягиваем одно
-    // на другое: если масштаб посчитан верно, контуры обязаны совпасть.
-    // Соотносить надо именно квадраты, а не рамки контура: вписывание идёт
-    // по меньшей стороне, и рамка совпадает с квадратом только по одной оси.
+    // The bird's field in the icon is an iconGlyphScale × 72 square at the
+    // centre of 108; in the widget the same square is its whole size. We map
+    // one onto the other: if the scale is computed right, the outlines must
+    // match. It is the squares that must be related, not the outline boxes:
+    // fitting goes by the shorter side, and the box matches the square along
+    // one axis only.
     final box = glyphBox(adaptiveMask);
     final k = side / box.width;
     final fromIcon =
@@ -126,15 +128,15 @@ void main() {
           ),
         );
 
-    // Допуск — от округления записи: координаты пишутся с двумя знаками,
-    // то есть с точностью 0,005 поля 108, что на этом размере даёт 0,02
-    // пикселя. Измерение вдоль обвода накапливает ещё столько же. Ошибка
-    // масштаба, ради которой всё это и затевалось, промахнулась бы на
-    // десятки пикселей, а не на десятые.
+    // The tolerance comes from rounding on output: coordinates are written
+    // with two digits, i.e. to 0.005 of the 108 field, which at this size is
+    // 0.02 pixel. Measuring along the contour accumulates as much again. The
+    // scale error this was all about would miss by tens of pixels, not by
+    // tenths.
     _expectSameOutline(fromIcon, drawn, tolerance: side / 720);
   });
 
-  test('краска не выходит из безопасной зоны', () {
+  test('paint does not leave the safe zone', () {
     final path = buildPath(
       parsePathData(_iconPathData(foregroundXml()).single),
     );
@@ -146,20 +148,21 @@ void main() {
       if (r > worst) worst = r;
     }
 
-    // Из поля 108 dp Android обещает показать круг 66 dp, остальное съедает
-    // маска лаунчера. Меряем по самому обводу, а не по рамке контура:
-    // рамка считается по контрольным точкам и всегда шире краски.
+    // Of the 108 dp field Android promises to show a 66 dp circle; the rest is
+    // eaten by the launcher mask. We measure along the contour itself, not the
+    // outline box: the box is computed from control points and is always wider
+    // than the paint.
     expect(
       worst,
       lessThanOrEqualTo(33.0),
       reason:
-          'краска уходит на ${worst.toStringAsFixed(2)} dp от центра '
-          'при допустимых 33',
+          'paint reaches ${worst.toStringAsFixed(2)} dp from the centre '
+          'with 33 allowed',
     );
   });
 }
 
-// ─── вспомогательное ───────────────────────────────────────────────────────
+// ─── helpers ───────────────────────────────────────────────────────────────
 
 String _hex(Color c) =>
     '#${c.toARGB32().toRadixString(16).toUpperCase().padLeft(8, '0')}';
@@ -168,11 +171,11 @@ List<String> _iconPathData(String vectorXml) => RegExp(
   r'android:pathData="([^"]*)"',
 ).allMatches(vectorXml).map((m) => m.group(1)!).toList();
 
-/// Холст, который ничего не рисует, а запоминает контур.
+/// A canvas that draws nothing but remembers the outline.
 ///
-/// `_RavenPainter` закрыт, и это правильно: проверять надо не его внутренности,
-/// а то, что он в итоге кладёт на холст. [noSuchMethod] гасит остальные три
-/// десятка методов [Canvas], которые здесь не вызываются.
+/// `_RavenPainter` is private, and rightly so: what must be checked is not its
+/// internals but what it finally puts on the canvas. [noSuchMethod] swallows
+/// the other three dozen [Canvas] methods, which are not called here.
 class _CapturingCanvas implements Canvas {
   Path? path;
 
@@ -183,7 +186,7 @@ class _CapturingCanvas implements Canvas {
   dynamic noSuchMethod(Invocation invocation) => null;
 }
 
-/// Точки вдоль обвода пути с шагом [step].
+/// Points along the path contour with spacing [step].
 Iterable<Offset> _walk(Path path, {required double step}) sync* {
   for (final metric in path.computeMetrics()) {
     final count = math.max(1, (metric.length / step).ceil());
@@ -195,18 +198,18 @@ Iterable<Offset> _walk(Path path, {required double step}) sync* {
   }
 }
 
-/// Сверяет два пути по обводу: число подконтуров, их длины и точки на них.
+/// Compares two paths along the contour: subpath count, lengths and points.
 void _expectSameOutline(Path a, Path b, {required double tolerance}) {
   final ma = a.computeMetrics().toList();
   final mb = b.computeMetrics().toList();
-  expect(ma.length, mb.length, reason: 'разное число подконтуров');
+  expect(ma.length, mb.length, reason: 'different number of subpaths');
   expect(ma.isNotEmpty, isTrue);
 
   for (var i = 0; i < ma.length; i++) {
     expect(
       ma[i].length,
       closeTo(mb[i].length, math.max(0.05, mb[i].length * 0.002)),
-      reason: 'подконтур $i другой длины',
+      reason: 'subpath $i has a different length',
     );
 
     const samples = 32;
@@ -220,7 +223,7 @@ void _expectSameOutline(Path a, Path b, {required double tolerance}) {
       expect(
         (pa - pb).distance,
         lessThan(tolerance),
-        reason: 'подконтур $i, точка $j: $pa против $pb',
+        reason: 'subpath $i, point $j: $pa vs $pb',
       );
     }
   }

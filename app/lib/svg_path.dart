@@ -1,14 +1,14 @@
-/// Разбор атрибута `d` из SVG в [Path] и преобразования над готовым путём.
+/// Parsing the SVG `d` attribute into a [Path] and transforms on a built path.
 ///
-/// Зачем своё, а не пакет: нужна одна функция под один фирменный контур.
-/// Тянуть ради этого зависимость с её обновлениями и уязвимостями — плохой
-/// размен в проекте, который обещает проверяемость. Здесь сотня строк,
-/// которые можно прочитать целиком.
+/// Why our own rather than a package: one function is needed for one brand
+/// outline. Pulling in a dependency for that, with its updates and
+/// vulnerabilities, is a bad trade in a project that promises verifiability.
+/// Here are a hundred lines that can be read in full.
 ///
-/// Разбор чисел живёт в `path_data.dart` — без `dart:ui`, потому что тем же
-/// разбором пользуется генератор иконки Android (`tool/gen_android_icon.dart`),
-/// запускаемый вне Flutter. Здесь остаётся мост в [Path] и те же
-/// преобразования, но над непрозрачным путём.
+/// Number parsing lives in `path_data.dart` — without `dart:ui`, because the
+/// same parser is used by the Android icon generator
+/// (`tool/gen_android_icon.dart`), which runs outside Flutter. What remains
+/// here is the bridge to [Path] and the same transforms, but on an opaque path.
 library;
 
 import 'dart:math' as math;
@@ -17,11 +17,11 @@ import 'dart:ui';
 
 import 'path_data.dart';
 
-/// Разбирает атрибут `d`. Неподдержанная команда (`S Q T A`) бросает
-/// [FormatException] с её указанием, а не рисует молча неправильное.
+/// Parses the `d` attribute. An unsupported command (`S Q T A`) throws
+/// [FormatException] naming it, rather than silently drawing something wrong.
 Path parseSvgPath(String d) => buildPath(parsePathData(d));
 
-/// Собирает [Path] из разобранных сегментов.
+/// Builds a [Path] from parsed segments.
 Path buildPath(List<PathSeg> segs) {
   final path = Path();
   for (final s in segs) {
@@ -46,11 +46,11 @@ Path buildPath(List<PathSeg> segs) {
   return path;
 }
 
-/// Плоское аффинное преобразование в виде, который принимает [Path.transform]:
-/// матрица 4×4 по столбцам.
+/// A planar affine transform in the form [Path.transform] accepts: a 4×4
+/// column-major matrix.
 ///
-/// Собирается вручную, чтобы утилита обходилась одним `dart:ui` и не тянула
-/// vector_math ради масштаба и сдвига.
+/// Built by hand so that the utility makes do with `dart:ui` alone and does
+/// not pull in vector_math just for scale and translation.
 Float64List affine({
   double scaleX = 1,
   double scaleY = 1,
@@ -67,17 +67,17 @@ Float64List affine({
   return m;
 }
 
-/// Отражает путь по горизонтали относительно собственных границ.
+/// Mirrors the path horizontally relative to its own bounds.
 Path mirrorPathX(Path source) {
   final b = source.getBounds();
   return source.transform(affine(scaleX: -1, translateX: b.left + b.right));
 }
 
-/// Поворачивает путь вокруг центра его границ.
+/// Rotates the path about the centre of its bounds.
 ///
-/// Ось Y экрана направлена вниз, поэтому **положительный угол вращает по
-/// часовой стрелке**, а отрицательный — против. Применять поворот следует
-/// после отражения: зеркало меняет направление вращения на обратное.
+/// The screen's Y axis points down, so **a positive angle rotates clockwise**,
+/// and a negative one counter-clockwise. Rotation should be applied after
+/// mirroring: the mirror reverses the direction of rotation.
 Path rotatePath(Path source, double degrees) {
   if (degrees == 0) return source;
   final c = source.getBounds().center;
@@ -91,16 +91,16 @@ Path rotatePath(Path source, double degrees) {
   m[5] = cos;
   m[10] = 1;
   m[15] = 1;
-  // Сдвиг, возвращающий центр на место после поворота вокруг начала координат.
+  // Translation that puts the centre back after rotating about the origin.
   m[12] = c.dx - (c.dx * cos - c.dy * sin);
   m[13] = c.dy - (c.dx * sin + c.dy * cos);
   return source.transform(m);
 }
 
-/// Вписывает путь в прямоугольник, сохраняя пропорции.
+/// Fits the path into a rectangle, preserving proportions.
 ///
-/// [mirrorX] отражает по горизонтали: исходный силуэт летит влево, а в
-/// интерфейсе с письмом слева направо отправка читается движением вправо.
+/// [mirrorX] mirrors horizontally: the source silhouette flies left, while in
+/// a left-to-right interface sending reads as movement to the right.
 Path fitPath(Path source, Rect box, {bool mirrorX = false, double inset = 0}) {
   final b = source.getBounds();
   if (b.isEmpty) return source;

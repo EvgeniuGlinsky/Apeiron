@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- СГЕНЕРИРОВАНО из assets/brand/raven-corvus-corax-cc0.svg — руками не править.
-     Пересобрать: cd app && dart run tool/gen_android_icon.dart -->
+<!-- GENERATED from assets/brand/raven-corvus-corax-cc0.svg — do not edit by hand.
+     Regenerate: cd app && dart run tool/gen_android_icon.dart -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"

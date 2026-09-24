@@ -4,21 +4,21 @@ import 'brand/mark_geometry.dart';
 import 'raven.dart';
 import 'theme/tokens.dart';
 
-/// Форма подложки иконки.
+/// Shape of the icon backplate.
 enum IconShell {
-  /// Круг — как у Telegram. Нейтрально и совместимо со всеми масками системы.
+  /// Circle — as in Telegram. Neutral and compatible with every system mask.
   circle,
 
-  /// Квадрат со срезанными углами. Ближе нашей резьбе, но Android наложит
-  /// собственную маску и часть среза съест.
+  /// Square with chamfered corners. Closer to our carving, but Android applies
+  /// its own mask and eats part of the chamfer.
   chamfered,
 }
 
-/// Иконка приложения: цветная подложка и ворон на ней.
+/// App icon: a coloured backplate with the raven on it.
 ///
-/// Устройство то же, что у Telegram: сплошная подложка и один белый силуэт.
-/// Приём проверен — на экране, забитом пёстрыми иконками, выигрывает та,
-/// в которой одна форма и один цвет.
+/// Same structure as Telegram's: a solid backplate and a single white
+/// silhouette. The technique is proven — on a screen crammed with busy icons,
+/// the one with a single shape and a single colour wins.
 class ApeironAppIcon extends StatelessWidget {
   const ApeironAppIcon({
     super.key,
@@ -30,7 +30,7 @@ class ApeironAppIcon extends StatelessWidget {
     this.pitchDegrees = ApeironRaven.defaultPitch,
   });
 
-  /// Разворот птицы, см. [ApeironRaven.pitchDegrees].
+  /// Rotation of the bird, see [ApeironRaven.pitchDegrees].
   final double pitchDegrees;
 
   final double size;
@@ -38,7 +38,7 @@ class ApeironAppIcon extends StatelessWidget {
   final Color glyph;
   final IconShell shell;
 
-  /// Доля поля, которую занимает птица — обоснование при [iconGlyphScale].
+  /// Share of the field taken by the bird — rationale at [iconGlyphScale].
   final double glyphScale;
 
   @override
@@ -84,8 +84,8 @@ class _ShellPainter extends CustomPainter {
         );
 
       case IconShell.chamfered:
-        // Срез в 18 % стороны: мельче не читается, крупнее превращает
-        // квадрат в восьмиугольник.
+        // Chamfer of 18 % of the side: smaller does not read, larger turns
+        // the square into an octagon.
         final c = size.shortestSide * 0.18;
         final w = size.width, h = size.height;
         final path = Path()

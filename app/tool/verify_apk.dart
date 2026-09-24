@@ -1,14 +1,14 @@
-/// Проверяет, годен ли APK к выдаче наружу.
+/// Checks whether an APK is fit to hand out.
 ///
-///     cd app && dart run tool/verify_apk.dart [путь к APK]
+///     cd app && dart run tool/verify_apk.dart [path to APK]
 ///
-/// Без аргумента берётся `build/app/outputs/flutter-apk/app-release.apk`.
-/// Код возврата: 0 — годен, 1 — негоден, 2 — нечего проверять.
+/// Without an argument, `build/app/outputs/flutter-apk/app-release.apk` is used.
+/// Exit code: 0 — valid, 1 — invalid, 2 — nothing to check.
 ///
-/// Зачем отдельно от предохранителя в Gradle: тот проверяет то, что собирается
-/// **сейчас**, и его легко обойти, собрав с `--continue` или взяв APK из
-/// другого места. Этот проверяет **конкретный файл**, который вот-вот уедет
-/// человеку, и ему всё равно, кто и как его собрал.
+/// Why separate from the build guard in Gradle: that one checks what is being
+/// built **now**, and is easy to bypass by building with `--continue` or taking
+/// the APK from elsewhere. This one checks **the specific file** that is about
+/// to go to a person, and does not care who built it or how.
 library;
 
 import 'dart:io';
@@ -19,8 +19,8 @@ const _defaultApk = 'build/app/outputs/flutter-apk/app-release.apk';
 
 void main(List<String> args) {
   if (args.length > 1 || args.contains('-h') || args.contains('--help')) {
-    stdout.writeln('Использование: dart run tool/verify_apk.dart [путь к APK]');
-    stdout.writeln('По умолчанию: $_defaultApk');
+    stdout.writeln('Usage: dart run tool/verify_apk.dart [path to APK]');
+    stdout.writeln('Default: $_defaultApk');
     exitCode = 2;
     return;
   }
@@ -28,7 +28,7 @@ void main(List<String> args) {
   final path = args.isEmpty ? _defaultApk : args.single;
   final file = File(path);
   if (!file.existsSync()) {
-    stderr.writeln('Нет файла: $path');
+    stderr.writeln('No such file: $path');
     exitCode = 2;
     return;
   }
@@ -37,7 +37,7 @@ void main(List<String> args) {
   try {
     apk = readApk(file.readAsBytesSync());
   } on FormatException catch (e) {
-    stderr.writeln('$path — не похоже на APK: ${e.message}');
+    stderr.writeln('$path — does not look like an APK: ${e.message}');
     exitCode = 1;
     return;
   }

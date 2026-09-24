@@ -4,12 +4,12 @@ import 'src/rust/api/vault.dart';
 import 'theme/tokens.dart';
 import 'vault_status.dart';
 
-/// Состояние хранилища ключа — как оно выглядит на экране.
+/// State of the key vault — how it looks on screen.
 ///
-/// Показывается всегда, а не только при беде. R-002 требует честного
-/// предупреждения там, где аппаратного хранилища нет; но и обратное верно:
-/// человек должен видеть, на чём держится защита, не дожидаясь, пока она
-/// откажет.
+/// Always shown, not only when something is wrong. R-002 requires an honest
+/// warning where there is no hardware keystore; but the converse holds too:
+/// a person must see what the protection rests on without waiting for it to
+/// fail.
 class VaultPanel extends StatelessWidget {
   const VaultPanel({
     super.key,
@@ -20,10 +20,10 @@ class VaultPanel extends StatelessWidget {
 
   final VaultStatus status;
 
-  /// Повторить попытку. Данные при этом целы.
+  /// Retry. The data stays intact.
   final VoidCallback? onRetry;
 
-  /// Начать заново. Предлагается только когда ключ действительно исчез.
+  /// Start over. Offered only when the key is really gone.
   final VoidCallback? onFreshStart;
 
   @override
@@ -70,18 +70,18 @@ class VaultPanel extends StatelessWidget {
                 if (onRetry != null)
                   FilledButton(
                     onPressed: onRetry,
-                    // Надпись обязана совпадать с тем, что предлагает текст
-                    // рядом: «повторить» после «разблокировать» читается как
-                    // два разных действия, хотя оно одно.
+                    // The label must match what the text next to it offers:
+                    // "retry" after "unlock" reads as two different actions,
+                    // although it is one.
                     child: Text(
                       status.state == VaultState.locked
                           ? 'РАЗБЛОКИРОВАТЬ'
                           : 'ПОВТОРИТЬ',
                     ),
                   ),
-                // Кнопка «начать заново» существует ровно в одном положении.
-                // Предложить стереть всё при преходящем сбое прошивки значило
-                // бы уничтожить переписку владельца за него.
+                // The "start over" button exists in exactly one state.
+                // Offering to erase everything on a transient firmware failure
+                // would mean destroying the owner's messages on their behalf.
                 if (onFreshStart != null && mayOfferFreshStart(status)) ...[
                   const SizedBox(width: Ap.s12),
                   OutlinedButton(

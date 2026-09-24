@@ -1,37 +1,39 @@
 import 'package:flutter/material.dart';
 
-/// Токены оформления Apeiron. Спецификация — `docs/design.md`.
+/// Apeiron design tokens. Specification — `docs/design.md`.
 ///
-/// Единственное жёсткое правило графики: 0°, 45°, 90°. Никаких скруглений.
-/// Поэтому [Ap.radius] здесь нет — углы всюду прямые, и это намеренно.
+/// The only hard rule of the graphics: 0°, 45°, 90°. No rounding at all.
+/// That is why there is no [Ap.radius] here — corners are square everywhere,
+/// and this is intentional.
 abstract final class Ap {
-  // Базальт — холодный почти-чёрный с синим подтоном.
+  // Basalt — a cold near-black with a blue undertone.
   static const basalt950 = Color(0xFF0B0E11);
   static const basalt900 = Color(0xFF12161A);
   static const basalt800 = Color(0xFF1A2026);
 
-  // Камень — границы и разделители.
+  // Stone — borders and dividers.
   static const stone700 = Color(0xFF2A333B);
   static const stone600 = Color(0xFF3A444D);
 
-  // Туман и кость. Основной текст намеренно НЕ белый: чистый белый на тёмном
-  // режет глаз и выглядит дёшево, тёплая кость читается как берёза.
+  // Fog and bone. Body text is deliberately NOT white: pure white on dark
+  // strains the eye and looks cheap, warm bone reads as birch.
   static const fog400 = Color(0xFF8A97A3);
   static const bone100 = Color(0xFFE8E6E1);
   static const bone50 = Color(0xFFF4F2ED);
 
-  /// Ледниковый — обычный акцент. Ненасыщенный: насыщенные акценты удешевляют.
+  /// Glacier — the regular accent. Desaturated: saturated accents cheapen.
   static const glacier400 = Color(0xFF8FB3C9);
   static const glacier600 = Color(0xFF4A7290);
 
-  /// Медь — только состояния сверки ключей. Не золото: бронза настоящий
-  /// материал этой культуры и читается дороже именно потому, что тише.
+  /// Copper — key verification states only. Not gold: bronze is a genuine
+  /// material of this culture and reads as more upmarket precisely because it
+  /// is quieter.
   static const ember400 = Color(0xFFC77B52);
 
-  /// Ржавчина — тревога. Приглушена: тревога должна быть заметна, не кричать.
+  /// Rust — alarm. Muted: an alarm must be noticeable, not shouting.
   static const rust500 = Color(0xFFB4543A);
 
-  // Шаг компоновки. Базовая единица 4, шаг 8.
+  // Layout spacing. Base unit 4, step 8.
   static const s4 = 4.0;
   static const s8 = 8.0;
   static const s12 = 12.0;
@@ -40,11 +42,11 @@ abstract final class Ap {
   static const s28 = 28.0;
   static const s40 = 40.0;
 
-  /// Гарнитуры. Файлы лежат в `assets/fonts/`, объявлены в `pubspec.yaml`.
+  /// Typefaces. The files live in `assets/fonts/`, declared in `pubspec.yaml`.
   ///
-  /// ВАЖНО: пакет `google_fonts` использовать нельзя — он скачивает шрифты
-  /// с fonts.gstatic.com при первом запуске, сообщая Google факт установки
-  /// приложения с IP пользователя. Только бандл.
+  /// IMPORTANT: the `google_fonts` package must not be used — it downloads
+  /// fonts from fonts.gstatic.com on first launch, telling Google that the app
+  /// was installed, along with the user's IP. Bundled only.
   static const String uiFont = 'Inter';
   static const String displayFont = 'Syne';
   static const monoFallback = <String>[
@@ -74,7 +76,7 @@ abstract final class Ap {
       colorScheme: scheme,
       scaffoldBackgroundColor: basalt950,
       fontFamily: uiFont,
-      // Прямые углы во всех компонентах — правило системы, не вкусовщина.
+      // Square corners in all components — a system rule, not personal taste.
       cardTheme: const CardThemeData(
         color: basalt800,
         elevation: 0,
@@ -154,10 +156,10 @@ abstract final class Ap {
     );
   }
 
-  /// Моноширинный стиль для отпечатков, ключей и кодов.
+  /// Monospace style for fingerprints, keys and codes.
   ///
-  /// Разборчивость здесь — вопрос безопасности: путаница `0`/`O` или `1`/`l`
-  /// в числе сверки означает пропущенного посредника.
+  /// Legibility here is a security matter: confusing `0`/`O` or `1`/`l` in a
+  /// safety number means a missed man in the middle.
   static TextStyle mono({
     double size = 13,
     Color color = bone100,

@@ -10,15 +10,15 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart' show FontLoader, rootBundle;
 import 'package:flutter_test/flutter_test.dart';
 
-/// Инструмент, а не тест: выкладывает ворона и иконку приложения.
+/// A tool, not a test: lays out the raven and the app icon.
 ///
 ///     flutter test test/raven_sheet.dart
 ///
-/// Результат — `build/mark/raven-sheet.png`.
+/// Output — `build/mark/raven-sheet.png`.
 ///
-/// Имя без суффикса `_test` намеренно — см. `wordmark_sheet.dart`.
+/// The name lacks the `_test` suffix on purpose — see `wordmark_sheet.dart`.
 void main() {
-  testWidgets('лист ворона', (tester) async {
+  testWidgets('raven sheet', (tester) async {
     await (FontLoader(
       'Inter',
     )..addFont(rootBundle.load('assets/fonts/Inter-SemiBold.otf'))).load();
@@ -53,7 +53,7 @@ void main() {
 
     expect(out.lengthSync(), greaterThan(0));
     // ignore: avoid_print
-    print('Лист ворона: ${out.absolute.path}');
+    print('Raven sheet: ${out.absolute.path}');
   });
 }
 
@@ -82,9 +82,9 @@ class _Sheet extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Силуэт сам по себе, в разных размерах.
+            // The silhouette on its own, at various sizes.
             for (final pitch in [0.0, -20.0, -32.0, -45.0]) ...[
-              Text('РАЗВОРОТ ${pitch.toInt()}°', style: _label),
+              Text('PITCH ${pitch.toInt()}°', style: _label),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -143,7 +143,7 @@ class _Sheet extends StatelessWidget {
               const SizedBox(height: 16),
             ],
 
-            const Text('ИКОНКА ПРИЛОЖЕНИЯ · ПОДЛОЖКА И ЦВЕТ', style: _label),
+            const Text('APP ICON · BACKPLATE AND COLOUR', style: _label),
             const SizedBox(height: 10),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -159,7 +159,7 @@ class _Sheet extends StatelessWidget {
                       ],
                     ),
                   ),
-                // Срезанный квадрат против круга.
+                // Chamfered square versus circle.
                 Column(
                   children: [
                     const ApeironAppIcon(
@@ -168,11 +168,11 @@ class _Sheet extends StatelessWidget {
                       shell: IconShell.chamfered,
                     ),
                     const SizedBox(height: 8),
-                    const Text('срезанный квадрат', style: _tiny),
+                    const Text('chamfered square', style: _tiny),
                   ],
                 ),
                 const SizedBox(width: 26),
-                // Рабочие размеры иконки на экране телефона.
+                // Working icon sizes on a phone screen.
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

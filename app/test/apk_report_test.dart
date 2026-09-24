@@ -5,33 +5,32 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../tool/apk_report.dart';
 
-/// Проверка верификатора APK.
+/// Test of the APK verifier.
 ///
-/// Верификатор существует потому, что 23.09.2026 сборка выдала APK без
-/// `librust_lib_apeiron.so` и отрапортовала успехом. Здесь проверяется, что он
-/// такой APK действительно заворачивает, — предохранитель, который никогда не
-/// срабатывал, предохранителем не является.
+/// The verifier exists because on 23.09.2026 the build produced an APK without
+/// `librust_lib_apeiron.so` and reported success. This checks that it really
+/// rejects such an APK — a guard that has never fired is not a guard.
 void main() {
-  group('чтение zip', () {
-    test('мусор отвергается, а не разбирается наполовину', () {
+  group('zip reading', () {
+    test('garbage is rejected, not half-parsed', () {
       expect(
         () => readApk(Uint8List.fromList(List.filled(1000, 0x41))),
         throwsA(isA<FormatException>()),
       );
     });
 
-    test('пустой файл отвергается', () {
+    test('an empty file is rejected', () {
       expect(() => readApk(Uint8List(0)), throwsA(isA<FormatException>()));
     });
   });
 
-  group('правила годности', () {
+  group('validity rules', () {
     ApkContents fake(List<String> names, {bool signed = true}) => ApkContents(
       entries: [for (final n in names) ZipEntry(n, 1, 1)],
       hasSigningBlock: signed,
     );
 
-    /// Минимально годный APK — от него отнимаем по одному и смотрим, ловится ли.
+    /// A minimally valid APK — remove items one by one and see if it's caught.
     List<String> goodNames() => [
       'AndroidManifest.xml',
       'classes.dex',
@@ -55,7 +54,7 @@ void main() {
     String failureOf(ApkContents apk) =>
         inspect(apk).where((c) => !c.ok).map((c) => c.title).join(', ');
 
-    test('полный набор признаётся годным', () {
+    test('the full set is judged valid', () {
       expect(
         passes(fake(goodNames())),
         isTrue,
@@ -64,50 +63,50 @@ void main() {
     });
 
     test(
-      'APK без библиотеки Rust заворачивается — ради этого всё и делалось',
+      'an APK without the Rust library is rejected — the whole point of this',
       () {
         final names = goodNames()
           ..remove('lib/arm64-v8a/librust_lib_apeiron.so');
         expect(passes(fake(names)), isFalse);
-        expect(failureOf(fake(names)), contains('библиотека Rust'));
+        expect(failureOf(fake(names)), contains('Rust library'));
       },
     );
 
-    test('библиотека есть не для всех архитектур — тоже негоден', () {
+    test('library present not for every architecture — also invalid', () {
       final names = goodNames()
-        ..addAll(['lib/x86_64/libflutter.so']); // без нашей библиотеки
+        ..addAll(['lib/x86_64/libflutter.so']); // without our library
       expect(passes(fake(names)), isFalse);
-      expect(failureOf(fake(names)), contains('библиотека Rust'));
+      expect(failureOf(fake(names)), contains('Rust library'));
     });
 
-    test('без подписи — негоден', () {
+    test('no signature — invalid', () {
       expect(passes(fake(goodNames(), signed: false)), isFalse);
-      expect(failureOf(fake(goodNames(), signed: false)), contains('подпись'));
+      expect(failureOf(fake(goodNames(), signed: false)), contains('signing'));
     });
 
-    test('без вшитой гарнитуры — негоден', () {
+    test('a bundled typeface missing — invalid', () {
       final names = goodNames()
         ..remove('assets/flutter_assets/assets/fonts/SyneBold.ttf');
       expect(passes(fake(names)), isFalse);
-      expect(failureOf(fake(names)), contains('гарнитуры'));
+      expect(failureOf(fake(names)), contains('typefaces'));
     });
 
-    test('без нативных библиотек вовсе — негоден', () {
+    test('no native libraries at all — invalid', () {
       final names = goodNames().where((n) => !n.startsWith('lib/')).toList();
       expect(passes(fake(names)), isFalse);
     });
   });
 
-  test('настоящий APK, если он собран, проходит проверку', () {
+  test('the real APK, if built, passes the check', () {
     final candidates = [
       'build/app/outputs/flutter-apk/app-release.apk',
       'build/app/outputs/flutter-apk/app-debug.apk',
     ].map(File.new).where((f) => f.existsSync()).toList();
 
     if (candidates.isEmpty) {
-      // Не заставляем собирать APK ради прогона тестов: сборка занимает минуты,
-      // а логика верификатора проверена выше на синтетике.
-      markTestSkipped('APK не собран — проверять нечего');
+      // We do not force building an APK just to run tests: the build takes
+      // minutes, and the verifier logic is tested above on synthetic input.
+      markTestSkipped('APK not built — nothing to check');
       return;
     }
 

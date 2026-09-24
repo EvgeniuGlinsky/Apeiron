@@ -11,18 +11,19 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../tool/android_icon.dart';
 
-/// Инструмент, а не тест: показывает иконку запуска так, как её покажет система.
+/// A tool, not a test: shows the launcher icon the way the system will show it.
 ///
 ///     flutter test test/android_icon_sheet.dart
 ///
-/// Результат — `build/mark/android-icon-sheet.png`.
-/// Имя без суффикса `_test` намеренно — см. `wordmark_sheet.dart`.
-/// Процесс не завершится: ждать появления файла, а не выхода.
+/// Output — `build/mark/android-icon-sheet.png`.
+/// The name lacks the `_test` suffix on purpose — see `wordmark_sheet.dart`.
+/// The process will not exit: wait for the file to appear, not for the exit.
 ///
-/// Рисуется **сгенерированный `pathData`**, тот самый, что уходит в APK, —
-/// а не виджет. Иначе лист показывал бы не то, что увидит пользователь.
+/// What is drawn is **the generated `pathData`**, the very one that goes into
+/// the APK — not the widget. Otherwise the sheet would show something other
+/// than what the user will see.
 void main() {
-  testWidgets('лист иконки Android', (tester) async {
+  testWidgets('Android icon sheet', (tester) async {
     await (FontLoader(
       'Inter',
     )..addFont(rootBundle.load('assets/fonts/Inter-SemiBold.otf'))).load();
@@ -57,18 +58,19 @@ void main() {
 
     expect(out.lengthSync(), greaterThan(0));
     // ignore: avoid_print
-    print('Лист иконки Android: ${out.absolute.path}');
+    print('Android icon sheet: ${out.absolute.path}');
   });
 }
 
-/// Маски, которыми лаунчеры режут адаптивную иконку.
+/// Masks launchers use to cut the adaptive icon.
 enum _Mask { circle, squircle, rounded, square }
 
 Path _maskPath(_Mask mask, Size s) {
   final r = Offset.zero & s;
   return switch (mask) {
     _Mask.circle => Path()..addOval(r),
-    // Суперэллипс лаунчера Pixel приближается скруглением в 28 % стороны.
+    // The Pixel launcher's superellipse is approximated by rounding at 28 %
+    // of the side.
     _Mask.squircle =>
       Path()
         ..addRRect(RRect.fromRectAndRadius(r, Radius.circular(s.width * 0.28))),
@@ -79,8 +81,8 @@ Path _maskPath(_Mask mask, Size s) {
   };
 }
 
-/// Иконка ровно так, как её собирает система: слой 108 dp, из которого видно
-/// центральные 72, обрезанные маской лаунчера.
+/// The icon exactly as the system assembles it: a 108 dp layer of which the
+/// central 72 are visible, cut by the launcher mask.
 class _Adaptive extends StatelessWidget {
   const _Adaptive({
     required this.size,
@@ -119,8 +121,8 @@ class _AdaptivePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Видимое окно — центральные 72 единицы поля 108, они и равны размеру
-    // иконки на экране. Значит верхний левый угол окна — точка (18, 18).
+    // The visible window is the central 72 units of the 108 field, and they
+    // equal the icon size on screen. So the window's top-left is (18, 18).
     final k = size.width / adaptiveMask;
     const window = (adaptiveViewport - adaptiveMask) / 2;
 
@@ -138,7 +140,7 @@ class _AdaptivePainter extends CustomPainter {
     canvas.restore();
 
     if (!guides) return;
-    // Круг 66 dp — та зона, которую Android обещает показать при любой маске.
+    // The 66 dp circle is the zone Android promises to show under any mask.
     final guide = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1
@@ -151,7 +153,8 @@ class _AdaptivePainter extends CustomPainter {
       old.mask != mask || old.background != background || old.glyph != glyph;
 }
 
-/// Иконка для Android 7: маски нет, подложку рисуем сами, поле 108 целиком.
+/// The Android 7 icon: no mask, we draw the backplate ourselves, over the
+/// whole 108 field.
 class _Legacy extends StatelessWidget {
   const _Legacy({required this.size});
 
@@ -230,28 +233,28 @@ class _Sheet extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('МАСКИ ЛАУНЧЕРОВ · ОДНА И ТА ЖЕ ИКОНКА', style: _label),
+            const Text('LAUNCHER MASKS · THE SAME ICON', style: _label),
             const SizedBox(height: 10),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 for (final (mask, name) in const [
-                  (_Mask.circle, 'круг · Pixel'),
-                  (_Mask.squircle, 'суперэллипс · Samsung'),
-                  (_Mask.rounded, 'скруглённый квадрат'),
-                  (_Mask.square, 'квадрат'),
+                  (_Mask.circle, 'circle · Pixel'),
+                  (_Mask.squircle, 'superellipse · Samsung'),
+                  (_Mask.rounded, 'rounded square'),
+                  (_Mask.square, 'square'),
                 ])
                   _cell(_Adaptive(size: 176, mask: mask), name),
                 const SizedBox(width: 20),
                 _cell(
                   const _Adaptive(size: 176, guides: true),
-                  'медью — обещанные 66 dp',
+                  'in copper — the promised 66 dp',
                 ),
               ],
             ),
             const SizedBox(height: 26),
 
-            const Text('РАБОЧИЕ РАЗМЕРЫ НА ЭКРАНЕ', style: _label),
+            const Text('WORKING SIZES ON SCREEN', style: _label),
             const SizedBox(height: 10),
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -259,8 +262,9 @@ class _Sheet extends StatelessWidget {
                 for (final px in const [96.0, 64.0, 48.0, 36.0, 28.0])
                   _cell(_Adaptive(size: px), '${px.toInt()} px'),
                 const SizedBox(width: 24),
-                // На светлом столе иконка соседствует со светлыми обоями —
-                // проверяем, что тёмный круг не сливается с рамкой.
+                // On a light home screen the icon sits next to light
+                // wallpaper — we check that the dark circle does not merge
+                // with the frame.
                 Container(
                   color: Ap.bone50,
                   padding: const EdgeInsets.all(16),
@@ -276,7 +280,7 @@ class _Sheet extends StatelessWidget {
             ),
             const SizedBox(height: 26),
 
-            const Text('ANDROID 7 · МАСКИ НЕТ, ПОДЛОЖКА СВОЯ', style: _label),
+            const Text('ANDROID 7 · NO MASK, OWN BACKPLATE', style: _label),
             const SizedBox(height: 10),
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -288,7 +292,7 @@ class _Sheet extends StatelessWidget {
             const SizedBox(height: 26),
 
             const Text(
-              'ТЕМАТИЧЕСКАЯ ИКОНКА · ANDROID 13 И НОВЕЕ',
+              'THEMED ICON · ANDROID 13 AND NEWER',
               style: _label,
             ),
             const SizedBox(height: 10),
@@ -301,7 +305,7 @@ class _Sheet extends StatelessWidget {
                     background: Color(0xFF2A3339),
                     glyph: Color(0xFFBFD4E0),
                   ),
-                  'тёмная тема системы',
+                  'system dark theme',
                 ),
                 _cell(
                   const _Adaptive(
@@ -309,16 +313,16 @@ class _Sheet extends StatelessWidget {
                     background: Color(0xFFDCE4EA),
                     glyph: Color(0xFF32424D),
                   ),
-                  'светлая тема системы',
+                  'system light theme',
                 ),
                 const SizedBox(width: 20),
                 SizedBox(
                   width: 520,
                   child: Text(
-                    'Цвета тематической иконки задаёт система из обоев: '
-                    'наш монохромный слой она перекрашивает целиком. '
-                    'Поэтому проверять здесь надо не цвет, а читается ли '
-                    'силуэт, когда контраст падает до системного.',
+                    'The themed icon colours are set by the system from the '
+                    'wallpaper: it recolours our monochrome layer entirely. '
+                    'So what to check here is not the colour but whether the '
+                    'silhouette reads when contrast drops to the system one.',
                     style: _tiny.copyWith(height: 1.5),
                   ),
                 ),
