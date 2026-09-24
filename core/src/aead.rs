@@ -45,6 +45,40 @@ pub const TAG_BYTES: usize = 16;
 /// Разделитель области вывода ключей.
 const KDF_DOMAIN: &[u8] = b"apeiron/kdf/v1";
 
+/// Метки назначения для [`SecretKey::derive`].
+///
+/// Реестр, а не строки по месту вызова. Причина простая и неприятная: опечатка
+/// в метке даёт **другой ключ**, всё продолжает работать, и обнаруживается это
+/// ровно тогда, когда данные уже записаны чужим ключом. Компилятор ловит
+/// опечатку в имени константы; в строковом литерале он не ловит ничего.
+///
+/// Имена следуют соглашению проекта `apeiron/<область>/v1`. Версия в конце —
+/// не украшение: меняя метку, вы делаете нечитаемым всё, что было записано
+/// прежней.
+pub mod purpose {
+    /// Секрет личности.
+    pub const IDENTITY: &str = "apeiron/storage/identity/v1";
+    /// Состояние аккаунта Olm — ключи этого устройства.
+    pub const ACCOUNT: &str = "apeiron/storage/account/v1";
+    /// Состояние храповика по каждой переписке.
+    pub const SESSION: &str = "apeiron/storage/session/v1";
+    /// Журнал личности.
+    pub const SIGCHAIN: &str = "apeiron/storage/sigchain/v1";
+    /// Записи о контактах.
+    pub const CONTACT: &str = "apeiron/storage/contact/v1";
+    /// Служебные записи хранилища.
+    pub const META: &str = "apeiron/storage/meta/v1";
+    /// Метки поиска.
+    ///
+    /// Отдельная ветвь, не связанная с ключами расшифровки: знание метки не
+    /// приближает к содержимому. Тот же приём, что `K_addr` в исследовании
+    /// (§16.2), применённый к локальной базе.
+    pub const TAG: &str = "apeiron/storage/tag/v1";
+
+    /// Все метки разом — для проверки, что среди них нет повторов.
+    pub const ALL: &[&str] = &[IDENTITY, ACCOUNT, SESSION, SIGCHAIN, CONTACT, META, TAG];
+}
+
 /// Что может пойти не так.
 #[derive(Debug, thiserror::Error)]
 pub enum AeadError {
@@ -262,6 +296,30 @@ mod tests {
         let b = master.derive("одно");
         let sealed = seal(&a, b"", "текст".as_bytes()).unwrap();
         assert_eq!(open(&b, b"", &sealed).unwrap(), "текст".as_bytes());
+    }
+
+    #[test]
+    fn purpose_labels_are_unique() {
+        // Две подсистемы с одной меткой получат один ключ, и это ровно тот
+        // случай, когда ошибка не проявляется до самого взлома.
+        let mut seen = std::collections::BTreeSet::new();
+        for label in purpose::ALL {
+            assert!(seen.insert(*label), "метка назначения повторяется: {label}");
+        }
+        assert_eq!(seen.len(), purpose::ALL.len());
+    }
+
+    #[test]
+    fn every_purpose_gives_its_own_key() {
+        let master = SecretKey::generate().expect("ОС отдаёт случайность");
+        let mut keys = std::collections::BTreeSet::new();
+        for label in purpose::ALL {
+            let derived = master.derive(label);
+            assert!(
+                keys.insert(derived.0),
+                "две метки назначения дали один ключ: {label}"
+            );
+        }
     }
 
     #[test]

@@ -21,10 +21,10 @@ pub mod random;
 pub mod session;
 pub mod sigchain;
 
-pub use aead::{open, seal, AeadError, SecretKey};
-pub use identity::{Identity, IdentityError, PublicIdentity};
+pub use aead::{open, purpose, seal, AeadError, SecretKey};
+pub use identity::{Identity, IdentityError, PublicIdentity, SecretBytes};
 pub use prekey::{PrekeyBundle, PrekeyError, UnverifiedPrekeyBundle};
-pub use session::{Chat, ChatError};
+pub use session::{pickle_account, unpickle_account, Chat, ChatError};
 pub use sigchain::{ChainSigner, ChainState, EntryBody, Sigchain, SigchainError};
 
 pub use random::{random_bytes, RandomError};

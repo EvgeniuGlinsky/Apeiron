@@ -75,6 +75,11 @@ flutter {
 
 val rustLibraryName = "librust_lib_apeiron.so"
 
+// Символ, через который Kotlin отдаёт Rust доступ к аппаратному ключу.
+// Имя задано явно и в Rust (export_name), и здесь: если они разойдутся,
+// сборка встанет тут, а не приложение на телефоне.
+val rustJniSymbol = "Java_io_apeiron_apeiron_Vault_nativeRegister"
+
 /**
  * Требует, чтобы в собранном APK для **каждой** упакованной архитектуры лежала
  * нативная библиотека Rust.
@@ -91,9 +96,23 @@ abstract class VerifyRustLib : DefaultTask() {
     @get:Input
     abstract val libraryName: Property<String>
 
+    /**
+     * Имя символа JNI, который обязан быть экспортирован из библиотеки.
+     *
+     * Через него Kotlin отдаёт Rust ссылку на Vault и путь к каталогу данных.
+     * Символ объявлен в крейте-зависимости, а не в самом cdylib, и теряется он
+     * молча: `System.loadLibrary` на отсутствующий символ не жалуется, а
+     * приложение просто остаётся без доступа к аппаратному ключу — и выясняется
+     * это уже на телефоне. Проверено, что сейчас он на месте; правило нужно,
+     * чтобы так и осталось.
+     */
+    @get:Input
+    abstract val requiredSymbol: Property<String>
+
     @TaskAction
     fun verify() {
         val lib = libraryName.get()
+        val symbol = requiredSymbol.get()
         val dir = apkDirectory.get().asFile
         val apks = dir.listFiles { f: File -> f.name.endsWith(".apk") }
             ?.sortedBy { it.name }
@@ -125,11 +144,37 @@ abstract class VerifyRustLib : DefaultTask() {
                     )
                 }
 
+                // Символ ищется прямо в байтах: он лежит в таблице
+                // динамических символов, которую `strip = "symbols"` не трогает.
+                // Так не нужны ни nm, ni readelf из NDK.
+                val needle = symbol.toByteArray(Charsets.US_ASCII)
+                val without = abis.filterNot { abi ->
+                    zip.getInputStream(zip.getEntry("lib/$abi/$lib")).use { input ->
+                        containsBytes(input.readBytes(), needle)
+                    }
+                }
+                if (without.isNotEmpty()) {
+                    throw GradleException(
+                        report(apk.name, "в $lib нет символа $symbol для: ${without.joinToString(", ")}")
+                    )
+                }
+
                 logger.lifecycle(
-                    "Предохранитель: ${apk.name} — $lib на месте для ${abis.joinToString(", ")}"
+                    "Предохранитель: ${apk.name} — $lib и символ $symbol на месте для ${abis.joinToString(", ")}"
                 )
             }
         }
+    }
+
+    private fun containsBytes(haystack: ByteArray, needle: ByteArray): Boolean {
+        if (needle.isEmpty() || haystack.size < needle.size) return false
+        outer@ for (i in 0..haystack.size - needle.size) {
+            for (j in needle.indices) {
+                if (haystack[i + j] != needle[j]) continue@outer
+            }
+            return true
+        }
+        return false
     }
 
     private fun report(apk: String, what: String): String = """
@@ -254,6 +299,7 @@ androidComponents {
             description = "Требует наличия $rustLibraryName в APK варианта ${variant.name}."
             apkDirectory.set(variant.artifacts.get(SingleArtifact.APK))
             libraryName.set(rustLibraryName)
+            requiredSymbol.set(rustJniSymbol)
         }
 
         // `assemble` — то, что вызывает `flutter build apk`. Проверка становится

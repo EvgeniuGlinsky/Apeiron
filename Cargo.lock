@@ -90,6 +90,7 @@ dependencies = [
  "getrandom",
  "hex",
  "hkdf",
+ "serde_json",
  "sha2",
  "subtle",
  "thiserror",

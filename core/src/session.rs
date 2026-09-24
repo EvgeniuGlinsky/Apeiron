@@ -31,7 +31,7 @@ use vodozemac::olm::{
     SessionCreationError,
 };
 
-use crate::identity::PublicIdentity;
+use crate::identity::{PublicIdentity, PUBLIC_IDENTITY_BYTES};
 use crate::prekey::PrekeyBundle;
 
 /// Что может пойти не так в переписке.
@@ -51,6 +51,14 @@ pub enum ChatError {
 
     #[error("внутренняя ошибка: сообщение осталось необработанным")]
     NotProcessed,
+
+    #[error("состояние переписки не удалось сохранить: {0}")]
+    Pickle(String),
+
+    #[error(
+        "СОСТОЯНИЕ ПЕРЕПИСКИ ПОВРЕЖДЕНО ИЛИ ПОДМЕНЕНО: {0}.          Продолжать эту переписку нельзя."
+    )]
+    Unpickle(String),
 }
 
 impl ChatError {
@@ -74,6 +82,32 @@ impl ChatError {
 pub struct Chat {
     session: Session,
     peer: PublicIdentity,
+}
+
+/// Сохраняет состояние аккаунта устройства.
+///
+/// Без этого каждый запуск приложения порождал бы **новое устройство**: у
+/// аккаунта Olm свои долговременные ключи и запас одноразовых, и потеря их
+/// рвёт все существующие переписки разом.
+///
+/// Формат — `serde_json` поверх `AccountPickle`. Собственное шифрование
+/// vodozemac (`AccountPickle::encrypt`, AES-CBC с HMAC поверх base64) не
+/// используется намеренно: криптостек проекта держится одного поколения, и
+/// второй формат шифрования рядом с ключами — это второй набор обязанностей по
+/// сопровождению. Запечатывает эти байты `crate::aead`.
+///
+/// Канонический вид здесь не требуется: результат не подписывается, а
+/// запечатывается, и от представления это не зависит. Там, где вид обязан быть
+/// однозначным, — в пакете пред-ключей и в журнале личности — `serde` не
+/// применяется вовсе.
+pub fn pickle_account(account: &Account) -> Result<Vec<u8>, ChatError> {
+    serde_json::to_vec(&account.pickle()).map_err(|e| ChatError::Pickle(e.to_string()))
+}
+
+/// Восстанавливает аккаунт устройства из того, что вернул [`pickle_account`].
+pub fn unpickle_account(bytes: &[u8]) -> Result<Account, ChatError> {
+    let pickle = serde_json::from_slice(bytes).map_err(|e| ChatError::Unpickle(e.to_string()))?;
+    Ok(Account::from_pickle(pickle))
 }
 
 impl Chat {
@@ -126,6 +160,46 @@ impl Chat {
     }
 
     /// Личность собеседника — та, чей отпечаток показывается на экране сверки.
+    /// Сохраняет состояние переписки.
+    ///
+    /// Раскладка: `публичная личность собеседника (64) ‖ serde_json(SessionPickle)`.
+    ///
+    /// Собеседник хранится рядом не для удобства: в `SessionPickle` его нет, а
+    /// без него `Chat` не восстановить — и, что важнее, некому было бы
+    /// предъявить число сверки. Переписка без известного собеседника это
+    /// переписка неизвестно с кем.
+    pub fn pickle(&self) -> Result<Vec<u8>, ChatError> {
+        let mut out = Vec::with_capacity(PUBLIC_IDENTITY_BYTES + 512);
+        out.extend_from_slice(&self.peer.to_bytes());
+        let body = serde_json::to_vec(&self.session.pickle())
+            .map_err(|e| ChatError::Pickle(e.to_string()))?;
+        out.extend_from_slice(&body);
+        Ok(out)
+    }
+
+    /// Восстанавливает переписку из того, что вернул [`Chat::pickle`].
+    ///
+    /// Байты обязаны приходить из проверенного источника: успешное
+    /// распечатывание AEAD говорит «это писали мы», и только это. Подменить их
+    /// снаружи нельзя, а повреждение внутри границы дальше границы не идёт —
+    /// отсюда отдельная ошибка вместо тихого возврата пустого состояния.
+    pub fn from_pickle(bytes: &[u8]) -> Result<Self, ChatError> {
+        let head = bytes
+            .get(..PUBLIC_IDENTITY_BYTES)
+            .ok_or_else(|| ChatError::Unpickle("запись короче публичной личности".to_string()))?;
+        let tail = bytes
+            .get(PUBLIC_IDENTITY_BYTES..)
+            .ok_or_else(|| ChatError::Unpickle("запись без состояния храповика".to_string()))?;
+        let peer =
+            PublicIdentity::from_bytes(head).map_err(|e| ChatError::Unpickle(e.to_string()))?;
+        let pickle =
+            serde_json::from_slice(tail).map_err(|e| ChatError::Unpickle(e.to_string()))?;
+        Ok(Self {
+            session: Session::from_pickle(pickle),
+            peer,
+        })
+    }
+
     pub fn peer(&self) -> &PublicIdentity {
         &self.peer
     }

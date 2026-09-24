@@ -17,7 +17,7 @@
 
 use apeiron_core::vodozemac::olm::{Account, OlmMessage, SessionConfig, SessionCreationError};
 use apeiron_core::vodozemac::Curve25519PublicKey;
-use apeiron_core::{Chat, Identity, PrekeyBundle};
+use apeiron_core::{pickle_account, unpickle_account, Chat, Identity, PrekeyBundle};
 
 /// Участник: долговременная личность плюс устройство с ключами Olm.
 struct Party {
@@ -402,4 +402,152 @@ fn established_pair() -> (Chat, Chat) {
     assert_eq!(text, "начало");
 
     (a_chat, b_chat)
+}
+
+// ─── Хранение: состояние обязано пережить перезапуск ─────────────────────────
+
+/// Личность переживает выгрузку и загрузку.
+///
+/// Без этого перезапуск приложения означал бы новый отпечаток, а значит и
+/// заново прочитанное вслух число сверки у каждого собеседника.
+#[test]
+fn identity_survives_export_and_import() {
+    let original = Identity::generate().expect("ОС отдаёт случайность");
+    let exported = original.export_secret();
+    let restored =
+        Identity::from_secret_bytes(exported.as_bytes()).expect("свой же секрет читается");
+
+    assert_eq!(
+        original.public().to_bytes(),
+        restored.public().to_bytes(),
+        "после загрузки получилась другая личность"
+    );
+    assert_eq!(
+        original.public().fingerprint(),
+        restored.public().fingerprint()
+    );
+
+    // Ключ тот же, а не «похожий»: подпись восстановленной личности обязана
+    // проверяться исходной.
+    let message = b"apeiron";
+    let signature = restored.sign(message);
+    original
+        .public()
+        .verify(message, &signature)
+        .expect("подпись не сошлась");
+}
+
+#[test]
+fn secret_of_wrong_length_is_rejected() {
+    let identity = Identity::generate().expect("ОС отдаёт случайность");
+    let exported = identity.export_secret();
+    assert!(Identity::from_secret_bytes(&exported.as_bytes()[..63]).is_err());
+    assert!(Identity::from_secret_bytes(&[]).is_err());
+}
+
+/// Переписка переживает перезапуск: сообщение, зашифрованное до сохранения,
+/// читается после загрузки.
+///
+/// Это и есть то, ради чего затевалось хранилище. Если состояние храповика
+/// теряется, собеседники расходятся навсегда, и починить это нечем.
+#[test]
+fn chat_survives_pickle_and_unpickle() {
+    let mut alice = Party::new();
+    let mut bob = Party::new();
+
+    let bob_bundle = accept_bundle(&bob.bundle());
+    let alice_bundle = accept_bundle(&alice.bundle());
+
+    let mut a_chat = Chat::initiate(&alice.account, &bob_bundle).expect("сессия создаётся");
+    let first = a_chat.encrypt("до перезапуска").expect("шифруется");
+
+    // Обе стороны уезжают на диск и возвращаются оттуда.
+    let saved_chat = a_chat.pickle().expect("состояние сохраняется");
+    let saved_account = pickle_account(&bob.account).expect("аккаунт сохраняется");
+    drop(a_chat);
+
+    let restored_chat = Chat::from_pickle(&saved_chat).expect("состояние читается");
+    let mut restored_account = unpickle_account(&saved_account).expect("аккаунт читается");
+
+    assert_eq!(
+        restored_chat.peer().to_bytes(),
+        bob.identity.public().to_bytes(),
+        "после загрузки собеседник стал другим"
+    );
+
+    let (_, text) = Chat::accept(&mut restored_account, &alice_bundle, prekey_of(&first))
+        .expect("сообщение, зашифрованное до сохранения, не прочиталось после загрузки");
+    assert_eq!(text, "до перезапуска");
+}
+
+/// Переписка продолжается после сохранения и загрузки обеих сторон.
+///
+/// Отдельно от предыдущего теста: там проверялось начало сессии, здесь — что
+/// храповик не сбился, то есть что сохранено именно состояние, а не его часть.
+#[test]
+fn conversation_continues_after_reload() {
+    let mut alice = Party::new();
+    let mut bob = Party::new();
+
+    let bob_bundle = accept_bundle(&bob.bundle());
+    let alice_bundle = accept_bundle(&alice.bundle());
+
+    let mut a_chat = Chat::initiate(&alice.account, &bob_bundle).expect("сессия создаётся");
+    let first = a_chat.encrypt("раз").expect("шифруется");
+    let (mut b_chat, text) =
+        Chat::accept(&mut bob.account, &alice_bundle, prekey_of(&first)).expect("сессия принята");
+    assert_eq!(text, "раз");
+
+    let reply = b_chat.encrypt("два").expect("шифруется");
+    assert_eq!(a_chat.decrypt(&reply).expect("читается"), "два");
+
+    // Оба состояния уезжают на диск.
+    let saved_a = a_chat.pickle().expect("сохраняется");
+    let saved_b = b_chat.pickle().expect("сохраняется");
+    drop(a_chat);
+    drop(b_chat);
+
+    let mut a_chat = Chat::from_pickle(&saved_a).expect("читается");
+    let mut b_chat = Chat::from_pickle(&saved_b).expect("читается");
+
+    let third = a_chat.encrypt("три").expect("шифруется");
+    assert_eq!(
+        b_chat.decrypt(&third).expect("читается после перезапуска"),
+        "три"
+    );
+    let fourth = b_chat.encrypt("четыре").expect("шифруется");
+    assert_eq!(
+        a_chat.decrypt(&fourth).expect("читается после перезапуска"),
+        "четыре"
+    );
+}
+
+#[test]
+fn damaged_chat_state_is_not_swallowed() {
+    let alice = Party::new();
+    let mut bob = Party::new();
+    let bob_bundle = accept_bundle(&bob.bundle());
+    let chat = Chat::initiate(&alice.account, &bob_bundle).expect("сессия создаётся");
+
+    let mut saved = chat.pickle().expect("состояние сохраняется");
+    let last = saved.len() - 1;
+    saved[last] ^= 0xff;
+
+    assert!(
+        Chat::from_pickle(&saved).is_err(),
+        "повреждённое состояние прошло как исправное"
+    );
+    assert!(
+        Chat::from_pickle(&saved[..10]).is_err(),
+        "обрезанное состояние прошло как исправное"
+    );
+}
+
+#[test]
+fn damaged_account_state_is_not_swallowed() {
+    let account = Account::new();
+    let mut saved = pickle_account(&account).expect("аккаунт сохраняется");
+    saved[5] ^= 0xff;
+    assert!(unpickle_account(&saved).is_err());
+    assert!(unpickle_account(&[]).is_err());
 }

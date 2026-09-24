@@ -13,7 +13,7 @@
 //! поэтому собственный `Drop` здесь не нужен и намеренно не пишется.
 
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::random::{random_bytes, RandomError};
 use sha2::{Digest, Sha256};
@@ -133,6 +133,35 @@ impl PublicIdentity {
     }
 }
 
+/// Длина вывезенного секрета личности: два семени по 32 байта.
+pub const SECRET_IDENTITY_BYTES: usize = 64;
+
+/// Секрет личности в виде байтов — единственный способ вынести его из
+/// [`Identity`].
+///
+/// Обёртка нужна не для красоты. Голый `[u8; 64]` остаётся в памяти после
+/// выхода из области видимости, печатается в журнал первой же неосторожной
+/// отладочной строкой и молча копируется. Здесь: затирается при уничтожении,
+/// `Debug` ничего не показывает, а имя типа прямо говорит, что внутри.
+///
+/// Единственное законное назначение — немедленно запечатать содержимое в
+/// хранилище (`apeiron-store`). Всё остальное — ошибка.
+#[derive(Clone, Zeroize, ZeroizeOnDrop)]
+pub struct SecretBytes([u8; SECRET_IDENTITY_BYTES]);
+
+impl SecretBytes {
+    /// Байты для запечатывания. Копировать их куда-либо ещё нельзя.
+    pub fn as_bytes(&self) -> &[u8; SECRET_IDENTITY_BYTES] {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for SecretBytes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SecretBytes(<скрыт>)")
+    }
+}
+
 /// Секретная личность. Не сериализуется наружу и не пересекает границу FFI.
 pub struct Identity {
     signing: SigningKey,
@@ -163,6 +192,61 @@ impl Identity {
         agreement_seed.zeroize();
 
         Ok(identity)
+    }
+
+    /// Восстанавливает личность из того, что вернул
+    /// [`Identity::export_secret`].
+    ///
+    /// Проверка здесь только на длину: любые 64 байта задают корректную пару
+    /// ключей, и «неверного» секрета не существует. Значит, подмена файла
+    /// хранилища дала бы не ошибку разбора, а **другую личность** — и ловится
+    /// она не тут, а проверкой подлинности записи (AEAD) до вызова этой
+    /// функции. Читать секрет из непроверенного источника нельзя.
+    pub fn from_secret_bytes(bytes: &[u8]) -> Result<Self, IdentityError> {
+        if bytes.len() != SECRET_IDENTITY_BYTES {
+            return Err(IdentityError::Length {
+                expected: SECRET_IDENTITY_BYTES,
+                got: bytes.len(),
+            });
+        }
+        let mut signing_seed = [0u8; 32];
+        let mut agreement_seed = [0u8; 32];
+        signing_seed.copy_from_slice(bytes.get(..32).ok_or(IdentityError::Length {
+            expected: SECRET_IDENTITY_BYTES,
+            got: bytes.len(),
+        })?);
+        agreement_seed.copy_from_slice(bytes.get(32..64).ok_or(IdentityError::Length {
+            expected: SECRET_IDENTITY_BYTES,
+            got: bytes.len(),
+        })?);
+
+        let identity = Self {
+            signing: SigningKey::from_bytes(&signing_seed),
+            agreement: StaticSecret::from(agreement_seed),
+        };
+
+        signing_seed.zeroize();
+        agreement_seed.zeroize();
+
+        Ok(identity)
+    }
+
+    /// Вывозит секрет наружу — только чтобы тут же его запечатать.
+    ///
+    /// До появления постоянного хранилища этого метода не было намеренно, и
+    /// появился он с одной оговоркой: возвращаемый тип затирает себя сам и
+    /// ничего не печатает. Границу FFI секрет по-прежнему не пересекает
+    /// (R-004): в Dart уходит только публичная часть.
+    pub fn export_secret(&self) -> SecretBytes {
+        let mut out = [0u8; SECRET_IDENTITY_BYTES];
+        // Раскладка та же, что у generate(): сначала семя подписи, потом
+        // секрет согласования. Порядок входит в формат хранилища, менять его
+        // значит ломать уже записанное.
+        let signing = self.signing.to_bytes();
+        let agreement = self.agreement.to_bytes();
+        out[..32].copy_from_slice(&signing);
+        out[32..].copy_from_slice(&agreement);
+        SecretBytes(out)
     }
 
     pub fn public(&self) -> PublicIdentity {
